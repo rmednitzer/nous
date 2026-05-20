@@ -1,20 +1,26 @@
 # Deployment
 
-`nous` deploys to a single Ubuntu 24.04 LTS VM. The bundle in `deploy/`
-contains everything needed to bring up a fresh host.
+`nous` deploys to a single Ubuntu 26.04 LTS VM (see ADR 0016). The
+bundle in `deploy/` contains everything needed to bring up a fresh
+host. The bundle is backwards-compatible with 24.04 LTS, but only the
+26.04 path is exercised in production.
 
 ## Steps
 
 1. Provision a VM with cloud-init enabled and pass `deploy/cloud-init.yaml`
-   as user data. The cloud-init script installs Python 3.12, git,
-   Caddy, logrotate, and sqlite3; creates the `nous` system user;
-   clones this repository; and runs `deploy/install.sh`.
+   as user data. The cloud-init script installs the platform Python
+   (3.14 on 26.04, 3.12 on 24.04), git, Caddy, logrotate, and sqlite3;
+   creates the `nous` system user; clones this repository; and runs
+   `deploy/install.sh`.
 2. `install.sh` is idempotent. It creates the venv at
-   `/opt/nous/venv`, runs `pip install .`, places the systemd units
-   (`nous.service`, `nous-state-flush.{service,timer}`) in
-   `/etc/systemd/system/`, drops a default `/etc/caddy/Caddyfile`
-   based on `deploy/Caddyfile.example`, and generates an OAuth signing
-   key under `$NOUS_HOME/auth/` if one is not present.
+   `/opt/nous/venv` (preferring `python3.14` -> `python3.13` ->
+   `python3`), runs `pip install .`, places the systemd units
+   (`nous.service`, `nous-state-flush.{service,timer}`,
+   `nous-auto-update.{service,timer}`) in `/etc/systemd/system/`,
+   drops a default `/etc/caddy/Caddyfile` based on
+   `deploy/Caddyfile.example`, and creates the OAuth state directory
+   at `$NOUS_HOME/auth/` (the MCP SDK signs tokens internally; no
+   signing key file is generated).
 3. Edit `/etc/caddy/Caddyfile` to set the public hostname and the
    operator CIDR.
 4. `systemctl enable --now nous.service nous-state-flush.timer caddy`.

@@ -14,7 +14,8 @@ is asyncio, the build is `uv` + hatchling, the configuration is
 
 ## Stack
 
-- Python 3.12, `uv` for dependency management, `hatchling` for build
+- Python 3.12+ (3.14 on the Ubuntu 26.04 deployment baseline; see ADR
+  0016), `uv` for dependency management, `hatchling` for build
 - `mcp>=1.27` (FastMCP), `pydantic>=2.11`, `pydantic-settings`, `sqlmodel`,
   `alembic`, `anthropic`, `numpy`, `filterpy`, `pynmea2`, `paho-mqtt`,
   `pyyaml`, `httpx`, `anyio>=4.6`, `uvicorn`, `starlette`

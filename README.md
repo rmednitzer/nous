@@ -3,7 +3,7 @@
 [![CI](https://github.com/rmednitzer/nous/actions/workflows/ci.yml/badge.svg)](https://github.com/rmednitzer/nous/actions/workflows/ci.yml)
 [![Docs](https://github.com/rmednitzer/nous/actions/workflows/docs.yml/badge.svg)](https://github.com/rmednitzer/nous/actions/workflows/docs.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 
 ## What this is
 
@@ -82,13 +82,14 @@ examples/        a self-driving demo, an inspector quickstart
   prompt-cache discipline.
 - Interop adapters for the standards a mission stack expects: CoT/TAK, OGC
   SensorThings, MISB KLV, NMEA 0183, STANAG 4774/4778, and MQTT.
-- A VM deployment bundle (Ubuntu 24.04 LTS + systemd + Caddy + logrotate)
-  and an `examples/self_driving_demo.py` for running the simulator with a
-  Claude session as the controller.
+- A VM deployment bundle (Ubuntu 26.04 LTS + systemd + Caddy + logrotate;
+  also works on 24.04) and an `examples/self_driving_demo.py` for running
+  the simulator with a Claude session as the controller.
 
 ## Install
 
-`nous` builds with `uv` and Python 3.12.
+`nous` builds with `uv` and Python 3.12+ (the deployment baseline is
+3.14 on Ubuntu 26.04 LTS; 3.12 and 3.13 are still supported).
 
 ```sh
 git clone https://github.com/rmednitzer/nous

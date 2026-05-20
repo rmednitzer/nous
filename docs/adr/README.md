@@ -10,7 +10,7 @@
 | 0005 | [Anthropic client with a hard daily cap and prompt-cache discipline](0005-anthropic-client-and-daily-cap.md) | Accepted | 2026-05-20 |
 | 0006 | [Internal vocabularies for OperatorState and CommsState](0006-internal-vocabularies.md) | Accepted | 2026-05-20 |
 | 0007 | [Additive-surface rule beyond L0](0007-additive-surface-rule.md) | Accepted | 2026-05-20 |
-| 0008 | [VM deployment pattern (Ubuntu 24.04 + systemd + Caddy)](0008-vm-deployment-pattern.md) | Accepted | 2026-05-20 |
+| 0008 | [VM deployment pattern (Ubuntu 24.04 + systemd + Caddy)](0008-vm-deployment-pattern.md) | Superseded by ADR 0016 | 2026-05-20 |
 | 0009 | [STPA-Pro as the safety analysis method](0009-stpa-pro-as-safety-method.md) | Accepted | 2026-05-20 |
 | 0010 | [Self-model and estimation layer](0010-self-model-and-estimation-layer.md) | Accepted | 2026-05-20 |
 | 0011 | [Interoperability adapters as a single Protocol](0011-interoperability-adapters.md) | Accepted | 2026-05-20 |
@@ -18,3 +18,4 @@
 | 0013 | [Tier-classified subsystem read/write tools](0013-tier-classified-subsystems.md) | Accepted | 2026-05-20 |
 | 0014 | [Docs site on MkDocs with GitHub Pages](0014-docs-site-mkdocs-pages.md) | Accepted | 2026-05-20 |
 | 0015 | [APU is strictly auxiliary; the primary battery is the sole bus](0015-apu-strictly-auxiliary.md) | Accepted | 2026-05-20 |
+| 0016 | [Deployment baseline upgrades to Ubuntu 26.04 LTS](0016-deployment-baseline-ubuntu-2604.md) | Accepted | 2026-05-20 |

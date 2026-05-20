@@ -12,9 +12,23 @@ if [ ! -d "${REPO_DIR}" ]; then
     exit 1
 fi
 
+# Prefer the platform Python from Ubuntu 26.04 (3.14) when present; fall
+# back through 3.13 to plain python3 on 24.04 (which resolves to 3.12) so
+# the bundle still works on the previous LTS.
+for candidate in python3.14 python3.13 python3; do
+    if command -v "${candidate}" >/dev/null 2>&1; then
+        PYTHON_BIN="$(command -v "${candidate}")"
+        break
+    fi
+done
+if [ -z "${PYTHON_BIN:-}" ]; then
+    echo "no python3 interpreter found on PATH" >&2
+    exit 1
+fi
+
 # venv
 if [ ! -d "${VENV_DIR}" ]; then
-    python3 -m venv "${VENV_DIR}"
+    "${PYTHON_BIN}" -m venv "${VENV_DIR}"
 fi
 "${VENV_DIR}/bin/pip" install --upgrade pip wheel
 "${VENV_DIR}/bin/pip" install -e "${REPO_DIR}[prod]"
