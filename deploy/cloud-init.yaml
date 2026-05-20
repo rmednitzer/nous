@@ -6,8 +6,8 @@ package_update: true
 package_upgrade: false
 
 packages:
-  - python3.12
-  - python3.12-venv
+  - python3
+  - python3-venv
   - python3-pip
   - git
   - caddy
