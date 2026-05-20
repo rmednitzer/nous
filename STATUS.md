@@ -46,7 +46,7 @@ Last reviewed: 2026-05-20.
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0014` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0015` | stable (decisions, not implementations) |
 | `docs/stpa/01..09` | in-progress |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -61,10 +61,14 @@ Last reviewed: 2026-05-20.
 | `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. |
-| `src/nous/engine.py` | in-progress | Tick orchestration; subsystem wiring is partial. |
+| `src/nous/engine.py` | in-progress | Tick orchestration; power and APU subsystems wired through the tick loop. |
 | `src/nous/tick.py` | in-progress | Async tick loop. |
-| `src/nous/subsystems/*` | planned | Each subsystem ships as a typed stub in v0.1. |
-| `src/nous/estimators/*` | planned | Each estimator ships as a typed stub in v0.1. |
+| `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |
+| `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in (BL-005a). |
+| `src/nous/subsystems/{thermal,compute,storage,sensors,position,biometrics,comms,inference}.py` | planned | Typed stubs in v0.1. |
+| `src/nous/estimators/power.py` | in-progress | 1-D Kalman over (SoC, voltage); covariance bound documented in the model card. |
+| `src/nous/estimators/apu.py` | in-progress | Per-source 1-D Kalman; tracks five source channels plus the total. |
+| `src/nous/estimators/{thermal,compute,position,biometrics,comms}.py` | planned | Typed stubs in v0.1. |
 | `src/nous/self_model/*` | planned | Assess/explain/viability shipped as stubs. |
 | `src/nous/interop/*` | planned | Each adapter ships as a typed stub in v0.1. |
 | `src/nous/auth/oauth.py` | in-progress | File-backed issuer shape. |

@@ -21,10 +21,17 @@ read-only calls before you mutate anything.
 
 ## Reading the simulator
 
-- `power_status`, `apu_status`, `comms_state` for the L1 subsystem
-  reads (placeholders in v0.1).
-- `self_model_assess` and `self_estimator_status` for the self-model
-  layer (calibrated capability quantiles in L1).
+- `power_status` returns the live Li-ion pack state (SoC, terminal
+  voltage, current, accepted vs offered APU charge, endurance
+  estimate, low/critical flag).
+- `apu_status` returns per-source power (solar, fuel cell, vehicle
+  tether, USB-C PD) plus fuel level. APU is strictly auxiliary
+  (ADR-0015); every watt it produces flows through the battery.
+- `comms_state` is a placeholder until the comms subsystem lands.
+- `self_estimator_status` reports live covariances for the power
+  and APU estimators; other estimators arrive in L1.
+- `self_model_assess` returns capability claims (calibrated
+  quantiles arrive with the full self-model layer in L1).
 
 ## Talking to a model
 

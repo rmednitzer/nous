@@ -2,16 +2,46 @@ schema_version: "0.1.0"
 name: pi5-hailo
 description: Raspberry Pi 5 with a Hailo-8L accelerator. Lightweight profile.
 
+# Hardware references:
+#   battery:   3S 2P 18650 pack, ~99 Wh @ 11.1 V nominal (common COTS pack).
+#   compute:   Raspberry Pi 5 (3 W idle, 8-10 W typical) + Hailo-8L
+#              accelerator (2-5 W). Combined ~3-12 W.
+#   solar:     PowerFilm F15-300N class (~20 W foldable).
+#   fuel cell: not modelled (no fuel cell on this class of build).
+#   vehicle:   12 V automotive accessory bus.
+
 power:
   battery_wh: 99
   voltage_v_nominal: 11.1
+  voltage_v_min: 9.0
+  voltage_v_max: 12.6
+  internal_resistance_ohm: 0.08
+  rated_current_a: 2.0
   peukert_k: 1.05
   soc_pct_low_threshold: 25
   soc_pct_critical_threshold: 5
+  thermal_derate_c: 40
+  thermal_derate_slope_per_c: 0.025
+  charge_limit_w: 30
 
 apu:
   solar_w_peak: 20
   fuelcell_w_continuous: 0
+  solar:
+    panel_w_peak: 20
+    mppt_efficiency: 0.88
+    panel_temp_derate_per_c_above_25: 0.005
+  fuel_cell:
+    continuous_w: 0
+    fuel_capacity_g: 0
+    efficiency: 0.0
+    wh_per_g_fuel: 0.0
+  vehicle:
+    bus_voltage_v: 12.0
+    current_limit_a: 2.0
+  usb_c_pd:
+    profiles_w: [15, 27, 45]
+    default_profile_w: 27
 
 thermal:
   ambient_c_default: 25

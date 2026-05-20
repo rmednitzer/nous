@@ -1,17 +1,46 @@
 schema_version: "0.1.0"
 name: spot-core
-description: Boston Dynamics Spot compute core. Documented placeholder profile.
+description: Boston Dynamics Spot compute core.
+
+# Hardware references:
+#   battery:   Boston Dynamics Spot battery (605 Wh, 41.6 V nominal, 4.2 kg).
+#   compute:   Spot CORE I/O compute payload (x86-class, ~30-90 W envelope).
+#   solar:     none (Spot is platform-tethered for recharge; field swap or dock).
+#   fuel cell: none (platform recharges via Spot dock).
+#   vehicle:   48 V tether (Spot dock / charger reference).
 
 power:
   battery_wh: 605
   voltage_v_nominal: 41.6
+  voltage_v_min: 36.0
+  voltage_v_max: 50.4
+  internal_resistance_ohm: 0.10
+  rated_current_a: 4.0
   peukert_k: 1.05
   soc_pct_low_threshold: 20
   soc_pct_critical_threshold: 5
+  thermal_derate_c: 45
+  thermal_derate_slope_per_c: 0.02
+  charge_limit_w: 150
 
 apu:
   solar_w_peak: 0
   fuelcell_w_continuous: 0
+  solar:
+    panel_w_peak: 0
+    mppt_efficiency: 0.0
+    panel_temp_derate_per_c_above_25: 0.0
+  fuel_cell:
+    continuous_w: 0
+    fuel_capacity_g: 0
+    efficiency: 0.0
+    wh_per_g_fuel: 0.0
+  vehicle:
+    bus_voltage_v: 48.0
+    current_limit_a: 8.0
+  usb_c_pd:
+    profiles_w: [60, 100, 240]
+    default_profile_w: 100
 
 thermal:
   ambient_c_default: 25

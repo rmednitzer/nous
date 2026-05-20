@@ -41,6 +41,7 @@ nav:
   - Tool reference: tool-reference.md
   - Scenarios: scenarios/README.md
   - Hardware profiles: hardware-profiles.md
+  - Bill of materials: bom.md
   - Interoperability:
       - CoT/TAK: conformance/cot-tak.md
       - OGC SensorThings: conformance/ogc-sensorthings.md
@@ -52,8 +53,11 @@ nav:
       - MOSA: conformance/mosa.md
   - Model cards:
       - Index: model-cards/README.md
+      - Power subsystem: model-cards/subsystem-power.md
+      - APU subsystem: model-cards/subsystem-apu.md
       - Position EKF: model-cards/estimator-position-ekf.md
       - Power SoC: model-cards/estimator-power-soc.md
+      - APU per-source: model-cards/estimator-apu.md
       - Thermal Kalman: model-cards/estimator-thermal-kalman.md
       - Biometrics Kalman: model-cards/estimator-biometrics-kalman.md
       - Comms Particle: model-cards/estimator-comms-particle.md
@@ -75,6 +79,7 @@ nav:
       - "0012 Versioned schemas": adr/0012-versioned-schemas.md
       - "0013 Tier-classified subsystems": adr/0013-tier-classified-subsystems.md
       - "0014 Docs site MkDocs Pages": adr/0014-docs-site-mkdocs-pages.md
+      - "0015 APU strictly auxiliary": adr/0015-apu-strictly-auxiliary.md
   - STPA:
       - Overview: stpa/README.md
       - "01 Purpose": stpa/01-purpose.md
