@@ -5,13 +5,14 @@ description: Bring up a fresh nous VM using the deploy bundle.
 
 # Deployment runbook
 
-Targets Ubuntu 24.04 LTS. The bundle in `deploy/` is idempotent.
+Targets Ubuntu 26.04 LTS (ADR 0016); also works on 24.04. The bundle
+in `deploy/` is idempotent.
 
 1. Provision a VM with cloud-init enabled. Pass
    `deploy/cloud-init.yaml` as user data.
-2. cloud-init installs Python 3.12, git, Caddy, logrotate, sqlite3;
-   creates the `nous` system user; clones the repo; runs
-   `deploy/install.sh`.
+2. cloud-init installs the platform Python (3.14 on 26.04, 3.12 on
+   24.04), git, Caddy, logrotate, sqlite3; creates the `nous`
+   system user; clones the repo; runs `deploy/install.sh`.
 3. `install.sh` creates the venv, installs `nous`, places the systemd
    units, drops a default Caddyfile, and generates an OAuth signing
    key if missing.

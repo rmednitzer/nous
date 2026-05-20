@@ -1,9 +1,10 @@
 # ADR 0008: VM deployment pattern (Ubuntu 24.04 + systemd + Caddy)
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR 0016
 - **Date:** 2026-05-20
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0001, ADR 0005
+- **Superseded by:** ADR 0016
 
 ## Context
 
@@ -50,3 +51,10 @@ need a port.
 - A second OS becomes a deployment target (then split out a `deploy/`
   per OS).
 - The OAuth surface needs a public registration endpoint (multi-tenant).
+
+## Supersession
+
+ADR 0016 advances the baseline to Ubuntu 26.04 LTS in May 2026 to pick
+up the platform Python 3.14 and the systemd 256+ sandboxing directives.
+The structural shape (cloud-init + install.sh + systemd + Caddy +
+logrotate) is unchanged; only the OS pin moves.

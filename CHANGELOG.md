@@ -6,7 +6,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Deployment baseline moves to Ubuntu 26.04 LTS / Python 3.14 (ADR
+  0016). `deploy/install.sh` selects `python3.14` -> `python3.13` ->
+  `python3` so the bundle still works on 24.04 hosts. ADR 0008 is
+  superseded.
+
 ### Added
+
+- Hardening on `deploy/systemd/nous.service`: `ProtectClock`,
+  `ProtectHostname`, `ProtectProc=invisible`, `ProcSubset=pid`,
+  `RestrictNamespaces`, `RestrictAddressFamilies=AF_UNIX AF_INET
+  AF_INET6`, `MemoryDenyWriteExecute`, `RemoveIPC`,
+  `KeyringMode=private`, `UMask=0077`, empty
+  `CapabilityBoundingSet`/`AmbientCapabilities`, and a
+  `SystemCallFilter=@system-service` allowlist with the privileged
+  groups (`@privileged @resources @debug @mount @cpu-emulation
+  @obsolete @raw-io @reboot @swap`) explicitly denied. Lifted by the
+  systemd version Ubuntu 26.04 ships.
+
+### Fixed
+
+- `deploy/systemd/nous.service` now lists `/var/log/nous` in
+  `ReadWritePaths=` so the audit log can be written when
+  `NOUS_AUDIT_PATH=/var/log/nous/audit.jsonl` (the path the
+  cloud-init env file and `deploy/logrotate.conf` already target).
+  Previously only `/var/lib/nous` was writable under
+  `ProtectSystem=strict`, so the audit sink degraded to stderr on a
+  fresh install.
 
 - ``docs/bom.md`` (Bill of Materials) added as the authoritative
   cross-reference for every numeric value in ``profiles/*.yaml``.

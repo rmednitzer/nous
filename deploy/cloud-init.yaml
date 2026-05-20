@@ -1,6 +1,9 @@
 #cloud-config
 
-# nous VM bootstrap. Pass this as user data on a fresh Ubuntu 24.04 LTS host.
+# nous VM bootstrap. Pass this as user data on a fresh Ubuntu 26.04 LTS host.
+# See ADR 0016 for the baseline rationale. The bundle also runs on 24.04;
+# the `python3` meta-package pulls in the platform default (3.14 on 26.04,
+# 3.12 on 24.04) and `install.sh` selects the newest available interpreter.
 
 package_update: true
 package_upgrade: false

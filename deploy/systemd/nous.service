@@ -14,12 +14,13 @@ ExecStart=/opt/nous/venv/bin/python -m nous serve
 ExecStopPost=/opt/nous/venv/bin/python -m nous tick -n 1
 Restart=on-failure
 RestartSec=5s
+# The audit log lives at /var/log/nous/audit.jsonl; logrotate manages it.
+ReadWritePaths=/var/lib/nous /var/log/nous
 
-# Hardening
+# Hardening (24.04-baseline directives).
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/nous
 PrivateTmp=true
 PrivateDevices=true
 ProtectControlGroups=true
@@ -29,6 +30,25 @@ RestrictRealtime=true
 RestrictSUIDSGID=true
 SystemCallArchitectures=native
 LockPersonality=true
+
+# Hardening added for the Ubuntu 26.04 / systemd 256+ baseline (ADR 0016).
+# Older systemd versions ignore unknown directives with a warning; the
+# service still starts on 24.04.
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+KeyringMode=private
+UMask=0077
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @debug @mount @cpu-emulation @obsolete @raw-io @reboot @swap
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target
