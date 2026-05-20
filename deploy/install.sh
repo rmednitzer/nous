@@ -32,13 +32,9 @@ fi
 # logrotate
 install -m 0644 "${REPO_DIR}/deploy/logrotate.conf" /etc/logrotate.d/nous
 
-# OAuth signing key (generated only if absent)
+# OAuth state dir (clients.json / codes.json / tokens.json live here)
+# The MCP SDK signs tokens internally; no signing key file needed.
 install -d -m 0750 -o nous -g nous "${NOUS_HOME_DIR}/auth"
-if [ ! -f "${NOUS_HOME_DIR}/auth/signing.key" ]; then
-    openssl rand -base64 48 > "${NOUS_HOME_DIR}/auth/signing.key"
-    chmod 0600 "${NOUS_HOME_DIR}/auth/signing.key"
-    chown nous:nous "${NOUS_HOME_DIR}/auth/signing.key"
-fi
 
 # Append-only on the audit log once it exists (no-op if not present)
 if [ -f "${NOUS_HOME_DIR}/audit.jsonl" ]; then

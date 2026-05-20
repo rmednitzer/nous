@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from .oauth import OAuthIssuer
+from .oauth import FileOAuthProvider, build_auth_settings, make_oauth_provider
 
-__all__ = ["OAuthIssuer"]
+__all__ = ["FileOAuthProvider", "build_auth_settings", "make_oauth_provider"]
