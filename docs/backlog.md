@@ -32,7 +32,7 @@ possible.
 
 ## L2 -- claude.ai integration and scenarios
 
-- BL-019 [planned] (L2) OAuth issuer wired into FastMCP via the SDK provider.
+- BL-019 [stable] (L2) OAuth issuer wired into FastMCP via the SDK provider.
 - BL-020 [planned] (L2) HTTP transport with OAuth and Caddy template.
 - BL-021 [planned] (L2) Anthropic client cap surfacing + structured `CapExhausted` payload.
 - BL-022 [planned] (L2) State machine refuses unsafe transitions per DR-2.

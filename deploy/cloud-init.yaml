@@ -32,6 +32,9 @@ write_files:
       NOUS_HTTP_BIND=127.0.0.1:8088
       NOUS_POLICY=open
       NOUS_PROFILE=jetson-agx-orin
+      NOUS_OAUTH_ENABLED=true
+      NOUS_OAUTH_ISSUER=https://nous.example.org
+      NOUS_OAUTH_SINGLE_CLIENT=true
 
 runcmd:
   - install -d -m 0750 -o nous -g nous /var/lib/nous /etc/nous

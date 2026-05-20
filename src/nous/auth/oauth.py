@@ -1,11 +1,18 @@
-"""File-backed OAuth 2.1 issuer (skeleton for the HTTP transport).
+"""File-backed OAuth 2.1 authorization-server provider.
 
-State lives in three JSON files under ``$NOUS_HOME/auth/``:
-``clients.json``, ``codes.json``, ``tokens.json``. Each file is read and
-rewritten atomically; no database is required.
+Wires into FastMCP via the ``OAuthAuthorizationServerProvider`` interface
+from the MCP SDK. State lives in three JSON files under
+``$NOUS_HOME/auth/`` (``clients.json``, ``codes.json``, ``tokens.json``);
+no database is needed. The SDK exposes ``/.well-known/oauth-*``,
+``/authorize``, ``/token``, and ``/register`` automatically when the
+provider is passed to ``FastMCP(auth=..., auth_server_provider=...)``.
 
-This is the v0.1 shape. The full L2 implementation (BL-019) wires it into
-FastMCP via the SDK's ``OAuthAuthorizationServerProvider``.
+Optional single-client lockdown closes Dynamic Client Registration after
+the first client is registered, so claude.ai claims the integration once
+and no later registration can squat on the issuer.
+
+Errors here must surface as auth failures, never as a crashed transport;
+all I/O is defensive.
 """
 
 from __future__ import annotations
@@ -16,28 +23,35 @@ import time
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from mcp.server.auth.provider import (
+    AccessToken,
+    AuthorizationCode,
+    AuthorizationParams,
+    OAuthAuthorizationServerProvider,
+    RefreshToken,
+    construct_redirect_uri,
+)
+from mcp.server.auth.settings import (
+    AuthSettings,
+    ClientRegistrationOptions,
+    RevocationOptions,
+)
+from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from pydantic import AnyHttpUrl
 
-__all__ = ["OAuthIssuer", "RegisteredClient", "Token"]
+__all__ = ["FileOAuthProvider", "build_auth_settings", "make_oauth_provider"]
+
+_SCOPES = ["mcp:tools"]
+_REFRESH_PREFIX = "refresh:"
 
 
-class RegisteredClient(BaseModel):
-    client_id: str
-    client_secret: str = ""
-    redirect_uris: list[str] = Field(default_factory=list)
-    scopes: list[str] = Field(default_factory=lambda: ["mcp:tools"])
+def _now() -> int:
+    return int(time.time())
 
 
-class Token(BaseModel):
-    access_token: str
-    refresh_token: str
-    expires_at: int
-    refresh_expires_at: int
-    client_id: str
-    scopes: list[str] = Field(default_factory=lambda: ["mcp:tools"])
+class _Store:
+    """Tiny JSON file store. Each call reads or writes the whole file."""
 
-
-class _JsonStore:
     def __init__(self, path: Path) -> None:
         self._path = path
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,98 +69,217 @@ class _JsonStore:
         tmp.replace(self._path)
 
 
-class OAuthIssuer:
-    """OAuth 2.1 authorization-server skeleton with file-backed state."""
+class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-arg]
+    """OAuth 2.1 authorization-server provider with file-backed state."""
 
     def __init__(
         self,
-        state_dir: Path,
+        state_dir: str | Path,
         *,
-        single_client: bool = True,
-        access_ttl: int = 3600,
-        refresh_ttl: int = 2_592_000,
-        code_ttl: int = 300,
+        single_client: bool,
+        access_ttl: int,
+        refresh_ttl: int,
+        code_ttl: int,
     ) -> None:
-        self._clients = _JsonStore(state_dir / "clients.json")
-        self._codes = _JsonStore(state_dir / "codes.json")
-        self._tokens = _JsonStore(state_dir / "tokens.json")
+        base = Path(state_dir).expanduser()
+        self._clients = _Store(base / "clients.json")
+        self._codes = _Store(base / "codes.json")
+        self._tokens = _Store(base / "tokens.json")
         self._single_client = single_client
         self._access_ttl = access_ttl
         self._refresh_ttl = refresh_ttl
         self._code_ttl = code_ttl
 
-    def register_client(
-        self, redirect_uris: list[str] | None = None
-    ) -> RegisteredClient:
-        """Register a new OAuth client, or return the single locked-in one."""
-        clients = self._clients.load()
-        if self._single_client and clients:
-            existing = next(iter(clients.values()))
-            return RegisteredClient.model_validate(existing)
-        client = RegisteredClient(
-            client_id=secrets.token_urlsafe(16),
-            client_secret=secrets.token_urlsafe(32),
-            redirect_uris=list(redirect_uris or []),
-        )
-        clients[client.client_id] = client.model_dump()
-        self._clients.save(clients)
-        return client
+    # --- clients ---
+    async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
+        data = self._clients.load().get(client_id)
+        if not data:
+            return None
+        try:
+            return OAuthClientInformationFull.model_validate(data)
+        except Exception:  # noqa: BLE001
+            return None
 
-    def authorize(self, client_id: str, redirect_uri: str) -> str:
-        """Issue a short-lived authorization code."""
-        code = secrets.token_urlsafe(32)
+    async def register_client(self, client_info: OAuthClientInformationFull) -> None:
+        cid = client_info.client_id or ""
+        if not cid:
+            raise ValueError("client_id is required")
+        clients = self._clients.load()
+        if self._single_client and clients and cid not in clients:
+            raise ValueError(
+                "Dynamic client registration is closed (single-client lockdown)."
+            )
+        clients[cid] = json.loads(client_info.model_dump_json())
+        self._clients.save(clients)
+
+    # --- authorization codes ---
+    async def authorize(
+        self, client: OAuthClientInformationFull, params: AuthorizationParams
+    ) -> str:
+        code = secrets.token_urlsafe(48)
         codes = self._codes.load()
         codes[code] = {
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "expires_at": int(time.time()) + self._code_ttl,
+            "code": code,
+            "client_id": client.client_id or "",
+            "scopes": list(getattr(params, "scopes", None) or _SCOPES),
+            "expires_at": _now() + self._code_ttl,
+            "code_challenge": getattr(params, "code_challenge", ""),
+            "redirect_uri": str(params.redirect_uri),
+            "redirect_uri_provided_explicitly": bool(
+                getattr(params, "redirect_uri_provided_explicitly", True)
+            ),
+            "resource": getattr(params, "resource", None),
         }
         self._codes.save(codes)
-        return code
+        return construct_redirect_uri(
+            str(params.redirect_uri),
+            code=code,
+            state=getattr(params, "state", None),
+        )
 
-    def token(self, code: str) -> Token | None:
-        """Exchange an authorization code for an access + refresh token."""
-        codes = self._codes.load()
-        entry = codes.pop(code, None)
-        self._codes.save(codes)
-        if not entry or int(entry.get("expires_at", 0)) < int(time.time()):
+    def _build_auth_code(self, rec: dict[str, Any]) -> AuthorizationCode | None:
+        try:
+            return AuthorizationCode(
+                code=rec["code"],
+                scopes=rec["scopes"],
+                expires_at=float(rec["expires_at"]),
+                client_id=rec["client_id"],
+                code_challenge=rec.get("code_challenge", ""),
+                redirect_uri=rec["redirect_uri"],
+                redirect_uri_provided_explicitly=rec.get(
+                    "redirect_uri_provided_explicitly", True
+                ),
+            )
+        except Exception:  # noqa: BLE001
             return None
-        return self._issue_token(str(entry["client_id"]))
 
-    def refresh(self, refresh_token: str) -> Token | None:
-        """Issue a new access token from a rotating refresh token."""
+    async def load_authorization_code(
+        self, client: OAuthClientInformationFull, authorization_code: str
+    ) -> AuthorizationCode | None:
+        codes = self._codes.load()
+        rec = codes.get(authorization_code)
+        if not rec or rec.get("client_id") != (client.client_id or ""):
+            return None
+        if int(rec.get("expires_at", 0)) < _now():
+            codes.pop(authorization_code, None)
+            self._codes.save(codes)
+            return None
+        return self._build_auth_code(rec)
+
+    async def exchange_authorization_code(
+        self,
+        client: OAuthClientInformationFull,
+        authorization_code: AuthorizationCode,
+    ) -> OAuthToken:
+        codes = self._codes.load()
+        codes.pop(authorization_code.code, None)
+        self._codes.save(codes)
+        scopes = list(authorization_code.scopes or _SCOPES)
+        return self._issue(client.client_id or "", scopes)
+
+    # --- tokens ---
+    def _issue(self, client_id: str, scopes: list[str]) -> OAuthToken:
+        access = secrets.token_urlsafe(48)
+        refresh = secrets.token_urlsafe(48)
         tokens = self._tokens.load()
-        entry = tokens.pop(f"refresh:{refresh_token}", None)
-        if entry is None or int(entry.get("expires_at", 0)) < int(time.time()):
+        tokens[access] = {
+            "token": access,
+            "client_id": client_id,
+            "scopes": scopes,
+            "expires_at": _now() + self._access_ttl,
+        }
+        tokens[_REFRESH_PREFIX + refresh] = {
+            "token": refresh,
+            "client_id": client_id,
+            "scopes": scopes,
+            "expires_at": _now() + self._refresh_ttl,
+        }
+        self._tokens.save(tokens)
+        return OAuthToken(
+            access_token=access,
+            token_type="Bearer",
+            expires_in=self._access_ttl,
+            refresh_token=refresh,
+            scope=" ".join(scopes),
+        )
+
+    async def load_access_token(self, token: str) -> AccessToken | None:
+        tokens = self._tokens.load()
+        rec = tokens.get(token)
+        if not rec:
+            return None
+        if int(rec.get("expires_at", 0)) < _now():
+            tokens.pop(token, None)
             self._tokens.save(tokens)
             return None
-        self._tokens.save(tokens)
-        return self._issue_token(str(entry["client_id"]))
-
-    def introspect(self, access_token: str) -> Token | None:
-        """Return token metadata if the access token is live."""
-        tokens = self._tokens.load()
-        entry = tokens.get(f"access:{access_token}")
-        if entry is None or int(entry.get("expires_at", 0)) < int(time.time()):
+        try:
+            return AccessToken(
+                token=rec["token"],
+                client_id=rec["client_id"],
+                scopes=rec["scopes"],
+                expires_at=int(rec["expires_at"]),
+            )
+        except Exception:  # noqa: BLE001
             return None
-        return Token.model_validate(entry)
 
-    def _issue_token(self, client_id: str) -> Token:
-        now = int(time.time())
-        access = secrets.token_urlsafe(32)
-        refresh = secrets.token_urlsafe(32)
-        token = Token(
-            access_token=access,
-            refresh_token=refresh,
-            expires_at=now + self._access_ttl,
-            refresh_expires_at=now + self._refresh_ttl,
-            client_id=client_id,
-        )
+    async def load_refresh_token(
+        self, client: OAuthClientInformationFull, refresh_token: str
+    ) -> RefreshToken | None:
+        rec = self._tokens.load().get(_REFRESH_PREFIX + refresh_token)
+        if not rec or rec.get("client_id") != (client.client_id or ""):
+            return None
+        if int(rec.get("expires_at", 0)) < _now():
+            return None
+        try:
+            return RefreshToken(
+                token=rec["token"],
+                client_id=rec["client_id"],
+                scopes=rec["scopes"],
+                expires_at=int(rec["expires_at"]),
+            )
+        except Exception:  # noqa: BLE001
+            return None
+
+    async def exchange_refresh_token(
+        self,
+        client: OAuthClientInformationFull,
+        refresh_token: RefreshToken,
+        scopes: list[str],
+    ) -> OAuthToken:
         tokens = self._tokens.load()
-        tokens[f"access:{access}"] = token.model_dump()
-        tokens[f"refresh:{refresh}"] = {
-            "client_id": client_id,
-            "expires_at": now + self._refresh_ttl,
-        }
+        tokens.pop(_REFRESH_PREFIX + refresh_token.token, None)
         self._tokens.save(tokens)
-        return token
+        effective = list(scopes or refresh_token.scopes or _SCOPES)
+        return self._issue(client.client_id or "", effective)
+
+    async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
+        tokens = self._tokens.load()
+        raw = getattr(token, "token", "")
+        tokens.pop(raw, None)
+        tokens.pop(_REFRESH_PREFIX + raw, None)
+        self._tokens.save(tokens)
+
+
+def build_auth_settings(issuer: str) -> AuthSettings:
+    """Build the FastMCP ``AuthSettings`` for the configured issuer URL."""
+    url = AnyHttpUrl(issuer)
+    return AuthSettings(
+        issuer_url=url,
+        resource_server_url=url,
+        client_registration_options=ClientRegistrationOptions(
+            enabled=True, valid_scopes=_SCOPES, default_scopes=_SCOPES
+        ),
+        revocation_options=RevocationOptions(enabled=True),
+        required_scopes=_SCOPES,
+    )
+
+
+def make_oauth_provider(settings: Any) -> FileOAuthProvider:
+    """Construct a :class:`FileOAuthProvider` from a nous ``Settings`` object."""
+    return FileOAuthProvider(
+        settings.resolved_oauth_state_dir(),
+        single_client=settings.oauth_single_client,
+        access_ttl=settings.oauth_access_ttl,
+        refresh_ttl=settings.oauth_refresh_ttl,
+        code_ttl=settings.oauth_code_ttl,
+    )

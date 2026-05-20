@@ -64,14 +64,20 @@ def build_server(settings: Settings | None = None) -> FastMCP:
     except ValueError:
         port = 8088
 
-    mcp = FastMCP(
-        "nous",
-        instructions=_INSTRUCTIONS,
-        host=host or "127.0.0.1",
-        port=port,
-        stateless_http=True,
-        json_response=True,
-    )
+    fastmcp_kwargs: dict[str, Any] = {
+        "instructions": _INSTRUCTIONS,
+        "host": host or "127.0.0.1",
+        "port": port,
+        "stateless_http": True,
+        "json_response": True,
+    }
+    if cfg.transport == "http" and cfg.oauth_enabled:
+        from .auth import build_auth_settings, make_oauth_provider
+
+        fastmcp_kwargs["auth"] = build_auth_settings(cfg.oauth_issuer)
+        fastmcp_kwargs["auth_server_provider"] = make_oauth_provider(cfg)
+
+    mcp = FastMCP("nous", **fastmcp_kwargs)
 
     async def _wrap(
         tool: str,
