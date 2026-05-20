@@ -23,6 +23,9 @@ fi
 install -m 0644 "${REPO_DIR}/deploy/systemd/nous.service" /etc/systemd/system/nous.service
 install -m 0644 "${REPO_DIR}/deploy/systemd/nous-state-flush.service" /etc/systemd/system/nous-state-flush.service
 install -m 0644 "${REPO_DIR}/deploy/systemd/nous-state-flush.timer" /etc/systemd/system/nous-state-flush.timer
+install -m 0644 "${REPO_DIR}/deploy/systemd/nous-auto-update.service" /etc/systemd/system/nous-auto-update.service
+install -m 0644 "${REPO_DIR}/deploy/systemd/nous-auto-update.timer" /etc/systemd/system/nous-auto-update.timer
+install -m 0755 "${REPO_DIR}/deploy/auto-update.sh" /opt/nous/deploy/auto-update.sh
 
 # Caddy template (do not overwrite an edited /etc/caddy/Caddyfile)
 if [ ! -f /etc/caddy/Caddyfile ]; then

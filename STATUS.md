@@ -3,6 +3,10 @@
 Project phase and per-document maturity. Authoritative for "is this real
 yet?" questions.
 
+## Deployment posture
+
+`nous-prod-01` (the live VM at `nous.blackphoenix.org`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches production within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure.
+
 Last reviewed: 2026-05-20.
 
 ## Maturity taxonomy

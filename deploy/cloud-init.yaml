@@ -43,4 +43,4 @@ runcmd:
   - git clone https://github.com/rmednitzer/nous.git /opt/nous
   - bash /opt/nous/deploy/install.sh
   - systemctl daemon-reload
-  - systemctl enable --now nous.service nous-state-flush.timer caddy
+  - systemctl enable --now nous.service nous-state-flush.timer nous-auto-update.timer caddy

@@ -131,6 +131,12 @@ tour.
 - [CONTRIBUTING.md](CONTRIBUTING.md) -- how to land changes
 - [SECURITY.md](SECURITY.md) -- reporting and hardening posture
 
+## Live deployment
+
+The reference instance at <https://nous.blackphoenix.org/>
+tracks `main` automatically. Every merged PR is live on the
+VM within five minutes. See `docs/deployment.md`.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Source files are

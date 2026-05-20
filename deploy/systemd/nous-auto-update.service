@@ -1,0 +1,17 @@
+[Unit]
+Description=Update nous to origin/main and restart the service
+Documentation=https://github.com/rmednitzer/nous
+After=network-online.target nous.service
+Wants=network-online.target
+# We do not Requires=nous.service: this unit can run before nous.service
+# is healthy (in fact it may be what fixes a broken nous.service).
+
+[Service]
+Type=oneshot
+ExecStart=/opt/nous/deploy/auto-update.sh
+# install.sh can take a minute on a fresh dependency set; cap generously.
+TimeoutStartSec=10m
+StandardOutput=journal
+StandardError=journal
+# Auto-update touches /opt/nous, /etc/nous, /var/log/nous, /etc/systemd,
+# and restarts the unit; runs as root by necessity.
