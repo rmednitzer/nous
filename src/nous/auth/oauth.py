@@ -105,11 +105,15 @@ class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-
         if not cid:
             raise ValueError("client_id is required")
         clients = self._clients.load()
+        record = json.loads(client_info.model_dump_json())
         if self._single_client and clients and cid not in clients:
-            raise ValueError(
-                "Dynamic client registration is closed (single-client lockdown)."
-            )
-        clients[cid] = json.loads(client_info.model_dump_json())
+            # Single-client mode: at most one active client. Re-DCR replaces
+            # the prior client atomically (the new credentials win), keeping
+            # the invariant without breaking clients that retry DCR on each
+            # connection attempt.
+            clients = {cid: record}
+        else:
+            clients[cid] = record
         self._clients.save(clients)
 
     # --- authorization codes ---

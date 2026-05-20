@@ -35,9 +35,10 @@ write_files:
       NOUS_OAUTH_ENABLED=true
       NOUS_OAUTH_ISSUER=https://nous.example.org
       NOUS_OAUTH_SINGLE_CLIENT=true
+      NOUS_AUDIT_PATH=/var/log/nous/audit.jsonl
 
 runcmd:
-  - install -d -m 0750 -o nous -g nous /var/lib/nous /etc/nous
+  - install -d -m 0750 -o nous -g nous /var/lib/nous /etc/nous /var/log/nous
   - install -d -m 0755 /opt
   - git clone https://github.com/rmednitzer/nous.git /opt/nous
   - bash /opt/nous/deploy/install.sh

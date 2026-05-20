@@ -15,13 +15,13 @@ nous.example.org {
     # rotates their egress ranges; see https://docs.anthropic.com/.
     @anthropic remote_ip 160.79.104.0/21 2607:6bc0::/48 127.0.0.1/8 ::1
 
-    # OAuth metadata + authorization endpoints MUST be browser-reachable
-    # for Dynamic Client Registration to complete from the user's laptop.
+    # OAuth metadata + the browser-facing /authorize endpoint stay public;
+    # /register (DCR) and /token are server-to-server from claude.ai and
+    # therefore stay behind the CIDR gate alongside the MCP traffic.
     @oauth_public {
         path /.well-known/oauth-authorization-server
         path /.well-known/oauth-protected-resource
         path /authorize
-        path /register
     }
 
     handle @oauth_public {

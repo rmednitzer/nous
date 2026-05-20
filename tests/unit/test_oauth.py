@@ -57,10 +57,13 @@ def test_register_then_get_client(provider: FileOAuthProvider) -> None:
     assert fetched.client_id == "c-1"
 
 
-def test_single_client_lockdown(provider: FileOAuthProvider) -> None:
+def test_single_client_replaces_on_re_dcr(provider: FileOAuthProvider) -> None:
     asyncio.run(provider.register_client(_client("c-1")))
-    with pytest.raises(ValueError, match="single-client lockdown"):
-        asyncio.run(provider.register_client(_client("c-2")))
+    asyncio.run(provider.register_client(_client("c-2")))
+    assert asyncio.run(provider.get_client("c-1")) is None
+    fetched = asyncio.run(provider.get_client("c-2"))
+    assert fetched is not None
+    assert fetched.client_id == "c-2"
 
 
 def test_issue_then_load_access_token(provider: FileOAuthProvider) -> None:
