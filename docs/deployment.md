@@ -13,11 +13,14 @@ host. The bundle is backwards-compatible with 24.04 LTS, but only the
    creates the `nous` system user; clones this repository; and runs
    `deploy/install.sh`.
 2. `install.sh` is idempotent. It creates the venv at
-   `/opt/nous/venv`, runs `pip install .`, places the systemd units
-   (`nous.service`, `nous-state-flush.{service,timer}`) in
-   `/etc/systemd/system/`, drops a default `/etc/caddy/Caddyfile`
-   based on `deploy/Caddyfile.example`, and generates an OAuth signing
-   key under `$NOUS_HOME/auth/` if one is not present.
+   `/opt/nous/venv` (preferring `python3.14` -> `python3.13` ->
+   `python3`), runs `pip install .`, places the systemd units
+   (`nous.service`, `nous-state-flush.{service,timer}`,
+   `nous-auto-update.{service,timer}`) in `/etc/systemd/system/`,
+   drops a default `/etc/caddy/Caddyfile` based on
+   `deploy/Caddyfile.example`, and creates the OAuth state directory
+   at `$NOUS_HOME/auth/` (the MCP SDK signs tokens internally; no
+   signing key file is generated).
 3. Edit `/etc/caddy/Caddyfile` to set the public hostname and the
    operator CIDR.
 4. `systemctl enable --now nous.service nous-state-flush.timer caddy`.
