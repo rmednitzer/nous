@@ -1,0 +1,18 @@
+[Unit]
+Description=Periodic main-branch fetch + auto-deploy for nous
+Documentation=https://github.com/rmednitzer/nous
+
+[Timer]
+# Wait 2 minutes after boot before the first check (lets cloud-init
+# finish and lets nous come up cleanly with whatever it has).
+OnBootSec=2min
+# Poll every 5 minutes thereafter.
+OnUnitActiveSec=5min
+# Add up to 30 s of jitter so fleets do not pull in lockstep.
+RandomizedDelaySec=30s
+# If the host was off when a tick was due, run once on the next boot.
+Persistent=true
+Unit=nous-auto-update.service
+
+[Install]
+WantedBy=timers.target

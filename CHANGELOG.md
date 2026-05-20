@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Self-updating deployment posture: `nous-auto-update.timer` polls
+  `origin/main` every 5 minutes and fast-forwards + reinstalls +
+  restarts when HEAD advances. New script `deploy/auto-update.sh`
+  and systemd units under `deploy/systemd/`. Disable with
+  `systemctl disable --now nous-auto-update.timer`.
+
 - OAuth 2.1 authorization-server provider (file-backed DCR + PKCE +
   rotating refresh, single-client lockdown) wired into the FastMCP HTTP
   transport. Caddy carveout for `/authorize` and `/.well-known/oauth-*`;

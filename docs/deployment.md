@@ -52,3 +52,44 @@ The systemd journal carries the rest of the process output. `journalctl
 Pull, `pip install -U .`, `systemctl daemon-reload && systemctl restart
 nous.service`. The state DB carries over (Alembic handles migrations);
 the audit log is append-only and unaffected.
+
+## Auto-deploy from `main`
+
+The live VM tracks `origin/main`. A oneshot systemd unit
+(`nous-auto-update.service`) runs `deploy/auto-update.sh`, which:
+
+1. `git fetch origin main`
+2. If `HEAD == origin/main`, exits 0 (silent no-op).
+3. Otherwise: `git reset --hard origin/main`, `bash deploy/install.sh`,
+   `systemctl daemon-reload`, `systemctl restart nous.service`,
+   asserts the service came back active.
+
+The companion timer (`nous-auto-update.timer`) fires every 5 minutes
+after a 2-minute post-boot delay, with up to 30 s of randomised
+jitter. A log line lands in `/var/log/nous/auto-update.log` on every
+successful update; silent ticks emit no log entry.
+
+### Halt the auto-deploy loop
+
+If a bad merge needs to be paused before the next tick:
+
+```bash
+sudo systemctl disable --now nous-auto-update.timer
+```
+
+Resume with `enable --now`. The timer is enabled by default in
+the cloud-init bootstrap.
+
+### Trigger a one-off update manually
+
+```bash
+sudo systemctl start nous-auto-update.service
+journalctl -u nous-auto-update.service -n 30 --no-pager
+```
+
+### Why polling instead of a webhook?
+
+No GitHub-side secrets, no public webhook endpoint to defend, no
+GitHub Actions runner permissions to manage. The 5-minute deploy
+latency is acceptable for a single-VM service; switch to a webhook
+or a workflow-dispatched deploy if/when that changes.
