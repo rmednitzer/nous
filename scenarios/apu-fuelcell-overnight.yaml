@@ -1,0 +1,12 @@
+schema_version: "0.1.0"
+meta:
+  name: apu-fuelcell-overnight
+  description: Overnight relay run sustained by the methanol fuel cell.
+profile: jetson-agx-orin
+tick_budget: 1440
+steps:
+  - { at_min: 0, action: state_transition, args: { trigger: relay } }
+  - { at_min: 0, action: inject_apu, args: { fuelcell_w: 25 } }
+  - { at_min: 720, action: inject_apu, args: { fuelcell_w: 20 } }
+  - { at_min: 1200, action: inject_apu, args: { fuelcell_w: 0 } }
+  - { at_min: 1320, action: state_transition, args: { trigger: low_power } }

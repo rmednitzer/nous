@@ -1,0 +1,42 @@
+#cloud-config
+
+# nous VM bootstrap. Pass this as user data on a fresh Ubuntu 24.04 LTS host.
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - python3.12
+  - python3.12-venv
+  - python3-pip
+  - git
+  - caddy
+  - logrotate
+  - sqlite3
+  - curl
+  - jq
+
+users:
+  - name: nous
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/nous
+    create_home: true
+
+write_files:
+  - path: /etc/nous/nous.env
+    permissions: "0644"
+    content: |
+      NOUS_HOME=/var/lib/nous
+      NOUS_TRANSPORT=http
+      NOUS_HTTP_BIND=127.0.0.1:8088
+      NOUS_POLICY=open
+      NOUS_PROFILE=jetson-agx-orin
+
+runcmd:
+  - install -d -m 0750 -o nous -g nous /var/lib/nous /etc/nous
+  - install -d -m 0755 /opt
+  - git clone https://github.com/rmednitzer/nous.git /opt/nous
+  - bash /opt/nous/deploy/install.sh
+  - systemctl daemon-reload
+  - systemctl enable --now nous.service nous-state-flush.timer caddy

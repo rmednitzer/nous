@@ -1,0 +1,11 @@
+[Unit]
+Description=nous daily state flush
+After=nous.service
+
+[Service]
+Type=oneshot
+User=nous
+Group=nous
+EnvironmentFile=/etc/nous/nous.env
+WorkingDirectory=/opt/nous
+ExecStart=/opt/nous/venv/bin/python -m nous tick -n 1

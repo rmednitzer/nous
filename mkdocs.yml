@@ -1,0 +1,119 @@
+site_name: nous
+site_description: "Simulator for a man-portable AI inference appliance."
+site_url: https://rmednitzer.github.io/nous/
+repo_url: https://github.com/rmednitzer/nous
+repo_name: rmednitzer/nous
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: site
+strict: true
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - toc.integrate
+    - content.code.copy
+    - content.code.annotate
+
+nav:
+  - Overview: README.md
+  - Architecture: architecture.md
+  - State machine: state-machine.md
+  - Subsystems: subsystems/README.md
+  - Tool reference: tool-reference.md
+  - Scenarios: scenarios/README.md
+  - Hardware profiles: hardware-profiles.md
+  - Interoperability:
+      - CoT/TAK: conformance/cot-tak.md
+      - OGC SensorThings: conformance/ogc-sensorthings.md
+      - MISB KLV: conformance/stanag-4609-misb-klv.md
+      - STANAG 4774/4778: conformance/stanag-4774-4778.md
+      - STANAG 4677 DSSS: conformance/stanag-4677-dsss.md
+      - NMEA 0183: conformance/nmea-0183.md
+      - SOSA: conformance/sosa.md
+      - MOSA: conformance/mosa.md
+  - Model cards:
+      - Index: model-cards/README.md
+      - Position EKF: model-cards/estimator-position-ekf.md
+      - Power SoC: model-cards/estimator-power-soc.md
+      - Thermal Kalman: model-cards/estimator-thermal-kalman.md
+      - Biometrics Kalman: model-cards/estimator-biometrics-kalman.md
+      - Comms Particle: model-cards/estimator-comms-particle.md
+      - Inference local mock: model-cards/inference-local-mock.md
+  - ADRs:
+      - Index: adr/README.md
+      - "0000 Template": adr/0000-template.md
+      - "0001 FastMCP and tiered policy": adr/0001-fastmcp-and-tiered-policy.md
+      - "0002 SQLite, Alembic, JSONL audit": adr/0002-sqlite-alembic-and-jsonl-audit.md
+      - "0003 Hardware profile YAML": adr/0003-hardware-profile-yaml.md
+      - "0004 Hand-rolled FSM": adr/0004-hand-rolled-fsm.md
+      - "0005 Anthropic client and daily cap": adr/0005-anthropic-client-and-daily-cap.md
+      - "0006 Internal vocabularies": adr/0006-internal-vocabularies.md
+      - "0007 Additive-surface rule": adr/0007-additive-surface-rule.md
+      - "0008 VM deployment pattern": adr/0008-vm-deployment-pattern.md
+      - "0009 STPA-Pro as safety method": adr/0009-stpa-pro-as-safety-method.md
+      - "0010 Self-model and estimation layer": adr/0010-self-model-and-estimation-layer.md
+      - "0011 Interoperability adapters": adr/0011-interoperability-adapters.md
+      - "0012 Versioned schemas": adr/0012-versioned-schemas.md
+      - "0013 Tier-classified subsystems": adr/0013-tier-classified-subsystems.md
+      - "0014 Docs site MkDocs Pages": adr/0014-docs-site-mkdocs-pages.md
+  - STPA:
+      - Overview: stpa/README.md
+      - "01 Purpose": stpa/01-purpose.md
+      - "02 System boundary": stpa/02-system-boundary.md
+      - "03 Losses": stpa/03-losses.md
+      - "04 Hazards": stpa/04-hazards.md
+      - "05 Safety constraints": stpa/05-safety-constraints.md
+      - "06 Control structure": stpa/06-control-structure.md
+      - "07 Unsafe control actions": stpa/07-unsafe-control-actions.md
+      - "08 Loss scenarios": stpa/08-loss-scenarios.md
+      - "09 Derived requirements": stpa/09-derived-requirements.md
+  - Backlog: backlog.md
+  - Deployment: deployment.md
+  - Releasing: releasing.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+
+plugins:
+  - search
+  - mermaid2
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_root_heading: true
+            members_order: source

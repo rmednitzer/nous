@@ -1,0 +1,41 @@
+schema_version: "0.1.0"
+name: jetson-orin-nx
+description: Smaller Jetson Orin NX variant. Numbers are documented placeholders.
+
+power:
+  battery_wh: 296
+  voltage_v_nominal: 14.4
+  peukert_k: 1.04
+  soc_pct_low_threshold: 20
+  soc_pct_critical_threshold: 5
+
+apu:
+  solar_w_peak: 40
+  fuelcell_w_continuous: 15
+
+thermal:
+  ambient_c_default: 25
+  junction_temp_max: 95
+  junction_temp_throttle: 80
+  thermal_resistance_c_per_w: 0.45
+
+compute:
+  draw_w_idle: 5
+  draw_w_load: 25
+  load_curve:
+    - { load_pct: 0, draw_w: 5 }
+    - { load_pct: 50, draw_w: 15 }
+    - { load_pct: 100, draw_w: 25 }
+  inference_local:
+    tok_per_s_p50: 90
+    energy_j_per_tok: 0.18
+
+sensors:
+  position: { lat_sigma: 3.0e-5, lon_sigma: 3.0e-5, alt_m_sigma: 5.0 }
+  environmental: { temp_c_sigma: 0.2, humidity_pct_sigma: 1.0, baro_kpa_sigma: 0.1 }
+  biometrics: { heart_rate_bpm_sigma: 2.0, core_temp_c_sigma: 0.05 }
+
+comms:
+  links:
+    - { id: lte, bandwidth_bps: 20000000, rssi_dbm_nominal: -75, loss_pct_nominal: 0.5, max_age_s: 30 }
+    - { id: lora, bandwidth_bps: 50000, rssi_dbm_nominal: -110, loss_pct_nominal: 2.0, max_age_s: 120 }

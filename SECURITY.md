@@ -1,0 +1,111 @@
+# Security policy
+
+`nous` is a simulator, not a production C2 system. It nevertheless ships a
+deliberate threat model and hardening posture, both because the project
+deploys to a public VM and because the simulator is meant to demonstrate
+audited tool surfaces.
+
+## Reporting a vulnerability
+
+Open a *private* security advisory on GitHub:
+
+    https://github.com/rmednitzer/nous/security/advisories/new
+
+Do not file public issues for security findings. The project commits to:
+
+- **7 days** to acknowledge a report (initial triage, request for
+  clarification if needed),
+- **14 days** to assessment (impact analysis, fix plan, target release),
+- **coordinated disclosure** when a fix lands.
+
+If you need PGP, request the key in the advisory; the maintainer will
+publish one on request.
+
+## Scope
+
+In scope:
+
+- The MCP server (`src/nous/server.py`, `src/nous/runner.py`,
+  `src/nous/policy.py`, `src/nous/audit.py`).
+- The OAuth issuer (`src/nous/auth/`).
+- Estimator and interop base classes (`src/nous/estimators/base.py`,
+  `src/nous/interop/base.py`) and any concrete adapter that ships.
+- The deployment bundle (`deploy/`).
+
+Out of scope:
+
+- Upstream Anthropic API surface. Report security issues with the SDK
+  directly to Anthropic.
+- Downstream consumers of `nous` outputs (e.g. a TAK server connected to
+  the CoT adapter). The adapter is in scope; the downstream is not.
+
+## Hardening posture
+
+### Tier policy gates
+
+Every MCP tool is classified at registration into one of four tiers (T0
+read-only, T1 reversible, T2 stateful, T3 irreversible). The runner
+refuses any call whose tier the configured policy mode (`open`, `guarded`,
+`readonly`) does not admit. The deny list, when set, applies in *every*
+mode, including `open`.
+
+### OAuth file-backed lockdown
+
+The OAuth issuer ships in single-client lockdown by default. Tokens and
+client registrations live under `$NOUS_HOME/auth/` in JSON files with
+mode `0600`. Multi-tenant deployment is out of scope for v0.1; do not
+disable single-client lockdown without an ADR.
+
+### Audit log discipline
+
+The audit log is append-only JSONL at `$NOUS_HOME/audit.jsonl`. Output
+bodies are SHA-256 hashed and never written. Arguments are passed through
+the redaction allowlist before being logged. On Linux, `chattr +a` on the
+file gives true append-only semantics; the `logrotate.conf` template in
+`deploy/` handles rotation under that constraint.
+
+A daily hash chain over the audit log is *optional* and shipped as a
+follow-up (`[BL-031]`); the v0.1 scaffold does not gate behaviour on it.
+
+### Secret redaction
+
+`src/nous/audit.py` redacts a fixed set of keys before logging:
+`Authorization`, `Cookie`, any key containing `token`, `password`,
+`secret`, `api_key`, `bearer`. Argument values that survive redaction are
+truncated to a documented length. If you find a redaction gap, report it
+as a security advisory.
+
+### No body bytes in audit
+
+The audit record stores `output_sha256` and `output_len` only. The body
+is never persisted. Operators who need traceability for a specific
+incident pair `output_sha256` with the body the controller saw.
+
+## Prompt-injection posture for `inference_cloud`
+
+The `inference_cloud` tool is the seam through which adversarial content
+(operator inputs, environmental observations, intercepted comms) can reach
+the controller. To bound the blast radius:
+
+- Untrusted content (sensor readings, raw operator transcripts, intercepted
+  text) is placed in the *user* message slot of the prompt.
+- The system message and tool-result slots are reserved for *trusted*
+  content (the controller's own instructions, the self-model's calibrated
+  claims, structured engine outputs).
+- The Anthropic prompt cache is partitioned so an injection in a cached
+  user-slot payload does not pollute the cached system-slot payload.
+
+Treat any change to this partitioning as a security-relevant change.
+
+## Supported versions
+
+Pre-1.0. Only `main` receives security fixes. Tagged releases (`v0.x.y`)
+are point-in-time snapshots; if a security fix is needed in a release
+branch, the maintainer will cut a new tag from `main` rather than
+backporting.
+
+## Acknowledgements
+
+Thanks in advance to the security researchers who take the time to file
+reports. Names of acknowledged reporters land in the advisory and the
+[CHANGELOG](CHANGELOG.md) once the fix ships.

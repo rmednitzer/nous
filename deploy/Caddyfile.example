@@ -1,0 +1,52 @@
+# nous reverse proxy (Caddy)
+#
+# Public-facing TLS terminator and CIDR gate for the FastMCP HTTP transport.
+# Every endpoint except the OAuth metadata / authorization carveout is
+# restricted to Anthropic's published client CIDR ranges plus loopback so
+# only claude.ai can reach the MCP surface.
+#
+# Replace nous.example.org with your real hostname; Let's Encrypt issues
+# the cert automatically on first HTTPS request.
+
+nous.example.org {
+    encode zstd gzip
+
+    # Anthropic CIDR ranges (IPv4 + IPv6) + loopback. Update if Anthropic
+    # rotates their egress ranges; see https://docs.anthropic.com/.
+    @anthropic remote_ip 160.79.104.0/21 2607:6bc0::/48 127.0.0.1/8 ::1
+
+    # OAuth metadata + authorization endpoints MUST be browser-reachable
+    # for Dynamic Client Registration to complete from the user's laptop.
+    @oauth_public {
+        path /.well-known/oauth-authorization-server
+        path /.well-known/oauth-protected-resource
+        path /authorize
+        path /register
+    }
+
+    handle @oauth_public {
+        reverse_proxy 127.0.0.1:8088
+    }
+
+    handle {
+        @blocked not remote_ip 160.79.104.0/21 2607:6bc0::/48 127.0.0.1/8 ::1
+        respond @blocked "Forbidden" 403
+        reverse_proxy 127.0.0.1:8088
+    }
+
+    log {
+        output file /var/log/caddy/nous.log {
+            roll_size 50MiB
+            roll_keep 10
+        }
+        format json
+    }
+
+    header {
+        # Defence in depth; the MCP server already sets these where relevant.
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        -Server
+    }
+}
