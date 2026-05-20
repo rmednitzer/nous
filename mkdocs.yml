@@ -41,6 +41,7 @@ nav:
   - Tool reference: tool-reference.md
   - Scenarios: scenarios/README.md
   - Hardware profiles: hardware-profiles.md
+  - Bill of materials: bom.md
   - Interoperability:
       - CoT/TAK: conformance/cot-tak.md
       - OGC SensorThings: conformance/ogc-sensorthings.md

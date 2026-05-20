@@ -66,7 +66,9 @@ is asyncio, the build is `uv` + hatchling, the configuration is
   datasheet, MIL standard, USB.org, STANAG) or a published benchmark
   (MLPerf, llama.cpp, Hailo, NVIDIA Jetson). Add a citation comment at
   the top of each profile YAML so the provenance survives future edits.
-  Plausible-but-unsourced placeholders are not acceptable.
+  Plausible-but-unsourced placeholders are not acceptable. The
+  authoritative cross-reference is [`docs/bom.md`](docs/bom.md): a new
+  numeric value lands in the BOM first, then in a profile YAML.
 
 ### Documentation
 

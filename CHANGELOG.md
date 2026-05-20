@@ -8,6 +8,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- ``docs/bom.md`` (Bill of Materials) added as the authoritative
+  cross-reference for every numeric value in ``profiles/*.yaml``.
+  One row per modeled component (battery, compute, solar, fuel
+  cell, fuel cartridge, vehicle bus, USB-C PD profile, thermal
+  envelope) naming the vendor / product / reference document and
+  the profile fields it drives. New numbers land in the BOM
+  first, then in a profile. ``AGENTS.md`` and
+  ``docs/hardware-profiles.md`` link the BOM as the realism
+  source of truth.
+
+- ``BL-005b`` added to the backlog: PMU/PDU subsystem covering
+  bus regulation, source arbitration, CC/CV charge profile, and
+  dual-slot battery hot-swap. Lifts ``charge_limit_w`` and the
+  offered/accepted clamp off ``PowerSubsystem`` onto a new
+  ``PmuSubsystem``; supersedes ADR-0015. Dual-slot model:
+  primary + secondary battery, PMU arbitrates the active source,
+  the inactive slot can be removed without bus collapse.
+
 - Profile values anchored to real spec sheets. Each profile YAML
   now carries a citation header naming the battery, compute,
   solar, fuel cell, and vehicle bus references:

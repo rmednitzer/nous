@@ -4,6 +4,10 @@ A hardware profile YAML describes one physical device. Curves and
 limits in the profile drive the subsystem physics; code reads the
 profile, never the other way round (ADR-0003).
 
+Numeric values in a profile must trace back to a row in the
+[Bill of Materials](bom.md). New components land in the BOM first,
+then in a profile YAML.
+
 ## Reference profile
 
 `profiles/jetson-agx-orin.yaml` is the canonical Jetson AGX Orin 64GB
