@@ -36,9 +36,16 @@ install -m 0644 "${REPO_DIR}/deploy/logrotate.conf" /etc/logrotate.d/nous
 # The MCP SDK signs tokens internally; no signing key file needed.
 install -d -m 0750 -o nous -g nous "${NOUS_HOME_DIR}/auth"
 
-# Append-only on the audit log once it exists (no-op if not present)
-if [ -f "${NOUS_HOME_DIR}/audit.jsonl" ]; then
-    chattr +a "${NOUS_HOME_DIR}/audit.jsonl" || true
+# Audit log lives outside NOUS_HOME so logrotate can manage it cleanly.
+# /var/log/nous/audit.jsonl is the spec path (matches deploy/logrotate.conf
+# and the NOUS_AUDIT_PATH set in cloud-init.yaml).
+AUDIT_DIR=/var/log/nous
+AUDIT_FILE="${AUDIT_DIR}/audit.jsonl"
+install -d -m 0750 -o nous -g nous "${AUDIT_DIR}"
+if [ ! -f "${AUDIT_FILE}" ]; then
+    sudo -u nous touch "${AUDIT_FILE}"
+    chmod 0640 "${AUDIT_FILE}"
 fi
+chattr +a "${AUDIT_FILE}" 2>/dev/null || true
 
 echo "nous installer done."
