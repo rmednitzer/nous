@@ -1,6 +1,13 @@
 schema_version: "0.1.0"
 name: jetson-orin-nx
-description: Smaller Jetson Orin NX variant. Numbers are documented placeholders.
+description: Smaller Jetson Orin NX variant.
+
+# Hardware references:
+#   battery:   1x Bren-Tronics BB-2590/U (296 Wh, 14.4 V nominal).
+#   compute:   NVIDIA Jetson Orin NX 16GB datasheet (10 W -- 25 W envelope).
+#   solar:     Bren-Tronics MFC-40 class (40 W peak).
+#   fuel cell: SFC Energy EFOY-class (~15 W continuous, ~1.4 Wh/g electrical).
+#   vehicle:   NATO STANAG 4074 vehicle bus (28 V DC).
 
 power:
   battery_wh: 296
@@ -25,9 +32,9 @@ apu:
     panel_temp_derate_per_c_above_25: 0.004
   fuel_cell:
     continuous_w: 15
-    fuel_capacity_g: 200
-    efficiency: 0.42
-    wh_per_g_fuel: 2.3
+    fuel_capacity_g: 395             # ~0.5 L methanol cartridge (density 0.79 g/ml)
+    efficiency: 0.25                 # SFC EFOY system efficiency (post-BOP)
+    wh_per_g_fuel: 1.4               # SFC EFOY 0.9 L/kWh methanol consumption
   vehicle:
     bus_voltage_v: 28.0
     current_limit_a: 3.0

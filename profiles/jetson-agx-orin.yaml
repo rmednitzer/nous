@@ -2,9 +2,16 @@ schema_version: "0.1.0"
 name: jetson-agx-orin
 description: >
   Reference profile for an NVIDIA Jetson AGX Orin 64GB packed in a
-  backpack-class enclosure with a 588 Wh Li-ion pack, a 60 W solar
-  panel, and a 25 W methanol fuel cell. Numbers below are documented
-  placeholders that will be refined in L1 (BL-006).
+  backpack-class enclosure with a ~588 Wh Li-ion pack, a 60 W solar
+  panel, and a 25 W methanol fuel cell.
+
+# Hardware references (keep numbers traceable to a datasheet):
+#   battery:   2x Bren-Tronics BB-2590/U (296 Wh, 14.4 V nominal each).
+#   compute:   NVIDIA Jetson AGX Orin 64GB datasheet (15 W -- 60 W envelope).
+#   solar:     PowerFilm SOL90 / Bren-Tronics MFC-90 class (60 W peak).
+#   fuel cell: SFC Energy EFOY-class methanol fuel cell
+#              (~25 W continuous, ~0.9 L/kWh -> ~1.4 Wh/g electrical).
+#   vehicle:   NATO STANAG 4074 vehicle bus (28 V DC).
 
 power:
   battery_wh: 588
@@ -33,9 +40,9 @@ apu:
     panel_temp_derate_per_c_above_25: 0.004
   fuel_cell:
     continuous_w: 25
-    fuel_capacity_g: 250
-    efficiency: 0.45
-    wh_per_g_fuel: 2.5
+    fuel_capacity_g: 790            # ~1 L methanol cartridge (density 0.79 g/ml)
+    efficiency: 0.25                # SFC EFOY system efficiency (post-BOP), datasheet
+    wh_per_g_fuel: 1.4              # SFC EFOY 0.9 L/kWh methanol consumption -> 1.4 Wh/g electrical
   vehicle:
     bus_voltage_v: 28.0
     current_limit_a: 5.0

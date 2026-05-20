@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Profile values anchored to real spec sheets. Each profile YAML
+  now carries a citation header naming the battery, compute,
+  solar, fuel cell, and vehicle bus references:
+  Bren-Tronics BB-2590/U (296 Wh, 14.4 V) for the Jetson
+  profiles, Boston Dynamics Spot battery (605 Wh, 41.6 V) for
+  spot-core, SFC EFOY (~0.9 L/kWh, ~25% system efficiency, ~1.4
+  Wh/g electrical) for the methanol fuel cells,
+  PowerFilm SOL90 / Bren-Tronics MFC class for the solar panels,
+  NATO STANAG 4074 for the vehicle tether. ``AGENTS.md`` now
+  states the realism rule explicitly so future profile edits
+  stay grounded.
+
 - Primary battery model: Li-ion with Peukert correction and thermal
   derate. Subsystem integrates coulomb counting over an effective
   capacity that scales with current and cell temperature; bus

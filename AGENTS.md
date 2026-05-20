@@ -60,6 +60,13 @@ is asyncio, the build is `uv` + hatchling, the configuration is
   values fail fast at startup.
 - Hardware curves and limits live in `profiles/*.yaml`. The YAML is the
   source of truth; code reads it, never the other way round.
+- **Profile values must be realistic.** Every battery capacity, panel
+  rating, fuel-cell consumption rate, compute envelope, inference
+  benchmark, etc. needs to align with a real spec sheet (vendor
+  datasheet, MIL standard, USB.org, STANAG) or a published benchmark
+  (MLPerf, llama.cpp, Hailo, NVIDIA Jetson). Add a citation comment at
+  the top of each profile YAML so the provenance survives future edits.
+  Plausible-but-unsourced placeholders are not acceptable.
 
 ### Documentation
 

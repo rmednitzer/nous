@@ -75,9 +75,10 @@ apu:
     panel_temp_derate_per_c_above_25: 0.004
   fuel_cell:
     continuous_w: 25
-    fuel_capacity_g: 250
-    efficiency: 0.45
-    wh_per_g_fuel: 2.5            # electrical Wh per gram; derived from efficiency * 5.53 when omitted
+    fuel_capacity_g: 790            # ~1 L methanol cartridge (density 0.79 g/ml)
+    efficiency: 0.25                # SFC EFOY system efficiency (post-BOP)
+    wh_per_g_fuel: 1.4              # SFC EFOY ~0.9 L/kWh -> ~1.4 Wh/g electrical
+                                    # derived from efficiency * 5.53 Wh/g (methanol LHV) when omitted
   vehicle:
     bus_voltage_v: 28.0
     current_limit_a: 5.0

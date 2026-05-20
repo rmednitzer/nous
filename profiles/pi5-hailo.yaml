@@ -2,6 +2,14 @@ schema_version: "0.1.0"
 name: pi5-hailo
 description: Raspberry Pi 5 with a Hailo-8L accelerator. Lightweight profile.
 
+# Hardware references:
+#   battery:   3S 2P 18650 pack, ~99 Wh @ 11.1 V nominal (common COTS pack).
+#   compute:   Raspberry Pi 5 (3 W idle, 8-10 W typical) + Hailo-8L
+#              accelerator (2-5 W). Combined ~3-12 W.
+#   solar:     PowerFilm F15-300N class (~20 W foldable).
+#   fuel cell: not modelled (no fuel cell on this class of build).
+#   vehicle:   12 V automotive accessory bus.
+
 power:
   battery_wh: 99
   voltage_v_nominal: 11.1
