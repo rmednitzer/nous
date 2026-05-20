@@ -77,10 +77,38 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         "streamable_http_path": "/",
     }
     if cfg.transport == "http" and cfg.oauth_enabled:
+        from urllib.parse import urlparse
+
+        from mcp.server.transport_security import TransportSecuritySettings
+
         from .auth import build_auth_settings, make_oauth_provider
 
         fastmcp_kwargs["auth"] = build_auth_settings(cfg.oauth_issuer)
         fastmcp_kwargs["auth_server_provider"] = make_oauth_provider(cfg)
+
+        # MCP SDK enables DNS-rebinding protection by default and rejects
+        # any Host header outside the bind address. Allowlist the public
+        # hostname taken from the issuer URL plus the local bind.
+        issuer_host = urlparse(cfg.oauth_issuer).hostname or ""
+        bind_host = host or "127.0.0.1"
+        allowed_hosts = [
+            issuer_host,
+            f"{issuer_host}:443",
+            f"{bind_host}:{port}",
+            "127.0.0.1",
+            "127.0.0.1:8088",
+            "localhost",
+            "localhost:8088",
+        ]
+        allowed_origins = [
+            cfg.oauth_issuer.rstrip("/"),
+            "https://claude.ai",
+        ]
+        fastmcp_kwargs["transport_security"] = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=allowed_hosts,
+            allowed_origins=allowed_origins,
+        )
 
     mcp = FastMCP("nous", **fastmcp_kwargs)
 
