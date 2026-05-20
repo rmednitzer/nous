@@ -28,9 +28,37 @@ description: ...
 
 power:
   battery_wh: 588
+  voltage_v_nominal: 14.4
+  voltage_v_min: 12.0
+  voltage_v_max: 16.8
+  internal_resistance_ohm: 0.05
+  rated_current_a: 5.0
   peukert_k: 1.04
-  voltage_v: 14.4
-  ...
+  soc_pct_low_threshold: 20
+  soc_pct_critical_threshold: 5
+  thermal_derate_c: 45
+  thermal_derate_slope_per_c: 0.02
+  charge_limit_w: 100
+
+apu:
+  solar:
+    panel_w_peak: 60
+    mppt_efficiency: 0.92
+    panel_temp_derate_per_c_above_25: 0.004
+  fuel_cell:
+    continuous_w: 25
+    fuel_capacity_g: 250
+    efficiency: 0.45
+    wh_per_g_fuel: 2.5
+  vehicle:
+    bus_voltage_v: 28.0
+    current_limit_a: 5.0
+  usb_c_pd:
+    profiles_w: [15, 27, 45, 60, 100]
+    default_profile_w: 60
+  hand_crank:
+    max_w: 20
+    efficiency: 0.65
 
 thermal:
   ambient_c_default: 25
@@ -59,6 +87,11 @@ comms:
       rssi_dbm_nominal: -75
       loss_pct_nominal: 0.5
 ```
+
+The APU section also accepts the legacy flat fields ``solar_w_peak``,
+``fuelcell_w_continuous``, ``fuelcell_fuel_capacity_g``, and
+``fuelcell_efficiency`` for backward compatibility; the nested form is
+preferred for new profiles.
 
 L1 ships a Pydantic schema model (`src/nous/profiles/schema.py`) and a
 JSON Schema artefact under `docs/schema/`. The `make schema` target

@@ -191,33 +191,64 @@ def build_server(settings: Settings | None = None) -> FastMCP:
 
     @mcp.tool()
     async def power_status(ctx: Context | None = None) -> str:
-        """Battery state-of-charge, draw, projected endurance (placeholder)."""
+        """Battery state-of-charge, draw, projected endurance."""
 
         async def _work() -> str:
-            return json.dumps(
-                {
-                    "soc_pct": None,
-                    "draw_w": None,
-                    "endurance_min_p50": None,
-                    "note": "power subsystem ships as a typed stub in v0.1",
-                }
-            )
+            truth = dict(app.engine.power.truth())
+            estimate = app.engine.power_est.state()
+            payload = {
+                "soc_pct": round(truth["soc_pct"], 3),
+                "voltage_v": round(truth["voltage_v"], 3),
+                "current_a": round(truth["current_a"], 4),
+                "load_w": round(truth["load_w"], 3),
+                "charge_offered_w": round(truth["charge_offered_w"], 3),
+                "charge_accepted_w": round(truth["charge_accepted_w"], 3),
+                "remaining_wh": round(truth["remaining_wh"], 3),
+                "endurance_min_p50": (
+                    None
+                    if truth["endurance_min"] is None
+                    else round(truth["endurance_min"], 2)
+                ),
+                "flag": truth["flag"],
+                "estimate": {
+                    "soc_pct": round(estimate.point["soc_pct"], 3),
+                    "soc_pct_sigma": round(
+                        estimate.covariance["soc_pct"] ** 0.5, 4
+                    ),
+                    "voltage_v": round(estimate.point["voltage_v"], 3),
+                },
+            }
+            return json.dumps(payload)
 
         return await _wrap("power_status", {}, ctx, _work)
 
     @mcp.tool()
     async def apu_status(ctx: Context | None = None) -> str:
-        """Auxiliary-power-unit state (solar, fuel cell)."""
+        """Auxiliary-power-unit state (solar, fuel cell, vehicle, USB-C, hand-crank)."""
 
         async def _work() -> str:
-            return json.dumps(
-                {
-                    "solar_w": None,
-                    "fuelcell_w": None,
-                    "fuelcell_fuel_pct": None,
-                    "note": "APU subsystem ships as a typed stub in v0.1",
-                }
-            )
+            truth = dict(app.engine.apu.truth())
+            estimate = app.engine.apu_est.state()
+            payload = {
+                "solar_w": round(truth["solar_w"], 3),
+                "fuelcell_w": round(truth["fuelcell_w"], 3),
+                "vehicle_w": round(truth["vehicle_w"], 3),
+                "usbc_w": round(truth["usbc_w"], 3),
+                "hand_crank_w": round(truth["hand_crank_w"], 3),
+                "total_w": round(truth["total_w"], 3),
+                "fuelcell_fuel_g": round(truth["fuel_g"], 3),
+                "fuelcell_fuel_pct": round(truth["fuel_pct"], 3),
+                "vehicle_connected": truth["vehicle_connected"],
+                "usbc_connected": truth["usbc_connected"],
+                "usbc_profile_w": round(truth["usbc_profile_w"], 3),
+                "estimate": {
+                    "total_w": round(estimate.point["total_w"], 3),
+                    "total_w_sigma": round(
+                        estimate.covariance["total_w"] ** 0.5, 4
+                    ),
+                },
+            }
+            return json.dumps(payload)
 
         return await _wrap("apu_status", {}, ctx, _work)
 
@@ -258,12 +289,20 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         """Estimator covariances, last update times, divergence flags."""
 
         async def _work() -> str:
-            return json.dumps(
-                {
-                    "estimators": [],
-                    "note": "estimator framework lands in L1",
-                }
-            )
+            rows = []
+            for est in (app.engine.power_est, app.engine.apu_est):
+                state = est.state()
+                rows.append(
+                    {
+                        "source": state.source,
+                        "ts_s": round(state.ts_s, 3),
+                        "point": {k: round(v, 4) for k, v in state.point.items()},
+                        "covariance": {
+                            k: round(float(v), 6) for k, v in state.covariance.items()
+                        },
+                    }
+                )
+            return json.dumps({"estimators": rows})
 
         return await _wrap("self_estimator_status", {}, ctx, _work)
 

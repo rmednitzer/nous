@@ -11,11 +11,11 @@ possible.
 
 ## L1 -- Subsystem models and state machine
 
-- BL-002 [planned] (L1) FastMCP server: full subsystem read tool surface.
-- BL-003 [planned] (L1) Power subsystem (Li-ion + Peukert + thermal derate).
+- BL-002 [in-progress] (L1) FastMCP server: full subsystem read tool surface. Power and APU tools now return real engine values; remaining subsystems still stub.
+- BL-003 [in-progress] (L1) Power subsystem (Li-ion + Peukert + thermal derate). Subsystem and SoC Kalman live; controller wiring in `server.py::power_status`.
 - BL-004 [planned] (L1) State machine wired to derived OperatorState and CommsState.
 - BL-005 [planned] (L1) Thermal subsystem with two-state model.
-- BL-005a [planned] (L1) APU subsystem (solar + fuel cell).
+- BL-005a [in-progress] (L1) APU subsystem (solar PV + MPPT, methanol fuel cell, vehicle tether, USB-C PD-in, hand-crank). Subsystem, per-source Kalman, and `apu_status` tool wired; see ADR-0015.
 - BL-006 [planned] (L1) Hardware profile schema model + validator.
 - BL-007 [planned] (L1) Compute subsystem with load curves from the profile.
 - BL-008 [planned] (L1) Storage subsystem with wear curve.

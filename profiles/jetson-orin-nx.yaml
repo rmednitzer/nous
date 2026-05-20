@@ -5,13 +5,38 @@ description: Smaller Jetson Orin NX variant. Numbers are documented placeholders
 power:
   battery_wh: 296
   voltage_v_nominal: 14.4
+  voltage_v_min: 12.0
+  voltage_v_max: 16.8
+  internal_resistance_ohm: 0.06
+  rated_current_a: 3.0
   peukert_k: 1.04
   soc_pct_low_threshold: 20
   soc_pct_critical_threshold: 5
+  thermal_derate_c: 45
+  thermal_derate_slope_per_c: 0.02
+  charge_limit_w: 60
 
 apu:
   solar_w_peak: 40
   fuelcell_w_continuous: 15
+  solar:
+    panel_w_peak: 40
+    mppt_efficiency: 0.90
+    panel_temp_derate_per_c_above_25: 0.004
+  fuel_cell:
+    continuous_w: 15
+    fuel_capacity_g: 200
+    efficiency: 0.42
+    wh_per_g_fuel: 2.3
+  vehicle:
+    bus_voltage_v: 28.0
+    current_limit_a: 3.0
+  usb_c_pd:
+    profiles_w: [15, 27, 45, 60]
+    default_profile_w: 45
+  hand_crank:
+    max_w: 15
+    efficiency: 0.6
 
 thermal:
   ambient_c_default: 25

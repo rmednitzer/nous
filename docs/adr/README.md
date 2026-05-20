@@ -17,3 +17,4 @@
 | 0012 | [Versioned schemas for profiles, scenarios, and tool I/O](0012-versioned-schemas.md) | Accepted | 2026-05-20 |
 | 0013 | [Tier-classified subsystem read/write tools](0013-tier-classified-subsystems.md) | Accepted | 2026-05-20 |
 | 0014 | [Docs site on MkDocs with GitHub Pages](0014-docs-site-mkdocs-pages.md) | Accepted | 2026-05-20 |
+| 0015 | [APU is strictly auxiliary; the primary battery is the sole bus](0015-apu-strictly-auxiliary.md) | Accepted | 2026-05-20 |
