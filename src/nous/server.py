@@ -70,6 +70,11 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         "port": port,
         "stateless_http": True,
         "json_response": True,
+        # Mount the streamable-HTTP MCP transport at the root so a bare
+        # custom-connector URL (https://host/) reaches the JSON-RPC endpoint
+        # directly. OAuth metadata, /authorize, /token, /register and /revoke
+        # are SDK-registered as siblings; no conflict at the routing layer.
+        "streamable_http_path": "/",
     }
     if cfg.transport == "http" and cfg.oauth_enabled:
         from .auth import build_auth_settings, make_oauth_provider
