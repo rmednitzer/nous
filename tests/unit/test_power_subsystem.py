@@ -106,6 +106,18 @@ def test_peukert_reduces_capacity_at_high_current() -> None:
     assert b.soc_pct < a.soc_pct - 1.0
 
 
+def test_peukert_not_applied_during_charging() -> None:
+    a = PowerSubsystem(_profile(peukert_k=1.0))
+    b = PowerSubsystem(_profile(peukert_k=1.30))
+    for sub in (a, b):
+        sub.set_soc_pct(50.0)
+        sub.set_load_w(0.0)
+        sub.set_charge_w(50.0)
+        for _ in range(120):
+            sub.step(1.0)
+    assert b.soc_pct == pytest.approx(a.soc_pct, abs=0.1)
+
+
 def test_thermal_derate_reduces_capacity() -> None:
     cold = PowerSubsystem(_profile())
     hot = PowerSubsystem(_profile())

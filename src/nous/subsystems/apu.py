@@ -1,7 +1,7 @@
-"""Auxiliary power unit: solar PV + methanol fuel cell + vehicle + USB-C PD + hand-crank.
+"""Auxiliary power unit: solar PV + methanol fuel cell + vehicle + USB-C PD.
 
 Implements the :class:`~nous.subsystems.base.Subsystem` Protocol. The APU
-composes five auxiliary sources into a single total power offered to the
+composes four auxiliary sources into a single total power offered to the
 battery; the bus regulator on
 :meth:`~nous.subsystems.power.PowerSubsystem.set_charge_w` clamps that to
 the battery's charge-acceptance budget. The APU is strictly auxiliary
@@ -15,16 +15,17 @@ Per-source physics:
   and clipped to ``panel_w_peak``.
 * **Methanol fuel cell.** Output tracks a 0..1 load fraction (or a
   scenario override). Fuel mass depletes at
-  ``output_w * dt / wh_per_g_fuel``; when the tank empties, output is
-  forced to zero.
+  ``output_w * dt / wh_per_g_fuel``; if ``wh_per_g_fuel`` is omitted
+  the model derives it from ``efficiency * methanol_lhv_wh_per_g``.
+  When the tank empties, output is forced to zero.
 * **Vehicle tether.** Connected/disconnected, with the bus's offered
   power clamped to ``bus_voltage_v * current_limit_a``.
-* **USB-C PD-in.** Discrete PD profiles (W). The negotiated value is the
-  largest available profile less than or equal to the controller's
-  request; if the request is below the smallest profile, PD falls back
-  to that minimum.
-* **Hand-crank.** Linear human input scaled by mechanical efficiency and
-  clamped to ``max_w``.
+* **USB-C PD-in.** Discrete PD profiles (W). The negotiated value is
+  the largest available profile less than or equal to the
+  controller's request; the construction-time
+  ``default_profile_w`` is run through the same negotiation so a YAML
+  default outside the advertised profiles cannot leak a non-PD power
+  level.
 """
 
 from __future__ import annotations
@@ -46,10 +47,9 @@ _DEFAULT_FUELCELL_EFFICIENCY = 0.0
 _DEFAULT_WH_PER_G_FUEL = 2.5
 _DEFAULT_VEHICLE_BUS_V = 12.0
 _DEFAULT_VEHICLE_CURRENT_LIMIT_A = 0.0
-_DEFAULT_HAND_CRANK_MAX_W = 0.0
-_DEFAULT_HAND_CRANK_EFFICIENCY = 0.5
 _DEFAULT_USBC_DEFAULT_W = 0.0
 _DEFAULT_PANEL_TEMP_C = 25.0
+_METHANOL_LHV_WH_PER_G = 5.53
 
 
 def _coalesce_float(*candidates: Any, default: float) -> float:
@@ -61,7 +61,7 @@ def _coalesce_float(*candidates: Any, default: float) -> float:
 
 
 class ApuSubsystem:
-    """Five-source auxiliary power unit (BL-005a).
+    """Four-source auxiliary power unit (BL-005a).
 
     Each tick, the engine reads :attr:`total_w` and feeds it to the power
     subsystem as charge inflow. Sources can be steered either from the
@@ -106,9 +106,15 @@ class ApuSubsystem:
             apu_cfg.get("fuelcell_efficiency"),
             default=_DEFAULT_FUELCELL_EFFICIENCY,
         )
-        self._wh_per_g_fuel = _coalesce_float(
-            fc_cfg.get("wh_per_g_fuel"), default=_DEFAULT_WH_PER_G_FUEL
-        )
+        explicit_wh_per_g = fc_cfg.get("wh_per_g_fuel")
+        if explicit_wh_per_g is not None:
+            self._wh_per_g_fuel = float(explicit_wh_per_g)
+        elif self._fuelcell_efficiency > 0.0:
+            self._wh_per_g_fuel = (
+                self._fuelcell_efficiency * _METHANOL_LHV_WH_PER_G
+            )
+        else:
+            self._wh_per_g_fuel = _DEFAULT_WH_PER_G_FUEL
 
         veh_cfg = dict(apu_cfg.get("vehicle") or {})
         self._vehicle_bus_v = _coalesce_float(
@@ -127,17 +133,10 @@ class ApuSubsystem:
                 if isinstance(w, (int, float)) and float(w) > 0.0
             )
         )
-        self._usbc_default_w = _coalesce_float(
+        configured_default_w = _coalesce_float(
             usbc_cfg.get("default_profile_w"), default=_DEFAULT_USBC_DEFAULT_W
         )
-
-        hc_cfg = dict(apu_cfg.get("hand_crank") or {})
-        self._hand_crank_max_w = _coalesce_float(
-            hc_cfg.get("max_w"), default=_DEFAULT_HAND_CRANK_MAX_W
-        )
-        self._hand_crank_efficiency = _coalesce_float(
-            hc_cfg.get("efficiency"), default=_DEFAULT_HAND_CRANK_EFFICIENCY
-        )
+        self._usbc_default_w = self._pick_usbc_profile(configured_default_w)
 
         self._solar_insolation_w: float | None = None
         self._panel_temp_c = _DEFAULT_PANEL_TEMP_C
@@ -148,7 +147,6 @@ class ApuSubsystem:
         self._vehicle_offered_w = 0.0
         self._usbc_connected = False
         self._usbc_profile_w = self._usbc_default_w
-        self._hand_crank_input_w = 0.0
 
         self._t = 0.0
         self._fuel_g = self._fuel_capacity_g
@@ -156,7 +154,6 @@ class ApuSubsystem:
         self._fuelcell_w = 0.0
         self._vehicle_w = 0.0
         self._usbc_w = 0.0
-        self._hand_crank_w = 0.0
 
     def set_solar_w(self, watts: float) -> None:
         """Override the next tick's solar output directly (scenario shortcut)."""
@@ -191,10 +188,6 @@ class ApuSubsystem:
         if profile_w is not None:
             self._usbc_profile_w = self._pick_usbc_profile(profile_w)
 
-    def set_hand_crank_w(self, input_w: float) -> None:
-        """Hand-crank input power; ``efficiency`` is applied to compute output."""
-        self._hand_crank_input_w = max(0.0, float(input_w))
-
     def refuel(self, grams: float) -> None:
         """Add fuel (g) to the methanol cell, clamped to ``fuel_capacity_g``."""
         self._fuel_g = max(
@@ -204,13 +197,7 @@ class ApuSubsystem:
     @property
     def total_w(self) -> float:
         """Total auxiliary power the APU is currently producing."""
-        return (
-            self._solar_w
-            + self._fuelcell_w
-            + self._vehicle_w
-            + self._usbc_w
-            + self._hand_crank_w
-        )
+        return self._solar_w + self._fuelcell_w + self._vehicle_w + self._usbc_w
 
     @property
     def fuel_pct(self) -> float:
@@ -230,7 +217,6 @@ class ApuSubsystem:
         self._fuelcell_w = self._compute_fuelcell_w(dt)
         self._vehicle_w = self._compute_vehicle_w()
         self._usbc_w = self._compute_usbc_w()
-        self._hand_crank_w = self._compute_hand_crank_w()
 
     def truth(self) -> Mapping[str, Any]:
         return {
@@ -238,7 +224,6 @@ class ApuSubsystem:
             "fuelcell_w": self._fuelcell_w,
             "vehicle_w": self._vehicle_w,
             "usbc_w": self._usbc_w,
-            "hand_crank_w": self._hand_crank_w,
             "total_w": self.total_w,
             "fuel_g": self._fuel_g,
             "fuel_pct": self.fuel_pct,
@@ -257,7 +242,6 @@ class ApuSubsystem:
                 "fuelcell_w": self._fuelcell_w,
                 "vehicle_w": self._vehicle_w,
                 "usbc_w": self._usbc_w,
-                "hand_crank_w": self._hand_crank_w,
                 "total_w": self.total_w,
             },
             noise={
@@ -265,7 +249,6 @@ class ApuSubsystem:
                 "fuelcell_w_sigma": 0.5,
                 "vehicle_w_sigma": 0.5,
                 "usbc_w_sigma": 0.2,
-                "hand_crank_w_sigma": 0.5,
                 "total_w_sigma": 2.0,
             },
         )
@@ -311,12 +294,6 @@ class ApuSubsystem:
         if not self._usbc_connected:
             return 0.0
         return self._usbc_profile_w
-
-    def _compute_hand_crank_w(self) -> float:
-        if self._hand_crank_max_w <= 0.0:
-            return 0.0
-        clipped = min(self._hand_crank_input_w, self._hand_crank_max_w)
-        return max(0.0, clipped * self._hand_crank_efficiency)
 
     def _pick_usbc_profile(self, requested_w: float) -> float:
         requested = max(0.0, float(requested_w))

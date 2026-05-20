@@ -8,7 +8,7 @@
 
 ## Scope
 
-Five auxiliary power sources composed into a single ``total_w`` offered
+Four auxiliary power sources composed into a single ``total_w`` offered
 to the primary battery each tick. Every source is additive; none ever
 delivers power directly to compute. The bus regulator on
 ``PowerSubsystem.set_charge_w`` clamps the offered total to
@@ -32,8 +32,10 @@ Inputs: load fraction in [0, 1] (``set_fuelcell_load_pct``) or a direct
 override (``set_fuelcell_w``).
 
 State: ``fuel_g`` depletes at
-``output_w * dt / wh_per_g_fuel``. When the tank empties, output is
-forced to zero regardless of the load fraction.
+``output_w * dt / wh_per_g_fuel``. When ``wh_per_g_fuel`` is omitted,
+the model derives it from ``efficiency * 5.53 Wh/g`` (the methanol LHV
+constant). When the tank empties, output is forced to zero regardless
+of the load fraction.
 
 Output: ``min(continuous_w, override_w or load_pct * continuous_w)``.
 
@@ -48,17 +50,15 @@ Inputs: ``connected`` flag and the bus's ``offered_w``
 Inputs: ``connected`` flag and a requested profile in W
 (``set_usb_c_pd``). The negotiated output is the largest available
 profile that is less than or equal to the request; if the request is
-below the smallest available profile, the smallest is used.
-
-### Hand-crank
-
-Input: human input power (``set_hand_crank_w``). Output is
-``min(input_w, max_w) * efficiency``.
+below the smallest available profile, the smallest is used. The
+``default_profile_w`` from the profile YAML is run through the same
+negotiation at construction time, so a YAML default outside the
+advertised set cannot leak a non-PD power level.
 
 ## Total
 
 ```
-total_w = solar_w + fuelcell_w + vehicle_w + usbc_w + hand_crank_w
+total_w = solar_w + fuelcell_w + vehicle_w + usbc_w
 ```
 
 The engine calls ``power.set_charge_w(apu.total_w)`` each tick; the
@@ -77,16 +77,13 @@ apu:
     continuous_w: 25
     fuel_capacity_g: 250
     efficiency: 0.45
-    wh_per_g_fuel: 2.5            # electrical Wh per gram (post-cell losses)
+    wh_per_g_fuel: 2.5            # electrical Wh per gram; derived from efficiency * 5.53 when omitted
   vehicle:
     bus_voltage_v: 28.0
     current_limit_a: 5.0
   usb_c_pd:
     profiles_w: [15, 27, 45, 60, 100]
     default_profile_w: 60
-  hand_crank:
-    max_w: 20
-    efficiency: 0.65
 ```
 
 The legacy flat fields ``solar_w_peak``, ``fuelcell_w_continuous``,
@@ -107,3 +104,7 @@ parsed when the nested form is absent, so older profiles keep working.
 - USB-C PD negotiation is discrete (a single profile selection per
   ``set_usb_c_pd`` call). The simulator does not model the PD
   message exchange itself.
+- No hand-crank source. A man-portable unit's emergency option, but
+  the simulator does not model it in v0.1; an operator who needs to
+  rehearse "battery dead, no daylight, no methanol" scenarios should
+  treat the device as offline rather than rely on a crank model.

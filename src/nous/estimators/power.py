@@ -1,12 +1,14 @@
 """Power state-of-charge estimator: coulomb-counting plus voltage Kalman update.
 
-The estimator tracks ``(soc_pct, voltage_v, current_a)`` as a recursive
-1-D Kalman filter over each scalar. Process noise grows the covariance in
+The estimator runs a 1-D scalar Kalman filter over each of SoC and
+terminal voltage. Process noise grows their covariances in
 :meth:`predict`; observation noise from
-:meth:`~nous.subsystems.power.PowerSubsystem.sensor_obs` shrinks it in
-:meth:`update`. See ``docs/model-cards/estimator-power-soc.md`` for the
-covariance bound contract (BL-027 carries the full EKF; this v0.1 build
-ships the linear-Gaussian baseline).
+:meth:`~nous.subsystems.power.PowerSubsystem.sensor_obs` shrinks them in
+:meth:`update`. The last observed ``current_a`` is stored verbatim and
+passed through in :meth:`state` -- it is not filtered and has no
+covariance entry. See ``docs/model-cards/estimator-power-soc.md`` for
+the covariance bound contract (BL-027 carries the full EKF; this v0.1
+build ships the linear-Gaussian baseline).
 """
 
 from __future__ import annotations

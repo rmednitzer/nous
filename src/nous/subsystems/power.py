@@ -139,6 +139,14 @@ class PowerSubsystem:
         return self._soc_pct
 
     @property
+    def voltage_v(self) -> float:
+        return self._voltage_v
+
+    @property
+    def current_a(self) -> float:
+        return self._current_a
+
+    @property
     def remaining_wh(self) -> float:
         return self._battery_wh * (self._soc_pct / 100.0)
 
@@ -184,8 +192,9 @@ class PowerSubsystem:
         load_a = self._load_w / max(v_terminal, 1.0)
         charge_a = self._charge_accepted_w / max(v_terminal, 1.0)
         net_a = load_a - charge_a
+        discharging = net_a > 0.0
 
-        c_eff_ah = self._effective_capacity_ah(abs(net_a))
+        c_eff_ah = self._effective_capacity_ah(abs(net_a), discharging=discharging)
         dsoc = -100.0 * net_a * (dt / 3600.0) / c_eff_ah
         soc_new = self._soc_pct + dsoc
         if soc_new < 0.0:
@@ -241,10 +250,12 @@ class PowerSubsystem:
             soc / 100.0
         )
 
-    def _effective_capacity_ah(self, current_a: float) -> float:
+    def _effective_capacity_ah(
+        self, current_a: float, *, discharging: bool = True
+    ) -> float:
         c = self._nominal_capacity_ah
         i = max(current_a, 1e-3)
-        if i > self._rated_current_a and self._peukert_k > 1.0:
+        if discharging and i > self._rated_current_a and self._peukert_k > 1.0:
             c = c * (self._rated_current_a / i) ** (self._peukert_k - 1.0)
         if self._cell_c > self._thermal_derate_c:
             penalty = self._derate_slope_per_c * (self._cell_c - self._thermal_derate_c)

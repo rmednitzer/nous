@@ -62,7 +62,10 @@ class Engine:
 
         self.power = PowerSubsystem(self.profile)
         self.apu = ApuSubsystem(self.profile)
-        self.power_est = PowerEstimator(initial_soc=self.power.soc_pct)
+        self.power_est = PowerEstimator(
+            initial_soc=self.power.soc_pct,
+            initial_voltage=self.power.voltage_v,
+        )
         self.apu_est = ApuEstimator()
 
     @property

@@ -14,7 +14,6 @@ def _obs(**values: float) -> Observation:
         "fuelcell_w": values.get("fuelcell_w", 0.0),
         "vehicle_w": values.get("vehicle_w", 0.0),
         "usbc_w": values.get("usbc_w", 0.0),
-        "hand_crank_w": values.get("hand_crank_w", 0.0),
         "total_w": values.get("total_w", sum(values.values())),
     }
     noise = {
@@ -22,7 +21,6 @@ def _obs(**values: float) -> Observation:
         "fuelcell_w_sigma": 0.5,
         "vehicle_w_sigma": 0.5,
         "usbc_w_sigma": 0.2,
-        "hand_crank_w_sigma": 0.5,
         "total_w_sigma": 2.0,
     }
     return Observation(source="apu", ts_s=0.0, payload=payload, noise=noise)
@@ -31,7 +29,7 @@ def _obs(**values: float) -> Observation:
 def test_starts_at_zero_each_source() -> None:
     est = ApuEstimator()
     state = est.state()
-    for key in ("solar_w", "fuelcell_w", "vehicle_w", "usbc_w", "hand_crank_w", "total_w"):
+    for key in ("solar_w", "fuelcell_w", "vehicle_w", "usbc_w", "total_w"):
         assert state.point[key] == 0.0
 
 

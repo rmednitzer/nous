@@ -49,16 +49,13 @@ apu:
     continuous_w: 25
     fuel_capacity_g: 250
     efficiency: 0.45
-    wh_per_g_fuel: 2.5
+    wh_per_g_fuel: 2.5            # optional; derived from efficiency * 5.53 if omitted
   vehicle:
     bus_voltage_v: 28.0
     current_limit_a: 5.0
   usb_c_pd:
     profiles_w: [15, 27, 45, 60, 100]
     default_profile_w: 60
-  hand_crank:
-    max_w: 20
-    efficiency: 0.65
 
 thermal:
   ambient_c_default: 25

@@ -224,7 +224,7 @@ def build_server(settings: Settings | None = None) -> FastMCP:
 
     @mcp.tool()
     async def apu_status(ctx: Context | None = None) -> str:
-        """Auxiliary-power-unit state (solar, fuel cell, vehicle, USB-C, hand-crank)."""
+        """Auxiliary-power-unit state (solar, fuel cell, vehicle, USB-C PD)."""
 
         async def _work() -> str:
             truth = dict(app.engine.apu.truth())
@@ -234,7 +234,6 @@ def build_server(settings: Settings | None = None) -> FastMCP:
                 "fuelcell_w": round(truth["fuelcell_w"], 3),
                 "vehicle_w": round(truth["vehicle_w"], 3),
                 "usbc_w": round(truth["usbc_w"], 3),
-                "hand_crank_w": round(truth["hand_crank_w"], 3),
                 "total_w": round(truth["total_w"], 3),
                 "fuelcell_fuel_g": round(truth["fuel_g"], 3),
                 "fuelcell_fuel_pct": round(truth["fuel_pct"], 3),

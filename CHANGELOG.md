@@ -16,14 +16,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   filter over (SoC, voltage) with covariance bounds documented in
   the model card. Tracked by `BL-003`.
 
-- APU subsystem expanded to five sources: solar PV with MPPT,
-  methanol fuel cell, vehicle tether, USB-C PD-in, and hand-crank.
-  Each source has scenario-friendly setters
+- APU subsystem expanded to four auxiliary sources: solar PV with
+  MPPT, methanol fuel cell, vehicle tether, and USB-C PD-in. Each
+  source has scenario-friendly setters
   (``set_solar_insolation_w``, ``set_fuelcell_load_pct``,
-  ``set_vehicle``, ``set_usb_c_pd``, ``set_hand_crank_w``) plus
-  direct overrides for compatibility with the existing
-  ``inject_apu`` scenario action. Fuel cell tracks methanol mass
-  and stops at empty. Per-source 1-D Kalman estimator. Tracked by
+  ``set_vehicle``, ``set_usb_c_pd``) plus direct overrides for
+  compatibility with the existing ``inject_apu`` scenario action.
+  Fuel cell tracks methanol mass and stops at empty;
+  ``wh_per_g_fuel`` is derived from ``efficiency * 5.53 Wh/g``
+  (methanol LHV) when not explicitly set. The USB-C
+  ``default_profile_w`` is run through the PD negotiation at
+  construction time. Per-source 1-D Kalman estimator. Tracked by
   `BL-005a`.
 
 - Engine ``tick()`` now wires power and APU through the loop:

@@ -64,7 +64,7 @@ Last reviewed: 2026-05-20.
 | `src/nous/engine.py` | in-progress | Tick orchestration; power and APU subsystems wired through the tick loop. |
 | `src/nous/tick.py` | in-progress | Async tick loop. |
 | `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |
-| `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in + hand-crank (BL-005a). |
+| `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in (BL-005a). |
 | `src/nous/subsystems/{thermal,compute,storage,sensors,position,biometrics,comms,inference}.py` | planned | Typed stubs in v0.1. |
 | `src/nous/estimators/power.py` | in-progress | 1-D Kalman over (SoC, voltage); covariance bound documented in the model card. |
 | `src/nous/estimators/apu.py` | in-progress | Per-source 1-D Kalman; tracks five source channels plus the total. |

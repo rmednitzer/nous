@@ -34,9 +34,6 @@ apu:
   usb_c_pd:
     profiles_w: [15, 27, 45, 60]
     default_profile_w: 45
-  hand_crank:
-    max_w: 15
-    efficiency: 0.6
 
 thermal:
   ambient_c_default: 25

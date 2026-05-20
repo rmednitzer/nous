@@ -7,13 +7,12 @@
 
 ## Context
 
-The auxiliary power unit covers five distinct sources: a solar panel
+The auxiliary power unit covers four distinct sources: a solar panel
 with an MPPT front end, a methanol fuel cell, a vehicle tether
-connection, a USB-C PD-in port, and a hand-crank generator. Each
-source could in principle bypass the primary Li-ion pack and feed
-compute directly. Doing so would let the simulator model a "battery
-removed, running off solar" posture, at the cost of a much more
-involved power-flow graph.
+connection, and a USB-C PD-in port. Each source could in principle
+bypass the primary Li-ion pack and feed compute directly. Doing so
+would let the simulator model a "battery removed, running off solar"
+posture, at the cost of a much more involved power-flow graph.
 
 The alternative, and the path the v0.1 simulator takes, is to treat
 every APU source as a charge input to the primary battery. Compute,

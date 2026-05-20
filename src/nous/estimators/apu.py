@@ -1,10 +1,10 @@
 """APU output estimator: per-source first-order Kalman smoothing.
 
-Tracks the five APU sources (solar, fuel cell, vehicle tether, USB-C PD,
-hand-crank) plus the total. Each channel is a scalar Kalman filter whose
-process noise grows in :meth:`predict` and is shrunk by the matching
-sensor observation in :meth:`update`. The covariance bounds are loose
-relative to the power SoC estimator -- the APU mostly reports its own
+Tracks the four APU sources (solar, fuel cell, vehicle tether, USB-C PD)
+plus the total. Each channel is a scalar Kalman filter whose process
+noise grows in :meth:`predict` and is shrunk by the matching sensor
+observation in :meth:`update`. The covariance bounds are loose relative
+to the power SoC estimator -- the APU mostly reports its own
 configuration, not a hidden physical state.
 """
 
@@ -20,7 +20,6 @@ _FIELDS: tuple[str, ...] = (
     "fuelcell_w",
     "vehicle_w",
     "usbc_w",
-    "hand_crank_w",
     "total_w",
 )
 

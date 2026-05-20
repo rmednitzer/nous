@@ -89,3 +89,10 @@ def test_apu_estimator_tracks_total(engine: Engine) -> None:
         engine.tick()
     estimate = engine.apu_est.state()
     assert estimate.point["total_w"] == pytest.approx(25.0, abs=2.0)
+
+
+def test_power_estimator_seeded_with_subsystem_voltage(tmp_nous_home: Path) -> None:
+    eng = Engine()
+    estimate = eng.power_est.state()
+    truth = eng.power.truth()
+    assert estimate.point["voltage_v"] == pytest.approx(truth["voltage_v"], abs=1e-6)

@@ -25,9 +25,8 @@ read-only calls before you mutate anything.
   voltage, current, accepted vs offered APU charge, endurance
   estimate, low/critical flag).
 - `apu_status` returns per-source power (solar, fuel cell, vehicle
-  tether, USB-C PD, hand-crank) plus fuel level. APU is strictly
-  auxiliary (ADR-0015); every watt it produces flows through the
-  battery.
+  tether, USB-C PD) plus fuel level. APU is strictly auxiliary
+  (ADR-0015); every watt it produces flows through the battery.
 - `comms_state` is a placeholder until the comms subsystem lands.
 - `self_estimator_status` reports live covariances for the power
   and APU estimators; other estimators arrive in L1.
