@@ -1,0 +1,78 @@
+# STATUS
+
+Project phase and per-document maturity. Authoritative for "is this real
+yet?" questions.
+
+Last reviewed: 2026-05-20.
+
+## Maturity taxonomy
+
+- **stable** -- public contract, breaking changes go through deprecation;
+  ADR governs changes.
+- **in-progress** -- the file or component exists and is wired up, but the
+  contract is still moving; expect churn.
+- **planned** -- referenced from the backlog (`docs/backlog.md`), not yet
+  scaffolded.
+
+## Phase table
+
+| Phase | Name | State | Scope |
+|-------|------|-------|-------|
+| L0 | Scaffold | in-progress | Layout, governance docs, audited tool surface, FSM, engine tick, hardware-profile loader, OAuth issuer. v0.1 lands the L0 scaffold. |
+| L1 | Subsystem models + state machine | planned | All ten subsystems implement step/truth/sensor_obs; estimators come online; the state machine transitions on derived OperatorState and CommsState. |
+| L2 | claude.ai integration + scenarios | planned | HTTP transport with OAuth + Caddy lockdown in place; scenario pack runs end-to-end; biometrics physiology-grounded; profile hot-reload. |
+| L3 | STPA completion + benchmarks | planned | STPA derived requirements complete; comms propagation model; learned self-model; multi-tenant claude.ai; real local inference; additional interop adapters. |
+
+## Per-document maturity
+
+| Document | State |
+|----------|-------|
+| `README.md` | in-progress |
+| `AGENTS.md` | in-progress |
+| `CLAUDE.md` | in-progress |
+| `LIMITATIONS.md` | in-progress |
+| `STATUS.md` | in-progress |
+| `CONTRIBUTING.md` | in-progress |
+| `SECURITY.md` | in-progress |
+| `CHANGELOG.md` | in-progress |
+| `docs/architecture.md` | in-progress |
+| `docs/state-machine.md` | in-progress |
+| `docs/tool-reference.md` | in-progress |
+| `docs/hardware-profiles.md` | in-progress |
+| `docs/deployment.md` | in-progress |
+| `docs/releasing.md` | in-progress |
+| `docs/backlog.md` | in-progress |
+| `docs/adr/0001` through `docs/adr/0014` | stable (decisions, not implementations) |
+| `docs/stpa/01..09` | in-progress |
+| `docs/conformance/*` | in-progress |
+| `docs/model-cards/*` | in-progress |
+
+## Component maturity
+
+| Component | State | Notes |
+|-----------|-------|-------|
+| `src/nous/server.py` (FastMCP wiring + representative tools) | in-progress | v0.1 wires a representative set; full surface lands in L1. |
+| `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
+| `src/nous/audit.py` | stable | JSONL append-only. Changes require an ADR. |
+| `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
+| `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
+| `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. |
+| `src/nous/engine.py` | in-progress | Tick orchestration; subsystem wiring is partial. |
+| `src/nous/tick.py` | in-progress | Async tick loop. |
+| `src/nous/subsystems/*` | planned | Each subsystem ships as a typed stub in v0.1. |
+| `src/nous/estimators/*` | planned | Each estimator ships as a typed stub in v0.1. |
+| `src/nous/self_model/*` | planned | Assess/explain/viability shipped as stubs. |
+| `src/nous/interop/*` | planned | Each adapter ships as a typed stub in v0.1. |
+| `src/nous/auth/oauth.py` | in-progress | File-backed issuer shape. |
+| `src/nous/scenarios/*` | planned | Loader + injectors shipped as stubs. |
+| `profiles/jetson-agx-orin.yaml` | in-progress | Reference profile with placeholder curves. |
+| `deploy/*` | in-progress | Systemd / Caddy / logrotate / install.sh / cloud-init. |
+| Test suite | in-progress | Unit, integration scaffold, stdio smoke. |
+
+## Quality gates
+
+- `make check` (ruff + mypy strict + pytest) is green on `main` and every
+  feature branch before merge.
+- `make docs-build` (`mkdocs build --strict`) is warning-free.
+- The CI grep ban against em-dashes in markdown and private-repo references
+  in any file passes.

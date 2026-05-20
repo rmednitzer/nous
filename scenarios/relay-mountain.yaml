@@ -1,0 +1,11 @@
+schema_version: "0.1.0"
+meta:
+  name: relay-mountain
+  description: Unit set down on a ridge as a comms relay; thermal soak during sun.
+profile: jetson-agx-orin
+tick_budget: 1440
+steps:
+  - { at_min: 0, action: state_transition, args: { trigger: relay } }
+  - { at_min: 120, action: inject_thermal, args: { ambient_delta_c: 12 } }
+  - { at_min: 240, action: inject_thermal, args: { ambient_delta_c: 0 } }
+  - { at_min: 1200, action: state_transition, args: { trigger: complete } }

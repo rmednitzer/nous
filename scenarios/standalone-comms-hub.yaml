@@ -1,0 +1,11 @@
+schema_version: "0.1.0"
+meta:
+  name: standalone-comms-hub
+  description: Unit acts as the comms hub for a multi-radio environment.
+profile: jetson-agx-orin
+tick_budget: 720
+steps:
+  - { at_min: 0, action: state_transition, args: { trigger: relay } }
+  - { at_min: 30, action: inject_comms_loss, args: { link_id: tak, loss_pct: 20 } }
+  - { at_min: 60, action: inject_comms_loss, args: { link_id: lora, loss_pct: 10 } }
+  - { at_min: 600, action: state_transition, args: { trigger: complete } }

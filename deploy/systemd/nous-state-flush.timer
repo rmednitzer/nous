@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily flush of nous SQLite WAL and state checkpoint
+Documentation=https://github.com/rmednitzer/nous
+
+[Timer]
+OnCalendar=*-*-* 00:14:00 UTC
+Persistent=true
+RandomizedDelaySec=15m
+AccuracySec=1m
+Unit=nous-state-flush.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+schema_version: "0.1.0"
+meta:
+  name: apu-solar-sustained
+  description: Daytime monitoring loop sustained by the solar APU.
+profile: jetson-agx-orin
+tick_budget: 720
+steps:
+  - { at_min: 0, action: state_transition, args: { trigger: monitoring } }
+  - { at_min: 0, action: inject_apu, args: { solar_w: 55 } }
+  - { at_min: 360, action: inject_apu, args: { solar_w: 25 } }
+  - { at_min: 600, action: inject_apu, args: { solar_w: 5 } }

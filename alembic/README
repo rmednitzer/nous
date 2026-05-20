@@ -1,0 +1,11 @@
+Alembic migrations for the nous SQLite state database.
+
+The baseline schema is created by `nous.db.init_db()` on first boot.
+Subsequent schema changes land as numbered migrations under
+`alembic/versions/`. Generate a new migration with:
+
+    uv run alembic revision -m "describe the change"
+
+Apply migrations with:
+
+    uv run alembic upgrade head

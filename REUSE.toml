@@ -1,0 +1,31 @@
+version = 1
+
+[[annotations]]
+path = [
+    "**/*.py",
+    "**/*.md",
+    "**/*.toml",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/*.sh",
+    "**/*.cfg",
+    "**/*.ini",
+    "**/*.mako",
+    "Makefile",
+    ".github/**",
+    ".editorconfig",
+    ".gitignore",
+    "alembic/**",
+    "deploy/**",
+    "docs/**",
+    "examples/**",
+    "profiles/**",
+    "scenarios/**",
+    "scripts/**",
+    "skills/**",
+    "src/**",
+    "tests/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The nous Authors"
+SPDX-License-Identifier = "Apache-2.0"

@@ -1,0 +1,34 @@
+[Unit]
+Description=nous simulator MCP server
+Documentation=https://github.com/rmednitzer/nous
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nous
+Group=nous
+EnvironmentFile=/etc/nous/nous.env
+WorkingDirectory=/opt/nous
+ExecStart=/opt/nous/venv/bin/python -m nous serve
+ExecStopPost=/opt/nous/venv/bin/python -m nous tick -n 1
+Restart=on-failure
+RestartSec=5s
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/nous
+PrivateTmp=true
+PrivateDevices=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

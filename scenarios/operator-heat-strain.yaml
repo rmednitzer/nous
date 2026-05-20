@@ -1,0 +1,12 @@
+schema_version: "0.1.0"
+meta:
+  name: operator-heat-strain
+  description: Operator exposure to heat causes biometrics drift; self-model should escalate OperatorState.
+profile: jetson-agx-orin
+tick_budget: 540
+steps:
+  - { at_min: 0, action: state_transition, args: { trigger: mission } }
+  - { at_min: 15, action: inject_biometrics, args: { core_temp_c_delta: 0.5, heart_rate_bpm_delta: 20 } }
+  - { at_min: 30, action: inject_biometrics, args: { core_temp_c_delta: 1.2, heart_rate_bpm_delta: 40 } }
+  - { at_min: 60, action: inject_biometrics, args: { core_temp_c_delta: 2.0, heart_rate_bpm_delta: 60 } }
+  - { at_min: 90, action: state_transition, args: { trigger: degrade } }
