@@ -12,8 +12,7 @@ calibrated standard deviation per channel.
 
 ## Outputs
 
-``Estimate`` with ``point = {solar_w, fuelcell_w, vehicle_w, usbc_w,
-total_w}`` and per-channel scalar covariances.
+``Estimate`` with ``point = {solar_w, fuelcell_w, vehicle_w, usbc_w, total_w}`` and per-channel scalar covariances.
 
 ## Algorithm
 
