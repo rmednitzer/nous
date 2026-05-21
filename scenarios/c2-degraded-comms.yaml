@@ -5,7 +5,7 @@ meta:
     Command-and-control loop with intermittent LTE blackout. Exercises the
     InferenceFallback ladder: when the comms estimator reports DEGRADED or
     DENIED, cloud inference falls back to the local mock and the audit
-    line records ``path=local_mock`` with the reason.
+    line records `path=local_mock` with the reason.
 profile: jetson-agx-orin
 tick_budget: 720
 steps:
