@@ -134,9 +134,11 @@ tour.
 
 ## Live deployment
 
-The reference instance at <https://nous.blackphoenix.org/>
-tracks `main` automatically. Every merged PR is live on the
-VM within five minutes. See `docs/deployment.md`.
+A single-VM reference instance tracks `main` automatically; every
+merged PR reaches it within five minutes (`docs/deployment.md`). The
+public face of the project is the showcase under
+[`docs/showcase/`](docs/showcase/README.md); the live VM itself
+remains private and CIDR-gated (ADR 0017).
 
 ## License
 

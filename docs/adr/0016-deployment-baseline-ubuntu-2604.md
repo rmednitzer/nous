@@ -10,11 +10,10 @@
 
 ADR 0008 set the VM deployment baseline to Ubuntu 24.04 LTS. Canonical
 shipped Ubuntu 26.04 LTS in April 2026, and the live reference instance
-at `nous.blackphoenix.org` now tracks it (commit `d9d3f6e` already
-adjusted the cloud-init package names to make the bundle land on the
-new image). This ADR records the deployment baseline now formally
-moving to 26.04 and captures the systemd hardening that the newer
-release lets us pin.
+now tracks it (commit `d9d3f6e` already adjusted the cloud-init
+package names to make the bundle land on the new image). This ADR
+records the deployment baseline now formally moving to 26.04 and
+captures the systemd hardening that the newer release lets us pin.
 
 Three things changed under the bundle that motivated the migration.
 The platform Python is now 3.14, which the simulator already runs

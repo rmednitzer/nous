@@ -106,9 +106,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Hardware profile schema extended with the new
   ``power.{voltage_v_min,voltage_v_max,internal_resistance_ohm,
   rated_current_a,thermal_derate_slope_per_c,charge_limit_w}``
-  fields and the nested ``apu.{solar,fuel_cell,vehicle,usb_c_pd,
-  hand_crank}`` blocks. The legacy flat ``apu`` keys are still
-  parsed for backward compatibility.
+  fields and the nested ``apu.{solar,fuel_cell,vehicle,usb_c_pd}``
+  blocks. The legacy flat ``apu`` keys are still parsed for
+  backward compatibility.
 
 - Self-updating deployment posture: `nous-auto-update.timer` polls
   `origin/main` every 5 minutes and fast-forwards + reinstalls +

@@ -12,11 +12,11 @@ subsystem coverage lands in L1 (see [backlog.md](backlog.md)).
 | `device_health` | T0 | Engine snapshot: tick, ts_s, mode, operator/comms state. |
 | `state_get` | T0 | Current FSM mode. |
 | `state_history` | T0 | Recent FSM transitions. |
-| `power_status` | T0 | Battery SoC, draw, projected endurance (placeholder). |
-| `apu_status` | T0 | Solar and fuel-cell state (placeholder). |
-| `comms_state` | T0 | Comms-stack summary. |
-| `self_model_assess` | T0 | Self-model capability assessment (placeholder). |
-| `self_estimator_status` | T0 | Estimator covariances, divergence flags. |
+| `power_status` | T0 | Live Li-ion pack: SoC, terminal voltage, current, accepted vs offered APU charge, endurance, low/critical flag. |
+| `apu_status` | T0 | Per-source APU power (solar, fuel cell, vehicle, USB-C PD) plus fuel level. |
+| `comms_state` | T0 | Comms-stack summary (stub until BL-012). |
+| `self_model_assess` | T0 | Self-model capability assessment (stub until BL-018). |
+| `self_estimator_status` | T0 | Estimator covariances (live for power and APU; other estimators land in L1). |
 | `inference_local` | T1 | Mock local inference. |
 | `interop_formats` | T0 | List the interop adapters the server knows about. |
 
