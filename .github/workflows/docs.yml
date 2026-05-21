@@ -44,6 +44,7 @@ jobs:
           uv run python scripts/gen_tool_reference.py
           uv run python scripts/gen_adr_index.py
           uv run python scripts/gen_backlog_summary.py
+          uv run python scripts/gen_showcase_telemetry.py
 
       - name: Build MkDocs site
         run: uv run mkdocs build --strict
