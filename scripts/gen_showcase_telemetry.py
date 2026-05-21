@@ -36,12 +36,28 @@ _APU_SETTERS = {
     "fuelcell_load_pct": "set_fuelcell_load_pct",
 }
 
+_guard_denied_type_cache: type[Exception] | None = None
+_guard_denied_type_resolved = False
+
 
 def _load_engine_module() -> Any:
     sys.path.insert(0, str(REPO_ROOT / "src"))
     from nous.engine import Engine
 
     return Engine
+
+
+def _guard_denied_type() -> type[Exception] | None:
+    global _guard_denied_type_resolved, _guard_denied_type_cache
+    if not _guard_denied_type_resolved:
+        try:
+            from nous.state.machine import GuardDenied
+
+            _guard_denied_type_cache = GuardDenied
+        except ImportError:
+            _guard_denied_type_cache = None
+        _guard_denied_type_resolved = True
+    return _guard_denied_type_cache
 
 
 def _sparkline(values: list[float]) -> str:
@@ -73,15 +89,16 @@ def _apply_step(engine: Any, action: str, args: Mapping[str, Any]) -> str:
         if not isinstance(trigger, str):
             return "skipped: missing trigger"
         context = args.get("context")
-        transition_context = context if isinstance(context, Mapping) else None
+        guard_denied = _guard_denied_type()
+        handled_errors: tuple[type[Exception], ...] = (ValueError,)
+        if guard_denied is not None:
+            handled_errors = (ValueError, guard_denied)
         try:
             engine.state.mode = engine.fsm.transition(
                 trigger,
-                context=transition_context,
+                context=context if isinstance(context, Mapping) else None,
             )
-        except Exception as exc:
-            if exc.__class__.__name__ != "GuardDenied" and not isinstance(exc, ValueError):
-                raise
+        except handled_errors as exc:
             return f"refused: {exc}"
         return f"applied: mode -> {engine.state.mode.value}"
     if action == "inject_apu":

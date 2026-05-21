@@ -1,6 +1,6 @@
 # Scenario: c2-degraded-comms
 
-Command-and-control loop with intermittent LTE blackout. Exercises the InferenceFallback ladder: when the comms estimator reports DEGRADED or DENIED, cloud inference falls back to the local mock and the audit line records ``path=local_mock`` with the reason.
+Command-and-control loop with intermittent LTE blackout. Exercises the InferenceFallback ladder: when the comms estimator reports DEGRADED or DENIED, cloud inference falls back to the local mock and the audit line records `path=local_mock` with the reason.
 
 
 ## Run metadata
