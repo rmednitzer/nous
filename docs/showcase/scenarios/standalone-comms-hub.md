@@ -1,0 +1,122 @@
+# Scenario: standalone-comms-hub
+
+Unit acts as the comms hub for a multi-radio environment.
+
+## Run metadata
+
+| Field | Value |
+| --- | --- |
+| profile | `jetson-agx-orin` |
+| tick budget | 720 |
+| tick rate | 0.0166667 Hz |
+| name | standalone-comms-hub |
+| source | `scenarios/standalone-comms-hub.yaml` |
+
+## Fidelity
+
+This run exercises the v0.1 substantive subsystems and records the
+rest as defaults. See [Fidelity](../fidelity.md) for the legend.
+
+| Subsystem | Substance | Source |
+| --- | --- | --- |
+| power | `filtered` | Li-ion + Peukert + SoC Kalman |
+| apu | `filtered` | solar MPPT, fuel cell, vehicle, USB-C PD; per-source Kalman |
+| thermal | `stub` | ambient default; no dynamics yet |
+| compute | `stub` | idle draw only; no load curve coupling yet |
+| comms | `stub` | nominal `CONNECTED`; no link envelope yet |
+| inference | `planned` | not exercised in v0.1 telemetry |
+
+## Final state
+
+- mode: `idle`
+- operator: `nominal`
+- comms: `connected`
+- SoC: 85.693 %
+- APU offered: 0.0 W
+- fuel: 100.0 %
+
+## Series
+
+Sparklines are over resampled buckets; high to the right is high value.
+
+- battery SoC: `@@@@%%%%%%#####*******+++++======------......___`
+- APU offered (W): `++++++++++++++++++++++++++++++++++++++++++++++++`
+
+## Sampled snapshots
+
+| tick | t (s) | mode | SoC % | APU W | fuel % |
+| ---: | ---: | --- | ---: | ---: | ---: |
+| 1 | 60 | `relay` | 99.981 | 0.000 | 100.000 |
+| 12 | 720 | `relay` | 99.766 | 0.000 | 100.000 |
+| 24 | 1440 | `relay` | 99.533 | 0.000 | 100.000 |
+| 36 | 2160 | `relay` | 99.299 | 0.000 | 100.000 |
+| 48 | 2880 | `relay` | 99.065 | 0.000 | 100.000 |
+| 60 | 3600 | `relay` | 98.830 | 0.000 | 100.000 |
+| 72 | 4320 | `relay` | 98.596 | 0.000 | 100.000 |
+| 84 | 5040 | `relay` | 98.361 | 0.000 | 100.000 |
+| 96 | 5760 | `relay` | 98.127 | 0.000 | 100.000 |
+| 108 | 6480 | `relay` | 97.892 | 0.000 | 100.000 |
+| 120 | 7200 | `relay` | 97.657 | 0.000 | 100.000 |
+| 132 | 7920 | `relay` | 97.421 | 0.000 | 100.000 |
+| 144 | 8640 | `relay` | 97.186 | 0.000 | 100.000 |
+| 156 | 9360 | `relay` | 96.950 | 0.000 | 100.000 |
+| 168 | 10080 | `relay` | 96.715 | 0.000 | 100.000 |
+| 180 | 10800 | `relay` | 96.479 | 0.000 | 100.000 |
+| 192 | 11520 | `relay` | 96.243 | 0.000 | 100.000 |
+| 204 | 12240 | `relay` | 96.007 | 0.000 | 100.000 |
+| 216 | 12960 | `relay` | 95.770 | 0.000 | 100.000 |
+| 228 | 13680 | `relay` | 95.534 | 0.000 | 100.000 |
+| 240 | 14400 | `relay` | 95.297 | 0.000 | 100.000 |
+| 252 | 15120 | `relay` | 95.060 | 0.000 | 100.000 |
+| 264 | 15840 | `relay` | 94.823 | 0.000 | 100.000 |
+| 276 | 16560 | `relay` | 94.586 | 0.000 | 100.000 |
+| 288 | 17280 | `relay` | 94.349 | 0.000 | 100.000 |
+| 300 | 18000 | `relay` | 94.111 | 0.000 | 100.000 |
+| 312 | 18720 | `relay` | 93.874 | 0.000 | 100.000 |
+| 324 | 19440 | `relay` | 93.636 | 0.000 | 100.000 |
+| 336 | 20160 | `relay` | 93.398 | 0.000 | 100.000 |
+| 348 | 20880 | `relay` | 93.160 | 0.000 | 100.000 |
+| 360 | 21600 | `relay` | 92.921 | 0.000 | 100.000 |
+| 372 | 22320 | `relay` | 92.683 | 0.000 | 100.000 |
+| 384 | 23040 | `relay` | 92.444 | 0.000 | 100.000 |
+| 396 | 23760 | `relay` | 92.205 | 0.000 | 100.000 |
+| 408 | 24480 | `relay` | 91.966 | 0.000 | 100.000 |
+| 420 | 25200 | `relay` | 91.727 | 0.000 | 100.000 |
+| 432 | 25920 | `relay` | 91.488 | 0.000 | 100.000 |
+| 444 | 26640 | `relay` | 91.249 | 0.000 | 100.000 |
+| 456 | 27360 | `relay` | 91.009 | 0.000 | 100.000 |
+| 468 | 28080 | `relay` | 90.769 | 0.000 | 100.000 |
+| 480 | 28800 | `relay` | 90.529 | 0.000 | 100.000 |
+| 492 | 29520 | `relay` | 90.289 | 0.000 | 100.000 |
+| 504 | 30240 | `relay` | 90.049 | 0.000 | 100.000 |
+| 516 | 30960 | `relay` | 89.808 | 0.000 | 100.000 |
+| 528 | 31680 | `relay` | 89.567 | 0.000 | 100.000 |
+| 540 | 32400 | `relay` | 89.327 | 0.000 | 100.000 |
+| 552 | 33120 | `relay` | 89.086 | 0.000 | 100.000 |
+| 564 | 33840 | `relay` | 88.844 | 0.000 | 100.000 |
+| 576 | 34560 | `relay` | 88.603 | 0.000 | 100.000 |
+| 588 | 35280 | `relay` | 88.361 | 0.000 | 100.000 |
+| 600 | 36000 | `idle` | 88.120 | 0.000 | 100.000 |
+| 612 | 36720 | `idle` | 87.878 | 0.000 | 100.000 |
+| 624 | 37440 | `idle` | 87.636 | 0.000 | 100.000 |
+| 636 | 38160 | `idle` | 87.394 | 0.000 | 100.000 |
+| 648 | 38880 | `idle` | 87.151 | 0.000 | 100.000 |
+| 660 | 39600 | `idle` | 86.909 | 0.000 | 100.000 |
+| 672 | 40320 | `idle` | 86.666 | 0.000 | 100.000 |
+| 684 | 41040 | `idle` | 86.423 | 0.000 | 100.000 |
+| 696 | 41760 | `idle` | 86.180 | 0.000 | 100.000 |
+| 708 | 42480 | `idle` | 85.937 | 0.000 | 100.000 |
+| 720 | 43200 | `idle` | 85.693 | 0.000 | 100.000 |
+
+## Timeline
+
+| at_min | action | outcome |
+| ---: | --- | --- |
+| 0 | `state_transition` (trigger=relay) | applied: mode -> relay |
+| 30 | `inject_comms_loss` (link_id=tak, loss_pct=20) | skipped: action 'inject_comms_loss' not yet wired (BL-014) |
+| 60 | `inject_comms_loss` (link_id=lora, loss_pct=10) | skipped: action 'inject_comms_loss' not yet wired (BL-014) |
+| 600 | `state_transition` (trigger=complete) | applied: mode -> idle |
+
+## Artefacts
+
+- raw JSONL: [`standalone-comms-hub.jsonl`](../data/standalone-comms-hub.jsonl)

@@ -19,3 +19,4 @@
 | 0014 | [Docs site on MkDocs with GitHub Pages](0014-docs-site-mkdocs-pages.md) | Accepted | 2026-05-20 |
 | 0015 | [APU is strictly auxiliary; the primary battery is the sole bus](0015-apu-strictly-auxiliary.md) | Accepted | 2026-05-20 |
 | 0016 | [Deployment baseline upgrades to Ubuntu 26.04 LTS](0016-deployment-baseline-ubuntu-2604.md) | Accepted | 2026-05-20 |
+| 0017 | [Public showcase site on the existing docs Pages target](0017-public-showcase-site.md) | Accepted | 2026-05-21 |

@@ -40,6 +40,12 @@ nav:
   - Subsystems: subsystems/README.md
   - Tool reference: tool-reference.md
   - Scenarios: scenarios/README.md
+  - Showcase:
+      - Overview: showcase/README.md
+      - Fidelity: showcase/fidelity.md
+      - State machine: showcase/state-machine.md
+      - Capability matrix: showcase/capability-matrix.md
+      - Scenario gallery: showcase/scenarios/README.md
   - Hardware profiles: hardware-profiles.md
   - Bill of materials: bom.md
   - Interoperability:
@@ -81,6 +87,7 @@ nav:
       - "0014 Docs site MkDocs Pages": adr/0014-docs-site-mkdocs-pages.md
       - "0015 APU strictly auxiliary": adr/0015-apu-strictly-auxiliary.md
       - "0016 Deployment baseline Ubuntu 26.04": adr/0016-deployment-baseline-ubuntu-2604.md
+      - "0017 Public showcase site": adr/0017-public-showcase-site.md
   - STPA:
       - Overview: stpa/README.md
       - "01 Purpose": stpa/01-purpose.md
