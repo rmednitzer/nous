@@ -11,7 +11,10 @@ Group=nous
 EnvironmentFile=/etc/nous/nous.env
 WorkingDirectory=/opt/nous
 ExecStart=/opt/nous/venv/bin/python -m nous serve
-ExecStopPost=/opt/nous/venv/bin/python -m nous tick -n 1
+# Post-stop flush keeps the on-disk snapshot consistent after the
+# server process has fully exited.
+ExecStopPost=/opt/nous/venv/bin/python -m nous flush
+TimeoutStopSec=20
 Restart=on-failure
 RestartSec=5s
 # The audit log lives at /var/log/nous/audit.jsonl; logrotate manages it.

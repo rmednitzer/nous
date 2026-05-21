@@ -1,14 +1,25 @@
 schema_version: "0.1.0"
 meta:
   name: c2-degraded-comms
-  description: Command-and-control loop with intermittent LTE blackout.
+  description: >
+    Command-and-control loop with intermittent LTE blackout. Exercises the
+    InferenceFallback ladder: when the comms estimator reports DEGRADED or
+    DENIED, cloud inference falls back to the local mock and the audit
+    line records ``path=local_mock`` with the reason.
 profile: jetson-agx-orin
 tick_budget: 720
 steps:
-  - { at_min: 0, action: state_transition, args: { trigger: c2 } }
+  - { at_min: 0,  action: state_transition, args: { trigger: c2 } }
+  - { at_min: 5,  action: inference_request, args: { prompt: "status", path: "auto" } }
   - { at_min: 10, action: inject_comms_loss, args: { link_id: lte, loss_pct: 60 } }
+  - { at_min: 12, action: inference_request, args: { prompt: "status",  path: "auto" } }
   - { at_min: 18, action: inject_comms_loss, args: { link_id: lte, loss_pct: 0 } }
   - { at_min: 35, action: inject_comms_loss, args: { link_id: lte, loss_pct: 100 } }
+  - { at_min: 37, action: inference_request, args: { prompt: "fallback", path: "auto" } }
   - { at_min: 40, action: state_transition, args: { trigger: degrade } }
+  - { at_min: 45, action: inference_request, args: { prompt: "still local?", path: "auto" } }
   - { at_min: 55, action: inject_comms_loss, args: { link_id: lte, loss_pct: 0 } }
-  - { at_min: 56, action: state_transition, args: { trigger: recover } }
+  - { at_min: 56, action: state_transition, args: { trigger: recover, context: { thermal_headroom_c: 25, thermal_headroom_threshold_c: 5 } } }
+expectations:
+  - audit_contains: { tool: inference_request, path: cloud, count_gte: 2 }
+  - audit_contains: { tool: inference_request, path: local_mock, count_gte: 2 }

@@ -20,9 +20,17 @@ def test_irreversible_tool_classifies_as_t3() -> None:
     assert tier is Tier.IRREVERSIBLE
 
 
-def test_unknown_tool_falls_back_to_reversible() -> None:
+def test_unknown_tool_falls_back_to_stateful_additive_surface() -> None:
+    # Additive-surface rule: an unclassified tool is treated as STATEFUL
+    # so guarded mode refuses it unless an allow regex matches.
     tier, _ = classify("never_seen_before", {})
-    assert tier is Tier.REVERSIBLE
+    assert tier is Tier.STATEFUL
+
+
+def test_unknown_tool_refused_under_guarded_without_allow() -> None:
+    tier, _ = classify("never_seen_before", {})
+    decision = decide(tier, PolicyMode.GUARDED, probe="never_seen_before")
+    assert not decision.allowed
 
 
 def test_readonly_mode_refuses_stateful_calls() -> None:

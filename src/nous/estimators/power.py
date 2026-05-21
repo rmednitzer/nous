@@ -13,6 +13,8 @@ build ships the linear-Gaussian baseline).
 
 from __future__ import annotations
 
+import math
+
 from ..types import Estimate, Observation
 
 __all__ = ["PowerEstimator"]
@@ -60,28 +62,31 @@ class PowerEstimator:
         payload = obs.payload
         noise = obs.noise
 
-        if "soc_pct" in payload:
+        soc = _finite(payload.get("soc_pct"))
+        if soc is not None and 0.0 <= soc <= 100.0:
             r = float(noise.get("soc_pct_sigma", 0.5)) ** 2
             denom = self._soc_var + r
             if denom > 0.0:
                 k = self._soc_var / denom
-                self._soc = (1.0 - k) * self._soc + k * float(payload["soc_pct"])
+                self._soc = (1.0 - k) * self._soc + k * soc
                 self._soc_var = (1.0 - k) * self._soc_var
 
-        if "voltage_v" in payload:
+        voltage = _finite(payload.get("voltage_v"))
+        if voltage is not None and voltage >= 0.0:
             r = float(noise.get("voltage_v_sigma", 0.05)) ** 2
             denom = self._voltage_var + r
             if denom > 0.0:
                 k = self._voltage_var / denom
-                self._voltage = (1.0 - k) * self._voltage + k * float(
-                    payload["voltage_v"]
-                )
+                self._voltage = (1.0 - k) * self._voltage + k * voltage
                 self._voltage_var = (1.0 - k) * self._voltage_var
 
-        if "current_a" in payload:
-            self._current = float(payload["current_a"])
+        current = _finite(payload.get("current_a"))
+        if current is not None:
+            self._current = current
 
-        self._t = float(obs.ts_s)
+        ts = _finite(obs.ts_s)
+        if ts is not None and ts >= 0.0:
+            self._t = ts
 
     def state(self) -> Estimate:
         return Estimate(
@@ -97,3 +102,16 @@ class PowerEstimator:
                 "voltage_v": self._voltage_var,
             },
         )
+
+
+def _finite(value: object) -> float | None:
+    """Return ``float(value)`` iff it is finite and convertible, else ``None``."""
+    if value is None:
+        return None
+    try:
+        v = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(v):
+        return None
+    return v

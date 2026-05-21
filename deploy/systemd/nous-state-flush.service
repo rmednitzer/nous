@@ -8,4 +8,9 @@ User=nous
 Group=nous
 EnvironmentFile=/etc/nous/nous.env
 WorkingDirectory=/opt/nous
-ExecStart=/opt/nous/venv/bin/python -m nous tick -n 1
+# `flush` truncates the SQLite WAL (single PRAGMA wal_checkpoint(TRUNCATE))
+# and fsyncs the audit handler. A single daily checkpoint bounds disk
+# thrashing while keeping audit fidelity tight (every tool call is
+# already fsynced individually -- the daily run is the WAL safety net).
+ExecStart=/opt/nous/venv/bin/python -m nous flush
+TimeoutStartSec=30

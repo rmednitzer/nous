@@ -43,6 +43,14 @@ def _build_parser() -> argparse.ArgumentParser:
     scen = sub.add_parser("scenario", help="load and run a scenario YAML")
     scen.add_argument("path", help="path to the scenario YAML")
 
+    sub.add_parser(
+        "flush",
+        help=(
+            "flush audit + SQLite WAL to stable storage and exit "
+            "(called by deploy/systemd/nous-state-flush.service)"
+        ),
+    )
+
     return p
 
 
@@ -92,6 +100,28 @@ def _cmd_scenario(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_flush(_args: argparse.Namespace) -> int:
+    """Force a checkpoint of the SQLite WAL and fsync the audit log.
+
+    The systemd ``nous-state-flush.service`` runs this on a daily timer.
+    The point is bounded disk thrashing: a single ``PRAGMA wal_checkpoint``
+    each day plus an audit fsync, rather than syncing on every tick.
+    """
+    from sqlalchemy import text
+
+    from .audit import AuditLogger
+    from .db import make_engine
+
+    cfg = get_settings()
+    engine = make_engine(cfg.resolved_db_url())
+    with engine.begin() as conn:
+        conn.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
+    engine.dispose()
+    audit = AuditLogger(str(cfg.resolved_audit_path()))
+    audit.flush()
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -101,5 +131,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_tick(args)
     if args.command == "scenario":
         return _cmd_scenario(args)
+    if args.command == "flush":
+        return _cmd_flush(args)
     parser.print_help()
     return 2

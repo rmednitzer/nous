@@ -8,8 +8,11 @@ The handler is rotation-safe (``logging.handlers.WatchedFileHandler``): on
 Linux make ``audit.jsonl`` append-only with ``chattr +a`` and rotate it
 with the bundled ``deploy/logrotate.conf``.
 
-Audit failures must never break a tool call: if the sink cannot be opened
-the logger degrades to stderr and records ``degraded=True``.
+Durability under SIGTERM and hard power loss: every write flushes Python
+buffers and ``os.fsync()``s the underlying file descriptor so the audit
+line is on stable storage before the call returns. ``fsync`` failures are
+logged to stderr and the handler is marked degraded -- the operator gets
+an observable signal that a record may have been lost.
 """
 
 from __future__ import annotations
@@ -66,18 +69,28 @@ def redact(args: Mapping[str, Any]) -> dict[str, Any]:
 
 
 class AuditRecord(BaseModel):
-    """One audit line. Output body is recorded as a hash and length only."""
+    """One audit line. Output body is recorded as a hash and length only.
+
+    Schema is shaped for EU AI Act Art. 12 (automatic recording of events)
+    and CRA Art. 13 (security logging). Each line is self-describing
+    (``ts``, ``tool``, ``tier``, ``policy_mode``, ``decision_reason``,
+    ``denied``, ``args``, ``output_sha256``) so a conformity-assessment
+    body can replay the trail without consulting the source code.
+    """
 
     ts: str = Field(default_factory=_now_iso)
     tool: str
     tier: int
     denied: bool = False
+    decision_reason: str = ""
+    policy_mode: str = ""
     args: dict[str, Any] = Field(default_factory=dict)
     output_sha256: str = ""
     output_len: int = 0
     exit_code: int | None = None
     request_id: str = ""
     client_id: str = ""
+    extra: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
     def from_output(
@@ -88,21 +101,63 @@ class AuditRecord(BaseModel):
         args: Mapping[str, Any],
         output: str,
         denied: bool = False,
+        decision_reason: str = "",
+        policy_mode: str = "",
         exit_code: int | None = None,
         request_id: str = "",
         client_id: str = "",
+        extra: Mapping[str, Any] | None = None,
     ) -> AuditRecord:
         return cls(
             tool=tool,
             tier=tier,
             denied=denied,
+            decision_reason=decision_reason,
+            policy_mode=policy_mode,
             args=dict(args),
             output_sha256=_sha256_hex(output),
             output_len=len(output.encode("utf-8", "replace")),
             exit_code=exit_code,
             request_id=request_id,
             client_id=client_id,
+            extra=dict(extra) if extra else {},
         )
+
+
+class _FsyncingFileHandler(WatchedFileHandler):
+    """``WatchedFileHandler`` that fsyncs the descriptor after every emit.
+
+    On SIGTERM and hard power loss the OS may evict the page cache before
+    a buffered write reaches stable storage. The audit log is the only
+    record we ship off-host, so the audit handler trades a small per-record
+    latency cost for end-to-end durability. ``fsync`` failures bubble up to
+    the parent handler's :meth:`handleError`, which marks the logger
+    degraded via ``stream.fsync_failed``.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.fsync_failures = 0
+        self.last_fsync_error = ""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        super().emit(record)
+        stream = self.stream
+        if stream is None:
+            return
+        try:
+            stream.flush()
+            fd = stream.fileno()
+        except (OSError, ValueError):
+            return
+        try:
+            os.fsync(fd)
+        except OSError as exc:
+            self.fsync_failures += 1
+            self.last_fsync_error = str(exc)
+            with contextlib.suppress(Exception):
+                sys.stderr.write(f"audit fsync failed: {exc}\n")
+                sys.stderr.flush()
 
 
 class AuditLogger:
@@ -112,6 +167,8 @@ class AuditLogger:
         self.path = str(path)
         self.degraded = False
         self.degraded_reason = ""
+        self.fsync_failures = 0
+        self._seen_handler_fsync_failures = 0
         self._log = logging.getLogger("nous.audit")
         self._log.setLevel(logging.INFO)
         self._log.propagate = False
@@ -122,11 +179,15 @@ class AuditLogger:
         try:
             target = Path(self.path).expanduser()
             target.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(str(target), os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+            # Open then close just to assert the file exists with the
+            # right mode bits before any record gets written.
+            fd = os.open(
+                str(target), os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600
+            )
             os.close(fd)
             with contextlib.suppress(OSError):
                 target.chmod(0o600)
-            sink = WatchedFileHandler(str(target), encoding="utf-8")
+            sink = _FsyncingFileHandler(str(target), encoding="utf-8")
         except OSError as exc:
             self.degraded = True
             self.degraded_reason = str(exc)
@@ -140,6 +201,58 @@ class AuditLogger:
             self._log.addHandler(echo)
 
     def write(self, record: AuditRecord) -> None:
-        """Append one audit line. Best-effort; swallows its own errors."""
-        with contextlib.suppress(Exception):
+        """Append one audit line. Best-effort; swallows its own errors.
+
+        The handler fsyncs after every record. If the underlying file
+        operation raises, the exception is caught here -- audit failures
+        must never break a tool call -- but the failure is tallied on
+        ``self.fsync_failures`` and surfaced through ``device_info``.
+        """
+        try:
             self._log.info(record.model_dump_json())
+            self._sync_fsync_failure_state()
+        except OSError as exc:
+            self.fsync_failures += 1
+            self.degraded = True
+            self.degraded_reason = str(exc)
+            with contextlib.suppress(Exception):
+                sys.stderr.write(f"audit write failed: {exc}\n")
+        except Exception as exc:  # noqa: BLE001
+            self.fsync_failures += 1
+            self.degraded = True
+            self.degraded_reason = exc.__class__.__name__
+            with contextlib.suppress(Exception):
+                sys.stderr.write(f"audit write degraded: {exc.__class__.__name__}\n")
+
+    def _sync_fsync_failure_state(self) -> None:
+        fsync_handlers = [
+            handler
+            for handler in self._log.handlers
+            if isinstance(handler, _FsyncingFileHandler)
+        ]
+        total_handler_failures = sum(handler.fsync_failures for handler in fsync_handlers)
+        delta = total_handler_failures - self._seen_handler_fsync_failures
+        if delta <= 0:
+            return
+        self.fsync_failures += delta
+        self._seen_handler_fsync_failures = total_handler_failures
+        self.degraded = True
+        for handler in fsync_handlers:
+            if handler.last_fsync_error:
+                self.degraded_reason = handler.last_fsync_error
+                break
+
+    def flush(self) -> None:
+        """Force every handler to flush + fsync (called from systemd ExecStopPost)."""
+        for handler in list(self._log.handlers):
+            with contextlib.suppress(Exception):
+                handler.flush()
+            stream = getattr(handler, "stream", None)
+            if stream is None:
+                continue
+            try:
+                fd = stream.fileno()
+            except (OSError, ValueError):
+                continue
+            with contextlib.suppress(OSError):
+                os.fsync(fd)
