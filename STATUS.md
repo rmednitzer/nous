@@ -5,9 +5,9 @@ yet?" questions.
 
 ## Deployment posture
 
-`nous-prod-01` (the live VM at `nous.blackphoenix.org`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches production within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure.
+The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`.
 
-Last reviewed: 2026-05-20.
+Last reviewed: 2026-05-21.
 
 ## Maturity taxonomy
 
@@ -46,7 +46,7 @@ Last reviewed: 2026-05-20.
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0015` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0017` | stable (decisions, not implementations) |
 | `docs/stpa/01..09` | in-progress |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -67,7 +67,7 @@ Last reviewed: 2026-05-20.
 | `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in (BL-005a). |
 | `src/nous/subsystems/{thermal,compute,storage,sensors,position,biometrics,comms,inference}.py` | planned | Typed stubs in v0.1. |
 | `src/nous/estimators/power.py` | in-progress | 1-D Kalman over (SoC, voltage); covariance bound documented in the model card. |
-| `src/nous/estimators/apu.py` | in-progress | Per-source 1-D Kalman; tracks five source channels plus the total. |
+| `src/nous/estimators/apu.py` | in-progress | Per-source 1-D Kalman; tracks four source channels plus the total. |
 | `src/nous/estimators/{thermal,compute,position,biometrics,comms}.py` | planned | Typed stubs in v0.1. |
 | `src/nous/self_model/*` | planned | Assess/explain/viability shipped as stubs. |
 | `src/nous/interop/*` | planned | Each adapter ships as a typed stub in v0.1. |

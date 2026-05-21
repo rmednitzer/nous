@@ -13,7 +13,7 @@ inference mock. Each card answers the same questions:
 | Subsystem / Model | Card |
 |-------------------|------|
 | Power subsystem (Li-ion battery) | [subsystem-power.md](subsystem-power.md) |
-| APU subsystem (solar + fuel cell + vehicle + USB-C PD + hand-crank) | [subsystem-apu.md](subsystem-apu.md) |
+| APU subsystem (solar + fuel cell + vehicle + USB-C PD) | [subsystem-apu.md](subsystem-apu.md) |
 
 | Estimator / Model | Card |
 |-------------------|------|

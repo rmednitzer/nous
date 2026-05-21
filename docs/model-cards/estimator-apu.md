@@ -7,13 +7,12 @@
 ## Inputs
 
 Sensor observations from ``ApuSubsystem.sensor_obs()``. Each
-observation carries the five source channels plus the total, with a
+observation carries the four source channels plus the total, with a
 calibrated standard deviation per channel.
 
 ## Outputs
 
-``Estimate`` with ``point = {solar_w, fuelcell_w, vehicle_w, usbc_w,
-hand_crank_w, total_w}`` and per-channel scalar covariances.
+``Estimate`` with ``point = {solar_w, fuelcell_w, vehicle_w, usbc_w, total_w}`` and per-channel scalar covariances.
 
 ## Algorithm
 

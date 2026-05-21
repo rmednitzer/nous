@@ -7,17 +7,18 @@ This tree is the source for the MkDocs site published at
 ## Reading order
 
 1. [README.md](https://github.com/rmednitzer/nous/blob/main/README.md) -- the project overview.
-2. [architecture.md](architecture.md) -- how the engine, server, and
+2. [showcase/README.md](showcase/README.md) -- the fidelity-badged public view (ADR 0017).
+3. [architecture.md](architecture.md) -- how the engine, server, and
    self-model fit together.
-3. [state-machine.md](state-machine.md) -- the mission-posture FSM.
-4. [tool-reference.md](tool-reference.md) -- representative MCP tools.
-5. [hardware-profiles.md](hardware-profiles.md) -- the profile YAML
-   schema.
-6. [adr/README.md](adr/README.md) -- numbered architecture decisions.
-7. [stpa/README.md](stpa/README.md) -- the safety analysis.
-8. [backlog.md](backlog.md) -- the BL-NNN tracker.
-9. [deployment.md](deployment.md) -- VM deployment guide.
-10. [releasing.md](releasing.md) -- release process.
+4. [state-machine.md](state-machine.md) -- the mission-posture FSM.
+5. [tool-reference.md](tool-reference.md) -- representative MCP tools.
+6. [hardware-profiles.md](hardware-profiles.md) -- the profile YAML
+   schema, anchored to [bom.md](bom.md).
+7. [adr/README.md](adr/README.md) -- numbered architecture decisions.
+8. [stpa/README.md](stpa/README.md) -- the safety analysis.
+9. [backlog.md](backlog.md) -- the BL-NNN tracker.
+10. [deployment.md](deployment.md) -- VM deployment guide.
+11. [releasing.md](releasing.md) -- release process.
 
 ## Generated pages
 
