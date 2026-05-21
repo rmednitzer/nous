@@ -1,10 +1,10 @@
 """Inference fallback ladder for degraded comms and exhausted-cap scenarios.
 
 The ladder is consulted by ``inference_cloud`` and any controller-facing
-tool that wants to honour the SC-5 contract ("fail closed with
-``CapExhausted``, surfacing the failure"). It is *not* a fancy routing
-layer -- it picks the first path that is currently feasible and reports
-which path was used so the audit trail makes the fallback observable.
+tool that wants to honour the SC-5 contract while preserving availability.
+It is *not* a fancy routing layer, it picks the first path that is
+currently feasible and reports which path was used so the audit trail
+makes degraded fallback observable.
 
 Order of preference (when ``call_cloud`` is requested):
 

@@ -10,11 +10,11 @@ The adapter escapes every interpolated string with ``xml.sax.saxutils``
 so an operator name or unit identifier carrying ``<``, ``>``, or ``&``
 cannot break out of an attribute and inject a sibling element.
 
-Decoding is intentionally narrow: it pulls the canonical attributes off
-the root ``event`` element and refuses to instantiate external entities
-(``defusedxml`` is used for the parse). That keeps the adapter safe from
-XXE attacks if the controller ever decodes a payload from an untrusted
-peer.
+Decoding is intentionally narrow: it pulls canonical attributes off the
+root ``event`` element using ``xml.etree.ElementTree`` and explicitly
+refuses payloads containing ``DOCTYPE`` or ``ENTITY`` declarations. That
+keeps the adapter safe from XXE attacks if the controller ever decodes a
+payload from an untrusted peer.
 """
 
 from __future__ import annotations

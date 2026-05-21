@@ -76,3 +76,17 @@ def test_zero_cap_disabled(tmp_path: Path) -> None:
     cap = CallCap(path, cap=0)
     for _ in range(20):
         cap.increment()
+
+
+def test_fsync_failure_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "cap.json"
+    cap = CallCap(path, cap=5)
+
+    def _fail_fsync(fd: int) -> None:
+        raise OSError("simulated fsync failure")
+
+    monkeypatch.setattr("nous.anthropic_client.os.fsync", _fail_fsync)
+    with pytest.raises(CapExhausted, match="could not be fsynced"):
+        cap.increment()

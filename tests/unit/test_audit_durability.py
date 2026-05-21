@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from nous.audit import AuditLogger, AuditRecord
 
 
@@ -44,4 +46,21 @@ def test_audit_degraded_when_directory_unwritable(tmp_path: Path) -> None:
     unreachable = Path("/proc/0/audit.jsonl")
     logger = AuditLogger(unreachable)
     # /proc/0 is not a real directory; expect degraded
-    assert logger.degraded or logger.path == str(unreachable)
+    assert logger.degraded
+
+
+def test_audit_degraded_on_fsync_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "audit.jsonl"
+    logger = AuditLogger(path)
+
+    def _fail_fsync(fd: int) -> None:
+        raise OSError("simulated fsync failure")
+
+    monkeypatch.setattr("nous.audit.os.fsync", _fail_fsync)
+    logger.write(AuditRecord.from_output(tool="t", tier=0, args={}, output="x"))
+
+    assert logger.degraded
+    assert logger.fsync_failures == 1
+    assert "simulated fsync failure" in logger.degraded_reason

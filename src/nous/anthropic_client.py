@@ -101,8 +101,12 @@ class CallCap:
                 fh.truncate()
                 fh.write(json.dumps(state))
                 fh.flush()
-                with contextlib.suppress(OSError):
+                try:
                     os.fsync(fh.fileno())
+                except OSError as exc:
+                    raise CapExhausted(
+                        f"daily counter at {self._path} could not be fsynced: {exc}"
+                    ) from exc
                 return count + 1, self._cap
             finally:
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)

@@ -135,6 +135,11 @@ class _FsyncingFileHandler(WatchedFileHandler):
     degraded via ``stream.fsync_failed``.
     """
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.fsync_failures = 0
+        self.last_fsync_error = ""
+
     def emit(self, record: logging.LogRecord) -> None:
         super().emit(record)
         stream = self.stream
@@ -148,6 +153,8 @@ class _FsyncingFileHandler(WatchedFileHandler):
         try:
             os.fsync(fd)
         except OSError as exc:
+            self.fsync_failures += 1
+            self.last_fsync_error = str(exc)
             with contextlib.suppress(Exception):
                 sys.stderr.write(f"audit fsync failed: {exc}\n")
                 sys.stderr.flush()
@@ -161,6 +168,7 @@ class AuditLogger:
         self.degraded = False
         self.degraded_reason = ""
         self.fsync_failures = 0
+        self._seen_handler_fsync_failures = 0
         self._log = logging.getLogger("nous.audit")
         self._log.setLevel(logging.INFO)
         self._log.propagate = False
@@ -202,14 +210,37 @@ class AuditLogger:
         """
         try:
             self._log.info(record.model_dump_json())
+            self._sync_fsync_failure_state()
         except OSError as exc:
             self.fsync_failures += 1
+            self.degraded = True
+            self.degraded_reason = str(exc)
             with contextlib.suppress(Exception):
                 sys.stderr.write(f"audit write failed: {exc}\n")
         except Exception as exc:  # noqa: BLE001
             self.fsync_failures += 1
+            self.degraded = True
+            self.degraded_reason = exc.__class__.__name__
             with contextlib.suppress(Exception):
                 sys.stderr.write(f"audit write degraded: {exc.__class__.__name__}\n")
+
+    def _sync_fsync_failure_state(self) -> None:
+        fsync_handlers = [
+            handler
+            for handler in self._log.handlers
+            if isinstance(handler, _FsyncingFileHandler)
+        ]
+        total_handler_failures = sum(handler.fsync_failures for handler in fsync_handlers)
+        delta = total_handler_failures - self._seen_handler_fsync_failures
+        if delta <= 0:
+            return
+        self.fsync_failures += delta
+        self._seen_handler_fsync_failures = total_handler_failures
+        self.degraded = True
+        for handler in fsync_handlers:
+            if handler.last_fsync_error:
+                self.degraded_reason = handler.last_fsync_error
+                break
 
     def flush(self) -> None:
         """Force every handler to flush + fsync (called from systemd ExecStopPost)."""
