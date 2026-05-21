@@ -72,9 +72,16 @@ def _apply_step(engine: Any, action: str, args: Mapping[str, Any]) -> str:
         trigger = args.get("trigger")
         if not isinstance(trigger, str):
             return "skipped: missing trigger"
+        context = args.get("context")
+        transition_context = context if isinstance(context, Mapping) else None
         try:
-            engine.state.mode = engine.fsm.transition(trigger)
-        except ValueError as exc:
+            engine.state.mode = engine.fsm.transition(
+                trigger,
+                context=transition_context,
+            )
+        except Exception as exc:
+            if exc.__class__.__name__ != "GuardDenied" and not isinstance(exc, ValueError):
+                raise
             return f"refused: {exc}"
         return f"applied: mode -> {engine.state.mode.value}"
     if action == "inject_apu":
