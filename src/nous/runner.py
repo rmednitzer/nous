@@ -60,6 +60,8 @@ async def run(
                 args=redacted,
                 output=body,
                 denied=True,
+                decision_reason=decision.reason,
+                policy_mode=policy_mode.value,
                 request_id=request_id,
                 client_id=client_id,
             )
@@ -78,6 +80,8 @@ async def run(
             tier=int(decision.tier),
             args=redacted,
             output=body,
+            decision_reason=decision.reason,
+            policy_mode=policy_mode.value,
             request_id=request_id,
             client_id=client_id,
         )

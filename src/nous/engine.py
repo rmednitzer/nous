@@ -21,7 +21,7 @@ from .config import Settings, get_settings
 from .estimators.apu import ApuEstimator
 from .estimators.power import PowerEstimator
 from .state.comms_state import CommsState
-from .state.machine import Mode, StateMachine
+from .state.machine import GuardDenied, Mode, StateMachine
 from .state.operator_state import OperatorState
 from .subsystems.apu import ApuSubsystem
 from .subsystems.power import PowerSubsystem
@@ -73,20 +73,73 @@ class Engine:
         return 1.0 / float(self.settings.tick_hz)
 
     def start(self) -> None:
-        """Boot transition. Idempotent."""
+        """Boot transition. Idempotent. Re-startable after ``stop()``."""
         if self._started:
             return
+        if self.fsm.current is Mode.SHUTDOWN or self.fsm.current is Mode.FAULT:
+            self.fsm.transition("reset")
+        if self.fsm.current is Mode.STOWED:
+            self.fsm.transition("boot")
         self._started = True
         self._wall_start = time.monotonic()
-        self.state.mode = self.fsm.transition("boot")
+        self.state.mode = self.fsm.current
         self.state.ts_s = 0.0
+        self.state.tick = 0
 
     def stop(self) -> None:
-        """Cooperative shutdown. Subsystems are not torn down here."""
+        """Cooperative shutdown. Subsystems are not torn down here.
+
+        Idempotent: a second call from SHUTDOWN is a no-op rather than a
+        raised ``ValueError``. A controller that calls ``stop`` from a
+        state without a defined ``shutdown`` transition (e.g. STOWED)
+        gets the same no-op behaviour rather than a crash mid-teardown.
+        """
         if not self._started:
             return
         self._started = False
-        self.state.mode = self.fsm.transition("shutdown")
+        if self.fsm.can("shutdown"):
+            self.state.mode = self.fsm.transition("shutdown")
+        else:
+            self.state.mode = self.fsm.current
+
+    def request_transition(
+        self, trigger: str, *, context: Mapping[str, Any] | None = None
+    ) -> tuple[bool, Mode, str]:
+        """Drive the FSM with the engine's current safety context.
+
+        Merges caller-supplied ``context`` over the engine-derived defaults
+        (thermal headroom, SoC critical threshold). Returns
+        ``(ok, mode, reason)``: ``ok=False`` covers both unknown
+        transitions and guard refusals so the controller has a single
+        observable outcome.
+        """
+        ctx: dict[str, Any] = self._safety_context()
+        if context:
+            ctx.update(context)
+        try:
+            new = self.fsm.transition(trigger, context=ctx)
+        except GuardDenied as exc:
+            return False, self.fsm.current, exc.reason
+        except ValueError as exc:
+            return False, self.fsm.current, str(exc)
+        self.state.mode = new
+        return True, new, ""
+
+    def _safety_context(self) -> dict[str, Any]:
+        thermal_cfg = self.profile.get("thermal") or {}
+        power_cfg = self.profile.get("power") or {}
+        junction_max = float(thermal_cfg.get("junction_temp_throttle", 85.0))
+        ambient = float(thermal_cfg.get("ambient_c_default", _DEFAULT_AMBIENT_C))
+        return {
+            "thermal_headroom_c": junction_max - ambient,
+            "thermal_headroom_threshold_c": float(
+                thermal_cfg.get("headroom_threshold_c", 5.0)
+            ),
+            "soc_pct": float(self.power.soc_pct),
+            "soc_pct_critical": float(
+                power_cfg.get("soc_pct_critical_threshold", 5.0)
+            ),
+        }
 
     def tick(self) -> TickContext:
         """Advance the simulator by one tick. Returns the tick context."""

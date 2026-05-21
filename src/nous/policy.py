@@ -97,8 +97,10 @@ _STATEFUL_TOOLS = frozenset(
         "comms_send",
         "comms_publish",
         "inference_cloud",
+        "inference_request",
         "self_model_publish",
         "state_transition",
+        "request_transition",
     }
 )
 
@@ -115,9 +117,11 @@ _IRREVERSIBLE_TOOLS = frozenset(
 def classify(tool: str, args: Mapping[str, Any] | None = None) -> tuple[Tier, str]:
     """Best-effort tier for ``tool``.
 
-    Conservative: when an exact match is missing, returns ``REVERSIBLE`` so
-    nothing accidentally gets read-only treatment. Args are inspected only
-    for a few well-known signals (e.g. an ``irreversible`` flag).
+    Additive-surface rule: an unknown tool is treated as ``STATEFUL`` so
+    it requires an explicit allowlist match under guarded mode and is
+    refused under readonly mode. A typo or a forgotten classification is
+    therefore observable in CI (the guarded-mode tests fail) instead of
+    silently coasting through under the old ``REVERSIBLE`` default.
     """
     if tool in _IRREVERSIBLE_TOOLS:
         return Tier.IRREVERSIBLE, "irreversible tool"
@@ -129,7 +133,7 @@ def classify(tool: str, args: Mapping[str, Any] | None = None) -> tuple[Tier, st
         return Tier.READ_ONLY, "read-only tool"
     if args and bool(args.get("irreversible")):
         return Tier.IRREVERSIBLE, "args.irreversible flag set"
-    return Tier.REVERSIBLE, "unclassified tool defaults to reversible"
+    return Tier.STATEFUL, "unclassified tool defaults to stateful (additive-surface rule)"
 
 
 def decide(
