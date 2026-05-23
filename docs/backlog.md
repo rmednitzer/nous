@@ -19,7 +19,7 @@ possible.
 - BL-005b [planned] (L1) PMU/PDU subsystem (bus regulation, source arbitration, CC/CV charge profile, dual-slot battery hot-swap). Lifts `charge_limit_w` and the offered/accepted clamp off `PowerSubsystem` onto a new `PmuSubsystem`. Supersedes ADR-0015. New ADR documents the dual-slot hot-swap state machine (primary + secondary battery, PMU arbitrates the active source; the inactive slot can be removed without bus collapse).
 - BL-006 [planned] (L1) Hardware profile schema model + validator.
 - BL-007 [in-progress] (L1) Compute subsystem with load curves from the profile. Load fraction set via `compute.set_load_pct` or `set_inference_rate`; draw watts come from the profile's piecewise-linear `load_curve`. The engine reads `compute.draw_w` each tick and feeds it into both power (electrical draw) and thermal (junction dissipation). Thermal throttling automatically caps delivered load. `compute_status` MCP tool added.
-- BL-008 [planned] (L1) Storage subsystem with wear curve.
+- BL-008 [in-progress] (L1) Storage subsystem with wear curve. NAND wear driven by physical writes (logical writes inflated by `storage.write_amplification`); endurance budget defaults to `capacity_gib * 600` GiB when `storage.tbw_gib` is unset. `write(gib)` and `set_write_rate(gib_per_s)` for one-shot and sustained workloads; paired 1-D Kalman estimator over (used_gib, wear_pct); `storage_status` MCP tool added.
 - BL-009 [planned] (L1) Environmental sensor pack subsystem.
 - BL-010 [planned] (L1) Position subsystem (GNSS + 9-DoF IMU).
 - BL-011 [planned] (L1) Biometrics subsystem (parametric, not physiology-grounded).

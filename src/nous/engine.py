@@ -21,6 +21,7 @@ from .config import Settings, get_settings
 from .estimators.apu import ApuEstimator
 from .estimators.compute import ComputeKalman
 from .estimators.power import PowerEstimator
+from .estimators.storage import StorageKalman
 from .estimators.thermal import ThermalKalman
 from .state.comms_state import CommsState
 from .state.machine import GuardDenied, Mode, StateMachine
@@ -29,6 +30,7 @@ from .subsystems.apu import ApuSubsystem
 from .subsystems.compute import ComputeSubsystem
 from .subsystems.inference import InferenceSubsystem
 from .subsystems.power import PowerSubsystem
+from .subsystems.storage import StorageSubsystem
 from .subsystems.thermal import ThermalSubsystem
 from .types import TickContext
 
@@ -70,6 +72,7 @@ class Engine:
         self.thermal = ThermalSubsystem(self.profile)
         self.compute = ComputeSubsystem(self.profile)
         self.inference = InferenceSubsystem(self.profile, compute=self.compute)
+        self.storage = StorageSubsystem(self.profile)
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
@@ -82,6 +85,10 @@ class Engine:
         self.compute_est = ComputeKalman(
             initial_load_pct=self.compute.load_pct,
             initial_draw_w=self.compute.draw_w,
+        )
+        self.storage_est = StorageKalman(
+            initial_used_gib=self.storage.used_gib,
+            initial_wear_pct=self.storage.wear_pct,
         )
 
     @property
@@ -167,6 +174,7 @@ class Engine:
         self.compute.set_thermal_throttle(throttling=self.thermal.throttling)
         self.compute.step(dt)
         self.inference.step(dt)
+        self.storage.step(dt)
         load_w = self.compute.draw_w
 
         self.apu.step(dt)
@@ -186,6 +194,8 @@ class Engine:
         self.thermal_est.update(self.thermal.sensor_obs())
         self.compute_est.predict(dt)
         self.compute_est.update(self.compute.sensor_obs())
+        self.storage_est.predict(dt)
+        self.storage_est.update(self.storage.sensor_obs())
 
         ctx = TickContext(
             tick=self.state.tick,
@@ -242,6 +252,13 @@ class Engine:
                 "total_tokens": self.inference.total_tokens,
                 "total_energy_j": round(self.inference.total_energy_j, 3),
                 "last_latency_s": round(self.inference.last_latency_s, 4),
+            },
+            "storage": {
+                "used_gib": round(self.storage.used_gib, 3),
+                "free_gib": round(self.storage.free_gib, 3),
+                "wear_pct": round(self.storage.wear_pct, 4),
+                "at_capacity": self.storage.at_capacity,
+                "worn_out": self.storage.worn_out,
             },
         }
 

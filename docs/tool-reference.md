@@ -17,6 +17,7 @@ subsystem coverage lands in L1 (see [backlog.md](backlog.md)).
 | `thermal_status` | T0 | Two-state thermal model: junction and enclosure temperature, ambient, throttle headroom, throttling flag. |
 | `compute_status` | T0 | Compute load fraction, electrical draw, throttling and saturation flags, profile-reported token capacity. |
 | `inference_status` | T0 | Inference totals: local calls, tokens generated, joules consumed, last latency, profile capacity. |
+| `storage_status` | T0 | Storage capacity, used / free space, NAND wear, write rate, capacity / wear flags, estimator covariance. |
 | `comms_state` | T0 | Comms-stack summary (stub until BL-012). |
 | `self_model_assess` | T0 | Self-model capability assessment (stub until BL-018). |
 | `self_estimator_status` | T0 | Estimator covariances (live for power, APU, thermal, and compute; other estimators land in L1). |
