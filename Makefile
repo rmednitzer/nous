@@ -1,4 +1,4 @@
-.PHONY: help install lint format typecheck test check schema docs-build docs-serve serve clean
+.PHONY: help install lint format typecheck test check policy schema docs-build docs-serve serve clean
 
 help:
 	@echo "Targets:"
@@ -8,6 +8,7 @@ help:
 	@echo "  typecheck   mypy --strict"
 	@echo "  test        pytest"
 	@echo "  check       lint + typecheck + test"
+	@echo "  policy      em-dash and private-repo greps (CI parity)"
 	@echo "  schema      regenerate generated docs (tool reference, ADR index, backlog summary, JSON Schemas)"
 	@echo "  docs-build  mkdocs build --strict"
 	@echo "  docs-serve  mkdocs serve"
@@ -30,6 +31,9 @@ test:
 	uv run pytest
 
 check: lint typecheck test
+
+policy:
+	bash scripts/policy_checks.sh
 
 schema:
 	uv run python scripts/gen_schemas.py
