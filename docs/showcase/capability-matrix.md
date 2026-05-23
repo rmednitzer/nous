@@ -4,7 +4,15 @@ Per-subsystem, per-estimator view of what is real today and what is
 not. The badges are defined in [Fidelity](fidelity.md). Each row
 points at the backlog item that is expected to raise the badge.
 
-Last reviewed: 2026-05-21.
+Last reviewed: 2026-05-23.
+
+> **Deployment note.** The badges below reflect the development line at
+> revision `02f2062`. The live VM tracks `origin/main`, which is behind
+> the development line by the L1 subsystem rollout (PRs #29..#37). Until
+> those merges land on `main`, the live MCP serves the v0.1 stub
+> surface, not the matrix below. See
+> [`docs/audit-2026-05-23.md`](../audit-2026-05-23.md) §4 for the
+> live-MCP probe.
 
 ## Subsystems
 
@@ -13,25 +21,25 @@ Last reviewed: 2026-05-21.
 | power | `filtered` (Li-ion + Peukert + thermal derate) | `filtered` (SoC + voltage Kalman) | [subsystem](../model-cards/subsystem-power.md), [estimator](../model-cards/estimator-power-soc.md) | BL-003 |
 | apu | `filtered` (solar MPPT, methanol FC, vehicle, USB-C PD) | `filtered` (per-source Kalman) | [subsystem](../model-cards/subsystem-apu.md), [estimator](../model-cards/estimator-apu.md) | BL-005a |
 | pmu / pdu | `planned` (lifts off PowerSubsystem) | `planned` | `planned` | BL-005b |
-| thermal | `stub` (returns ambient default) | `stub` (passthrough) | [estimator](../model-cards/estimator-thermal-kalman.md) | BL-005, BL-028 |
-| compute | `stub` (idle draw only) | `stub` (passthrough) | `planned` | BL-007, BL-031a |
-| storage | `stub` (fixed capacity) | `planned` | `planned` | BL-008 |
-| sensors | `stub` (hardcoded reads) | `planned` | `planned` | BL-009 |
-| position | `stub` (hardcoded covariance) | `stub` (labelled EKF, no Jacobian) | [estimator](../model-cards/estimator-position-ekf.md) | BL-010, BL-026 |
-| biometrics | `stub` (threshold) | `stub` (passthrough) | [estimator](../model-cards/estimator-biometrics-kalman.md) | BL-011, BL-029, BL-040 |
-| comms | `stub` (nominal `CONNECTED`) | `stub` (named particle filter, no resampling) | [estimator](../model-cards/estimator-comms-particle.md) | BL-012, BL-030, BL-048 |
-| inference | `planned` (local + cloud paths) | n/a | [local mock](../model-cards/inference-local-mock.md) | BL-013, BL-043 |
-| self model | `planned` (assess returns zeros) | n/a | `planned` | BL-018, BL-035 |
+| thermal | `filtered` (two-state lumped: junction + enclosure, profile-driven) | `filtered` (per-channel Kalman with shrinking covariance) | [estimator](../model-cards/estimator-thermal-kalman.md) | BL-005, BL-028 |
+| compute | `filtered` (load fraction, profile-driven draw curve, thermal-throttle clip) | `filtered` (per-channel Kalman over load and draw) | `planned` | BL-007, BL-031a |
+| storage | `filtered` (NAND wear, capacity accounting, write amplification) | `filtered` (per-channel Kalman over used and wear) | `planned` | BL-008 |
+| sensors | `filtered` (temp / humidity / baro; authoritative ambient source) | `filtered` (multi-channel Kalman with bounds validation) | `planned` | BL-009 |
+| position | `filtered` (lat / lon / alt dead-reckoning + GNSS fix gating + IMU drift) | `parametric` (v0.1 EKF passthrough with NaN/Inf validation; full constant-velocity EKF is BL-026) | [estimator](../model-cards/estimator-position-ekf.md) | BL-010, BL-026 |
+| biometrics | `filtered` (HR / core temp / hydration / cognitive load with physiological clamps) | `filtered` (multi-channel Kalman; physiology grounding is BL-040) | [estimator](../model-cards/estimator-biometrics-kalman.md) | BL-011, BL-029, BL-040 |
+| comms | `filtered` (per-link envelopes drive FSM `state.comms_state` each tick) | `parametric` (per-link belief tracker; full transition particle filter is BL-030) | [estimator](../model-cards/estimator-comms-particle.md) | BL-012, BL-030, BL-048 |
+| inference | `parametric` (local-path with profile-derived latency / energy / capacity; cloud path deferred) | n/a | [local mock](../model-cards/inference-local-mock.md) | BL-013, BL-043 |
+| self model | `planned` (assess returns the engine's `last_capabilities` dict; layer wiring is BL-018) | n/a | `planned` | BL-018, BL-035 |
 
 ## Cross-cutting surfaces
 
 | Surface | Status | Notes |
 | --- | --- | --- |
-| audit (JSONL, output-hashed) | `filtered` | append-only; redaction is shallow today (AUDIT C2). |
-| policy + runner (tier-classified admission) | `filtered` | tiers consistent with ADR 0001 and 0013. |
-| OAuth issuer | `filtered` for single-client lockdown; `planned` for L3 multi-tenant | BL-019, BL-059. |
-| anthropic client (daily cap + prompt cache) | `filtered` with one known race | AUDIT C1; BL-021. |
-| interop adapters (CoT, MISB, NMEA, STANAG, SensorThings, MQTT) | `stub` | All adapters explicitly claim "no conformance"; BL-024..BL-036. |
+| audit (JSONL, output-hashed) | `filtered` | append-only with fsync + chmod 0600; redaction still flat (AUDIT-2026-05-23 C2). The live VM is currently audit-degraded (AUDIT-2026-05-23 N2). |
+| policy + runner (tier-classified admission) | `filtered` | tiers consistent with ADR 0001 and 0013. Denial path still misses `exit_code=1` (AUDIT-2026-05-23 M1). |
+| OAuth issuer | `filtered` for single-client lockdown; `planned` for L3 multi-tenant | BL-019, BL-059. File-store lock and refresh-family revocation still open (AUDIT-2026-05-23 H6, H7). |
+| anthropic client (daily cap + prompt cache) | `filtered` | Flush-before-unlock race closed (AUDIT C1); test coverage in `tests/unit/test_anthropic_client.py`. BL-021 surfacing still planned. |
+| interop adapters (CoT, MISB, NMEA, STANAG, SensorThings, MQTT) | `parametric` | Encoders emit standards-shaped output with timestamp freshness checks; conformance is self-declared and uncertified (`docs/conformance/`). |
 | scenario injectors | `planned` | The scenario YAML loads, but the v0.1 injectors do not yet mutate engine state. BL-014. |
 | deterministic replay | `planned` | A `SimClock` with seed control would unlock replay; not yet scoped. |
 

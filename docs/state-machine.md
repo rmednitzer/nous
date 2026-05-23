@@ -57,6 +57,15 @@ stateDiagram-v2
     shutdown --> stowed: reset
 ```
 
+## Guards
+
+ADR 0018 attaches transition guards to four `(mode, trigger)` pairs:
+`IDLE -> mission`, `DEGRADED -> recover`, `THERMAL_LIMIT -> cool` (all
+gated on thermal headroom), and `LOW_POWER -> recover` (gated on SoC).
+A guard returning false raises `GuardDenied` and the refusal is logged
+on `StateMachine.refusals()` for the audit trail. `Engine.request_transition`
+fills the safety context from live subsystem state.
+
 ## Vocabularies
 
 `OperatorState` and `CommsState` are derived from estimator state and

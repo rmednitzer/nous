@@ -5,18 +5,26 @@
 **Standard:** CoT is the wire format ATAK / WinTAK / iTAK consume. The
 canonical spec lives in the MITRE CoT 2.0 schema.
 
-**v0.1 posture:** The adapter encodes a minimal CoT `event` element
-with `type="a-f-G-U-C"` (a friendly ground-unit combatant; chosen as a
-neutral default) and a `point` element with lat/lon. Decode is a stub
-that records the payload length.
+**Current posture:** The adapter encodes a CoT 2.0 `event` element
+with `type="a-f-G-U-C"` by default (a friendly ground-unit combatant;
+override via `data["type"]`), explicit `time`, `start`, and `stale`
+attributes, `how="m-g"` (machine, GPS), and a `point` element with
+lat / lon / hae / ce / le. Attribute values are escaped with
+`xml.sax.saxutils.quoteattr`. The encoder refuses to emit when the
+source estimate is older than `max_age_s` (default 60 s, configurable
+per ADR 0011 freshness rule SC-4). Decode is a narrow XML reader that
+explicitly refuses `DOCTYPE` and `ENTITY` declarations (XXE-safe).
 
-**What is supported:** Encode-only (single-event XML envelope with
-lat/lon/hae). The encoded byte stream is suitable for a TAK server's
-TCP/UDP listener for smoke tests.
+**What is supported:** Single-event encode and decode, lat / lon / hae
+plus optional `ce` / `le` accuracy, `detail.contact.callsign`,
+`detail.remarks`. The encoded byte stream is suitable for a TAK
+server's TCP / UDP listener.
 
-**What is omitted in v0.1:** Decoding inbound CoT, mesh delivery,
-nested `detail` elements, COP overlays, encrypted variants. Streaming
-adapters and TAK-protocol negotiation land with BL-024 in L2.
+**What is omitted:** Mesh delivery, COP overlays, encrypted variants,
+the wider `detail` schema (track, image, shape). The TAK-protocol
+negotiation lands with the streaming adapter follow-up.
 
 **Conformance claim:** None. This is a documented best-effort
-compatibility posture, not a certified conformance claim.
+compatibility posture, not a certified conformance claim. The 2026-05-23
+audit confirmed the required-attribute completeness (closes the
+baseline H3 finding).

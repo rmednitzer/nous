@@ -6,17 +6,27 @@
 encoding, layered on STANAG 4609 video. Spec:
 <https://gwg.nga.mil/misb/>.
 
-**v0.1 posture:** Encode emits a flat byte stream of single-byte
-key/length/value tuples. Decode is a stub that records the payload
-length. Local-set tags, BER-OID encoding, and the universal-set
-prelude land with BL-032.
+**Current posture:** Encode emits a UAS LDS universal-key prelude
+followed by a BER-length-prefixed body of TLV tuples. Local-set keys
+are validated to the `[1, 255]` range; value lengths use BER
+short-form for values under 128 bytes and BER long-form above; the
+encoder refuses to truncate either the key or the length and raises
+`ValueError` on overflow. Key 2 (`Unix Time Stamp`) is stamped on
+every encode and the encoder refuses to emit when the source estimate
+is older than `max_age_s` (default 30 s). Decode validates the
+universal key, parses the BER length, walks the TLV stream, and
+returns `{"error": ...}` on a truncated or malformed payload.
 
-**What is supported:** A minimal byte-level TLV encoder useful for
-smoke testing a downstream MISB parser. Not suitable for production.
+**What is supported:** ST 0601 local-set encode and decode with proper
+BER length handling. Suitable for smoke testing a downstream MISB
+parser; not certified for production.
 
-**What is omitted in v0.1:** Full ST 0601 tag dictionary, BER-OID
-length encoding, universal-set checksum, STANAG 4609 video container,
-embedding in a transport stream.
+**What is omitted:** Full ST 0601 tag dictionary (the encoder accepts
+any integer key but the decoder returns raw value bytes), universal-set
+checksum (key 1), STANAG 4609 video container, embedding in a transport
+stream.
 
 **Conformance claim:** None. A real MISB integration goes through a
-certified parser; this adapter is for simulator outputs only.
+certified parser; this adapter is for simulator outputs only. The
+2026-05-23 audit confirmed BER-OID length handling (closes the
+baseline C4 finding).

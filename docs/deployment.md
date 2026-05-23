@@ -24,6 +24,15 @@ host. The bundle is backwards-compatible with 24.04 LTS, but only the
 3. Edit `/etc/caddy/Caddyfile` to set the public hostname and the
    operator CIDR.
 4. `systemctl enable --now nous.service nous-state-flush.timer caddy`.
+5. To track `main` automatically:
+   `systemctl enable --now nous-auto-update.timer`. The timer polls
+   `origin/main` every five minutes, fast-forwards on a change,
+   re-runs `install.sh`, and restarts `nous.service` (asserting
+   post-restart `systemctl is-active`). Kill switch:
+   `systemctl disable --now nous-auto-update.timer`.
+6. Verify: `device_info` should report `audit.degraded: false`. A
+   `true` here means the JSONL sink could not be opened; consult
+   `skills/nous-troubleshooting.md` before serving traffic.
 
 ## Configuration
 

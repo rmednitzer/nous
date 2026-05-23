@@ -14,24 +14,28 @@ Daytime monitoring loop sustained by the solar APU.
 
 ## Fidelity
 
-This run exercises the v0.1 substantive subsystems and records the
+This run exercises the development-line subsystems and records the
 rest as defaults. See [Fidelity](../fidelity.md) for the legend.
 
 | Subsystem | Substance | Source |
 | --- | --- | --- |
 | power | `filtered` | Li-ion + Peukert + SoC Kalman |
 | apu | `filtered` | solar MPPT, fuel cell, vehicle, USB-C PD; per-source Kalman |
-| thermal | `stub` | ambient default; no dynamics yet |
-| compute | `stub` | idle draw only; no load curve coupling yet |
-| comms | `stub` | nominal `CONNECTED`; no link envelope yet |
-| inference | `planned` | not exercised in v0.1 telemetry |
+| thermal | `filtered` | two-state lumped model; per-channel Kalman |
+| compute | `filtered` | load fraction + profile-driven draw curve; per-channel Kalman |
+| storage | `filtered` | NAND wear + capacity accounting; per-channel Kalman |
+| sensors | `filtered` | temp / humidity / baro authoritative ambient; multi-channel Kalman |
+| position | `parametric` | dead reckoning + GNSS fix gating; EKF passthrough (full EKF is BL-026) |
+| biometrics | `filtered` | HR / core temp / hydration / cognitive load with multi-channel Kalman |
+| comms | `parametric` | per-link envelopes drive FSM each tick; particle filter is BL-030 |
+| inference | `parametric` | local-path with profile-derived latency / energy / capacity |
 
 ## Final state
 
 - mode: `idle`
 - operator: `nominal`
-- comms: `connected`
-- SoC: 99.117 %
+- comms: `denied`
+- SoC: 98.526 %
 - APU offered: 5.0 W
 - fuel: 100.0 %
 
@@ -96,17 +100,17 @@ Sparklines are over resampled buckets; high to the right is high value.
 | 564 | 33840 | `idle` | 100.000 | 25.000 | 100.000 |
 | 576 | 34560 | `idle` | 100.000 | 25.000 | 100.000 |
 | 588 | 35280 | `idle` | 100.000 | 25.000 | 100.000 |
-| 600 | 36000 | `idle` | 99.993 | 5.000 | 100.000 |
-| 612 | 36720 | `idle` | 99.905 | 5.000 | 100.000 |
-| 624 | 37440 | `idle` | 99.818 | 5.000 | 100.000 |
-| 636 | 38160 | `idle` | 99.730 | 5.000 | 100.000 |
-| 648 | 38880 | `idle` | 99.642 | 5.000 | 100.000 |
-| 660 | 39600 | `idle` | 99.555 | 5.000 | 100.000 |
-| 672 | 40320 | `idle` | 99.467 | 5.000 | 100.000 |
-| 684 | 41040 | `idle` | 99.380 | 5.000 | 100.000 |
-| 696 | 41760 | `idle` | 99.292 | 5.000 | 100.000 |
-| 708 | 42480 | `idle` | 99.204 | 5.000 | 100.000 |
-| 720 | 43200 | `idle` | 99.117 | 5.000 | 100.000 |
+| 600 | 36000 | `idle` | 99.988 | 5.000 | 100.000 |
+| 612 | 36720 | `idle` | 99.842 | 5.000 | 100.000 |
+| 624 | 37440 | `idle` | 99.696 | 5.000 | 100.000 |
+| 636 | 38160 | `idle` | 99.550 | 5.000 | 100.000 |
+| 648 | 38880 | `idle` | 99.404 | 5.000 | 100.000 |
+| 660 | 39600 | `idle` | 99.258 | 5.000 | 100.000 |
+| 672 | 40320 | `idle` | 99.111 | 5.000 | 100.000 |
+| 684 | 41040 | `idle` | 98.965 | 5.000 | 100.000 |
+| 696 | 41760 | `idle` | 98.819 | 5.000 | 100.000 |
+| 708 | 42480 | `idle` | 98.672 | 5.000 | 100.000 |
+| 720 | 43200 | `idle` | 98.526 | 5.000 | 100.000 |
 
 ## Timeline
 

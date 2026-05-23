@@ -1,5 +1,10 @@
 # AUDIT
 
+> **Superseded for current state by [`docs/audit-2026-05-23.md`](docs/audit-2026-05-23.md).**
+> This document is preserved as the 2026-05-20 baseline; consult the
+> 2026-05-23 audit for which findings closed, which remain open, and
+> for the live-MCP probe results.
+
 Point-in-time repository audit of `nous` against Python, FastMCP, OAuth
 2.1, OGC/MISB/NMEA/CoT, and STPA-Pro best practices. The audit covers
 governance, the spine (policy / audit / runner / server / engine /

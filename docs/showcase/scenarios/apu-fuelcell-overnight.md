@@ -14,24 +14,28 @@ Overnight relay run sustained by the methanol fuel cell.
 
 ## Fidelity
 
-This run exercises the v0.1 substantive subsystems and records the
+This run exercises the development-line subsystems and records the
 rest as defaults. See [Fidelity](../fidelity.md) for the legend.
 
 | Subsystem | Substance | Source |
 | --- | --- | --- |
 | power | `filtered` | Li-ion + Peukert + SoC Kalman |
 | apu | `filtered` | solar MPPT, fuel cell, vehicle, USB-C PD; per-source Kalman |
-| thermal | `stub` | ambient default; no dynamics yet |
-| compute | `stub` | idle draw only; no load curve coupling yet |
-| comms | `stub` | nominal `CONNECTED`; no link envelope yet |
-| inference | `planned` | not exercised in v0.1 telemetry |
+| thermal | `filtered` | two-state lumped model; per-channel Kalman |
+| compute | `filtered` | load fraction + profile-driven draw curve; per-channel Kalman |
+| storage | `filtered` | NAND wear + capacity accounting; per-channel Kalman |
+| sensors | `filtered` | temp / humidity / baro authoritative ambient; multi-channel Kalman |
+| position | `parametric` | dead reckoning + GNSS fix gating; EKF passthrough (full EKF is BL-026) |
+| biometrics | `filtered` | HR / core temp / hydration / cognitive load with multi-channel Kalman |
+| comms | `parametric` | per-link envelopes drive FSM each tick; particle filter is BL-030 |
+| inference | `parametric` | local-path with profile-derived latency / energy / capacity |
 
 ## Final state
 
 - mode: `idle`
 - operator: `nominal`
-- comms: `connected`
-- SoC: 95.277 %
+- comms: `denied`
+- SoC: 94.084 %
 - APU offered: 0.0 W
 - fuel: 58.446 %
 
@@ -146,27 +150,27 @@ Sparklines are over resampled buckets; high to the right is high value.
 | 1164 | 69840 | `idle` | 100.000 | 20.000 | 59.501 |
 | 1176 | 70560 | `idle` | 100.000 | 20.000 | 59.140 |
 | 1188 | 71280 | `idle` | 100.000 | 20.000 | 58.778 |
-| 1200 | 72000 | `idle` | 99.981 | 0.000 | 58.446 |
-| 1212 | 72720 | `idle` | 99.747 | 0.000 | 58.446 |
-| 1224 | 73440 | `idle` | 99.513 | 0.000 | 58.446 |
-| 1236 | 74160 | `idle` | 99.279 | 0.000 | 58.446 |
-| 1248 | 74880 | `idle` | 99.045 | 0.000 | 58.446 |
-| 1260 | 75600 | `idle` | 98.811 | 0.000 | 58.446 |
-| 1272 | 76320 | `idle` | 98.576 | 0.000 | 58.446 |
-| 1284 | 77040 | `idle` | 98.342 | 0.000 | 58.446 |
-| 1296 | 77760 | `idle` | 98.107 | 0.000 | 58.446 |
-| 1308 | 78480 | `idle` | 97.872 | 0.000 | 58.446 |
-| 1320 | 79200 | `idle` | 97.637 | 0.000 | 58.446 |
-| 1332 | 79920 | `idle` | 97.402 | 0.000 | 58.446 |
-| 1344 | 80640 | `idle` | 97.166 | 0.000 | 58.446 |
-| 1356 | 81360 | `idle` | 96.931 | 0.000 | 58.446 |
-| 1368 | 82080 | `idle` | 96.695 | 0.000 | 58.446 |
-| 1380 | 82800 | `idle` | 96.459 | 0.000 | 58.446 |
-| 1392 | 83520 | `idle` | 96.223 | 0.000 | 58.446 |
-| 1404 | 84240 | `idle` | 95.987 | 0.000 | 58.446 |
-| 1416 | 84960 | `idle` | 95.751 | 0.000 | 58.446 |
-| 1428 | 85680 | `idle` | 95.514 | 0.000 | 58.446 |
-| 1440 | 86400 | `idle` | 95.277 | 0.000 | 58.446 |
+| 1200 | 72000 | `idle` | 99.976 | 0.000 | 58.446 |
+| 1212 | 72720 | `idle` | 99.684 | 0.000 | 58.446 |
+| 1224 | 73440 | `idle` | 99.391 | 0.000 | 58.446 |
+| 1236 | 74160 | `idle` | 99.098 | 0.000 | 58.446 |
+| 1248 | 74880 | `idle` | 98.805 | 0.000 | 58.446 |
+| 1260 | 75600 | `idle` | 98.512 | 0.000 | 58.446 |
+| 1272 | 76320 | `idle` | 98.219 | 0.000 | 58.446 |
+| 1284 | 77040 | `idle` | 97.925 | 0.000 | 58.446 |
+| 1296 | 77760 | `idle` | 97.631 | 0.000 | 58.446 |
+| 1308 | 78480 | `idle` | 97.337 | 0.000 | 58.446 |
+| 1320 | 79200 | `idle` | 97.043 | 0.000 | 58.446 |
+| 1332 | 79920 | `idle` | 96.748 | 0.000 | 58.446 |
+| 1344 | 80640 | `idle` | 96.453 | 0.000 | 58.446 |
+| 1356 | 81360 | `idle` | 96.158 | 0.000 | 58.446 |
+| 1368 | 82080 | `idle` | 95.862 | 0.000 | 58.446 |
+| 1380 | 82800 | `idle` | 95.567 | 0.000 | 58.446 |
+| 1392 | 83520 | `idle` | 95.271 | 0.000 | 58.446 |
+| 1404 | 84240 | `idle` | 94.975 | 0.000 | 58.446 |
+| 1416 | 84960 | `idle` | 94.678 | 0.000 | 58.446 |
+| 1428 | 85680 | `idle` | 94.381 | 0.000 | 58.446 |
+| 1440 | 86400 | `idle` | 94.084 | 0.000 | 58.446 |
 
 ## Timeline
 

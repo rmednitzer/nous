@@ -7,7 +7,15 @@ yet?" questions.
 
 The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`.
 
-Last reviewed: 2026-05-21.
+Last reviewed: 2026-05-23.
+
+The deployment-side status note: as of this review the live VM still
+serves the L0 scaffold surface because `origin/main` is behind the
+local development line by the full L1 subsystem rollout. The component
+maturity table below tracks the *code* state on the development branch;
+the live MCP catches up the next time the relevant work lands on
+`main`. See [`docs/audit-2026-05-23.md`](docs/audit-2026-05-23.md) §4 for
+the live-MCP probe.
 
 ## Maturity taxonomy
 

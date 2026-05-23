@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documented
+
+- Full system audit at revision `02f2062` published as
+  [`docs/audit-2026-05-23.md`](docs/audit-2026-05-23.md). Delta against
+  the 2026-05-20 baseline (`AUDIT.md`) and the 2026-05-21 in-depth
+  review (`docs/review-2026-05-21.md`): C1, C4, C5 (estimator
+  stubs), H3, H4, H5, M4, and the audit chmod 0600 are confirmed
+  closed in code; C2, C3, C6, H1 (runner-only gap), H2, H6, H7, H8,
+  M1, and M10 carry over. The new finding **N1** (deployment drift:
+  `origin/main` 49 commits behind HEAD; the live MCP serves the v0.1
+  surface) and **N2** (live audit sink reports `degraded: true`) are
+  the highest-priority remediation items.
+- Markdown tree refreshed against the audit findings: STATUS.md and
+  LIMITATIONS.md date-stamped 2026-05-23; SECURITY.md adds the
+  audit-degraded kill-switch procedure; `docs/showcase/capability-matrix.md`
+  rows flipped from `stub` to `filtered` / `parametric` for the
+  subsystems that landed under PRs #29 through #37.
+
 ### Changed
 
 - Deployment baseline moves to Ubuntu 26.04 LTS / Python 3.14 (ADR

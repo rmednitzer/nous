@@ -37,13 +37,18 @@ provide the seams for plugging the simulated unit into mission stacks.
 
 ## Status
 
-Pre-1.0. The v0.1 scaffold establishes the layout, the audited MCP tool
-surface, the state machine, the engine tick loop, the hardware-profile
-loader, the policy/audit/runner spine, and placeholders for subsystems,
-estimators, the self-model, and interop adapters. Physics, estimators, and
-the self-model land in subsequent phases. See [STATUS.md](STATUS.md) for the
-phase table, [LIMITATIONS.md](LIMITATIONS.md) for the explicit gaps, and
-[docs/backlog.md](docs/backlog.md) for the line-item tracker.
+Pre-1.0. The L0 scaffold (layout, audited MCP tool surface, FSM, engine
+tick loop, hardware-profile loader, policy/audit/runner spine) is in
+place. The L1 subsystem rollout (power, APU, thermal, compute,
+inference, storage, comms, position, sensors, biometrics) and their
+estimators are landed on the development line with passing tests; the
+interop adapters (CoT, SensorThings, MISB KLV, NMEA, STANAG, MQTT) now
+emit standards-shaped output. The self-model layer is still a typed
+placeholder. See [STATUS.md](STATUS.md) for the phase table and the
+per-component maturity ledger, [LIMITATIONS.md](LIMITATIONS.md) for the
+explicit gaps, [docs/backlog.md](docs/backlog.md) for the line-item
+tracker, and [docs/audit-2026-05-23.md](docs/audit-2026-05-23.md) for
+the most recent point-in-time audit including a live-MCP probe.
 
 ## Layout
 
