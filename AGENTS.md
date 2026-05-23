@@ -163,7 +163,10 @@ Do not change these files without an ADR:
 
 Never introduce a runtime dependency on a private repository. `nous` is a
 standalone codebase; if a piece of infrastructure is useful, port the
-shape rather than the dependency.
+shape rather than the dependency. This rule is enforced by
+`scripts/policy_checks.sh` (the `policy` CI job and `make policy`
+locally); append a deny-list entry to `private_repo_patterns` when a
+specific private name needs to be banned.
 
 ## Self-driving simulator mode
 
