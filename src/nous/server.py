@@ -65,17 +65,21 @@ async def tick_lifespan(
     On entry, spawn a background task that advances ``engine.tick()`` at
     ``tick_hz``. On exit, set the stop event so the task drains cleanly,
     then call ``engine.stop()`` so the FSM lands on SHUTDOWN rather than
-    leaking the running state. Closes AUDIT-2026-05-23 C3 (engine starts
-    but the FastMCP server never ticks it).
+    leaking the running state. ``engine.stop()`` runs in a ``finally``
+    so a crashed tick task (or a cancelled task group) still surrenders
+    the engine cleanly. Closes AUDIT-2026-05-23 C3 (engine starts but
+    the FastMCP server never ticks it).
     """
     stop = anyio.Event()
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(tick_loop, engine, tick_hz, stop)
-        try:
-            yield
-        finally:
-            stop.set()
-    engine.stop()
+    try:
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(tick_loop, engine, tick_hz, stop)
+            try:
+                yield
+            finally:
+                stop.set()
+    finally:
+        engine.stop()
 
 
 def build_server(settings: Settings | None = None) -> FastMCP:

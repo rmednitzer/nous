@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import anyio
+import anyio.lowlevel
 
 from .engine import Engine
 
@@ -14,7 +15,10 @@ async def tick_loop(engine: Engine, hz: float, stop: anyio.Event) -> None:
 
     Backpressure: if a tick takes longer than its budget we skip the sleep
     and run the next tick immediately, logging the overrun count on the
-    engine state.
+    engine state. The overrun branch still hits a checkpoint so the loop
+    cannot starve the event loop or refuse cancellation; without it a
+    sustained overrun would block MCP request handling and graceful
+    shutdown of the server.
     """
     if hz <= 0.0:
         raise ValueError("hz must be positive")
@@ -30,4 +34,5 @@ async def tick_loop(engine: Engine, hz: float, stop: anyio.Event) -> None:
                 await stop.wait()
         else:
             overruns += 1
+            await anyio.lowlevel.checkpoint()
     engine.state.last_capabilities["tick_overruns"] = float(overruns)
