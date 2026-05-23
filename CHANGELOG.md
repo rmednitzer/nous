@@ -19,6 +19,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- BL-008 storage subsystem. NAND wear and capacity accounting driven
+  by physical writes: `storage.write(gib)` accepts a one-shot logical
+  write (clamped by free space, inflated by
+  `storage.write_amplification` into the lifetime physical-writes
+  counter); `storage.set_write_rate(gib_per_s)` is consumed each tick
+  for a sustained workload. The wear curve is linear against a TBW
+  endurance budget that defaults to `capacity_gib * 600` GiB when
+  `storage.tbw_gib` is unset. Paired 1-D `StorageKalman` estimator
+  over (used_gib, wear_pct). New `storage_status` MCP tool; storage
+  estimator added to `self_estimator_status`.
 - BL-013 local-path inference subsystem. `InferenceSubsystem.request_local`
   returns a profile-derived `latency_s` (from
   `compute.inference_local.tok_per_s_p50`) and `energy_j` (from

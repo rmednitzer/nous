@@ -314,6 +314,38 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         return await _wrap("compute_status", {}, ctx, _work)
 
     @mcp.tool()
+    async def storage_status(ctx: Context | None = None) -> str:
+        """Storage subsystem: capacity, used, wear, write rate."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.storage.truth())
+            estimate = app.engine.storage_est.state()
+            payload = {
+                "capacity_gib": round(truth["capacity_gib"], 3),
+                "used_gib": round(truth["used_gib"], 3),
+                "free_gib": round(truth["free_gib"], 3),
+                "used_pct": round(truth["used_pct"], 3),
+                "wear_pct": round(truth["wear_pct"], 4),
+                "lifetime_physical_gib": round(truth["lifetime_physical_gib"], 3),
+                "write_rate_gib_per_s": round(truth["write_rate_gib_per_s"], 4),
+                "at_capacity": truth["at_capacity"],
+                "worn_out": truth["worn_out"],
+                "estimate": {
+                    "used_gib": round(estimate.point["used_gib"], 3),
+                    "used_gib_sigma": round(
+                        estimate.covariance["used_gib"] ** 0.5, 4
+                    ),
+                    "wear_pct": round(estimate.point["wear_pct"], 4),
+                    "wear_pct_sigma": round(
+                        estimate.covariance["wear_pct"] ** 0.5, 4
+                    ),
+                },
+            }
+            return json.dumps(payload)
+
+        return await _wrap("storage_status", {}, ctx, _work)
+
+    @mcp.tool()
     async def comms_state(ctx: Context | None = None) -> str:
         """Comms-stack summary (per ADR-0006)."""
 
@@ -356,6 +388,7 @@ def build_server(settings: Settings | None = None) -> FastMCP:
                 app.engine.apu_est,
                 app.engine.thermal_est,
                 app.engine.compute_est,
+                app.engine.storage_est,
             ):
                 state = est.state()
                 rows.append(
