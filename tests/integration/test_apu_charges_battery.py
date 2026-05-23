@@ -27,23 +27,15 @@ def engine(tmp_nous_home: Path) -> Engine:
 
 def test_apu_recharges_when_load_is_zero(engine: Engine) -> None:
     engine.apu.set_solar_w(40.0)
-
-    def _zero_load() -> float:
-        return 0.0
-
-    engine._default_load_w = _zero_load  # type: ignore[method-assign]
+    engine.compute.set_load_pct(0.0)
     for _ in range(120):
         engine.tick()
     assert engine.power.soc_pct > 50.0
 
 
 def test_balanced_load_and_apu_holds_soc(engine: Engine) -> None:
-    engine.apu.set_solar_w(20.0)
-
-    def _twenty_w() -> float:
-        return 20.0
-
-    engine._default_load_w = _twenty_w  # type: ignore[method-assign]
+    engine.compute.set_load_pct(25.0)
+    engine.apu.set_solar_w(engine.compute.draw_w)
     start = engine.power.soc_pct
     for _ in range(120):
         engine.tick()
@@ -52,11 +44,7 @@ def test_balanced_load_and_apu_holds_soc(engine: Engine) -> None:
 
 def test_load_exceeding_apu_discharges_battery(engine: Engine) -> None:
     engine.apu.set_solar_w(5.0)
-
-    def _heavy_load() -> float:
-        return 100.0
-
-    engine._default_load_w = _heavy_load  # type: ignore[method-assign]
+    engine.compute.set_load_pct(100.0)
     start = engine.power.soc_pct
     for _ in range(1200):
         engine.tick()
@@ -71,10 +59,7 @@ def test_apu_total_clamped_by_charge_limit_in_truth(engine: Engine) -> None:
 
 
 def test_power_estimator_tracks_soc(engine: Engine) -> None:
-    def _ten_w() -> float:
-        return 10.0
-
-    engine._default_load_w = _ten_w  # type: ignore[method-assign]
+    engine.compute.set_load_pct(15.0)
     for _ in range(60):
         engine.tick()
     estimate = engine.power_est.state()

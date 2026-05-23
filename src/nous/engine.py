@@ -19,12 +19,14 @@ import yaml
 
 from .config import Settings, get_settings
 from .estimators.apu import ApuEstimator
+from .estimators.compute import ComputeKalman
 from .estimators.power import PowerEstimator
 from .estimators.thermal import ThermalKalman
 from .state.comms_state import CommsState
 from .state.machine import GuardDenied, Mode, StateMachine
 from .state.operator_state import OperatorState
 from .subsystems.apu import ApuSubsystem
+from .subsystems.compute import ComputeSubsystem
 from .subsystems.power import PowerSubsystem
 from .subsystems.thermal import ThermalSubsystem
 from .types import TickContext
@@ -65,6 +67,7 @@ class Engine:
         self.power = PowerSubsystem(self.profile)
         self.apu = ApuSubsystem(self.profile)
         self.thermal = ThermalSubsystem(self.profile)
+        self.compute = ComputeSubsystem(self.profile)
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
@@ -73,6 +76,10 @@ class Engine:
         self.thermal_est = ThermalKalman(
             initial_junction_c=self.thermal.junction_c,
             initial_enclosure_c=self.thermal.enclosure_c,
+        )
+        self.compute_est = ComputeKalman(
+            initial_load_pct=self.compute.load_pct,
+            initial_draw_w=self.compute.draw_w,
         )
 
     @property
@@ -153,8 +160,11 @@ class Engine:
         dt = self.dt_s
         self.state.ts_s += dt
 
-        load_w = self._default_load_w()
         ambient_c = self._default_ambient_c()
+
+        self.compute.set_thermal_throttle(throttling=self.thermal.throttling)
+        self.compute.step(dt)
+        load_w = self.compute.draw_w
 
         self.apu.step(dt)
         self.thermal.set_load_w(load_w)
@@ -171,6 +181,8 @@ class Engine:
         self.apu_est.update(self.apu.sensor_obs())
         self.thermal_est.predict(dt)
         self.thermal_est.update(self.thermal.sensor_obs())
+        self.compute_est.predict(dt)
+        self.compute_est.update(self.compute.sensor_obs())
 
         ctx = TickContext(
             tick=self.state.tick,
@@ -180,17 +192,6 @@ class Engine:
             profile=self.settings.profile,
         )
         return ctx
-
-    def _default_load_w(self) -> float:
-        """Idle compute draw from the profile.
-
-        The compute subsystem (BL-007) lands later and will report a real
-        load. Until then, the engine uses ``profile.compute.draw_w_idle``
-        so the battery and APU loops behave plausibly under the default
-        scenario.
-        """
-        compute_cfg = self.profile.get("compute") or {}
-        return float(compute_cfg.get("draw_w_idle", 0.0))
 
     def _default_ambient_c(self) -> float:
         """Ambient temperature input for the thermal subsystem.
@@ -227,6 +228,11 @@ class Engine:
                 "enclosure_c": round(self.thermal.enclosure_c, 3),
                 "headroom_c": round(self.thermal.headroom_c, 3),
                 "throttling": self.thermal.throttling,
+            },
+            "compute": {
+                "load_pct": round(self.compute.load_pct, 3),
+                "draw_w": round(self.compute.draw_w, 3),
+                "throttled": self.compute.throttled,
             },
         }
 

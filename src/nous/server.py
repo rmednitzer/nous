@@ -283,6 +283,37 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         return await _wrap("thermal_status", {}, ctx, _work)
 
     @mcp.tool()
+    async def compute_status(ctx: Context | None = None) -> str:
+        """Compute subsystem: load fraction, electrical draw, throttling."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.compute.truth())
+            estimate = app.engine.compute_est.state()
+            payload = {
+                "load_pct": round(truth["load_pct"], 3),
+                "requested_load_pct": round(truth["requested_load_pct"], 3),
+                "draw_w": round(truth["draw_w"], 3),
+                "draw_w_idle": round(truth["draw_w_idle"], 3),
+                "draw_w_load": round(truth["draw_w_load"], 3),
+                "throttled": truth["throttled"],
+                "saturated": truth["saturated"],
+                "tok_per_s_capacity": round(truth["tok_per_s_capacity"], 3),
+                "estimate": {
+                    "load_pct": round(estimate.point["load_pct"], 3),
+                    "load_pct_sigma": round(
+                        estimate.covariance["load_pct"] ** 0.5, 4
+                    ),
+                    "draw_w": round(estimate.point["draw_w"], 3),
+                    "draw_w_sigma": round(
+                        estimate.covariance["draw_w"] ** 0.5, 4
+                    ),
+                },
+            }
+            return json.dumps(payload)
+
+        return await _wrap("compute_status", {}, ctx, _work)
+
+    @mcp.tool()
     async def comms_state(ctx: Context | None = None) -> str:
         """Comms-stack summary (per ADR-0006)."""
 
@@ -324,6 +355,7 @@ def build_server(settings: Settings | None = None) -> FastMCP:
                 app.engine.power_est,
                 app.engine.apu_est,
                 app.engine.thermal_est,
+                app.engine.compute_est,
             ):
                 state = est.state()
                 rows.append(
@@ -390,7 +422,7 @@ never written to disk. The audit log path is reported by `device_info`.
 
 Representative v0.1 tools:
   device_info / device_health / state_get / state_history
-  power_status / apu_status / thermal_status / comms_state
+  power_status / apu_status / thermal_status / compute_status / comms_state
   self_model_assess / self_estimator_status
   inference_local / interop_formats
 
