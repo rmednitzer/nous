@@ -51,6 +51,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   audit-degraded kill-switch procedure; `docs/showcase/capability-matrix.md`
   rows flipped from `stub` to `filtered` / `parametric` for the
   subsystems that landed under PRs #29 through #37.
+- Re-audit at HEAD `43d0db2` (post PR #40 / #41 / #42) appended to
+  [`docs/audit-2026-05-23.md`](docs/audit-2026-05-23.md) §10. **C3**
+  (engine ticks via FastMCP lifespan), **C6** (CI policy greps
+  enforced), and **N1** (deployment drift, `origin/main` caught up)
+  are confirmed closed; **N2** (audit sink degraded on the live VM)
+  carries forward as the next live-VM action item; the revised
+  remediation order in §10.3 is the up-to-date plan. STATUS.md flips
+  L0 to `stable` and L1 to `in-progress` to match the actual code
+  state; quality-gate count rises to 351 tests. LIMITATIONS.md L17
+  and AGENTS.md "Boundaries" now reference `scripts/policy_checks.sh`
+  as the enforcement seam; `docs/showcase/capability-matrix.md`
+  deployment note updated to reflect the post-catch-up state.
 
 ### Changed
 

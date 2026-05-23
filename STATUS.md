@@ -7,15 +7,20 @@ yet?" questions.
 
 The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`.
 
-Last reviewed: 2026-05-23.
+Last reviewed: 2026-05-23 (re-audit at HEAD `43d0db2`, post PRs #40
+/ #41 / #42).
 
-The deployment-side status note: as of this review the live VM still
-serves the L0 scaffold surface because `origin/main` is behind the
-local development line by the full L1 subsystem rollout. The component
-maturity table below tracks the *code* state on the development branch;
-the live MCP catches up the next time the relevant work lands on
-`main`. See [`docs/audit-2026-05-23.md`](docs/audit-2026-05-23.md) §4 for
-the live-MCP probe.
+Deployment-side status note: the L1 subsystem rollout is now on
+`origin/main` (PR #38 catch-up train), so the auto-update timer
+lands the nineteen-tool surface on the live VM on its next poll.
+Three audit-baseline criticals closed since the 2026-05-23 baseline:
+**C3** (FastMCP lifespan ticks the engine, PR #40 + #42 follow-up),
+**C6** (CI policy greps now enforce em-dash and private-repo
+bans, PR #41), and **N1** (deployment drift -- `main` caught up).
+**N2** (live audit sink degraded) carries forward as the next
+live-VM action item. See [`docs/audit-2026-05-23.md`](docs/audit-2026-05-23.md)
+§10 for the post-catch-up re-audit and the revised remediation
+order.
 
 ## Maturity taxonomy
 
@@ -30,8 +35,8 @@ the live-MCP probe.
 
 | Phase | Name | State | Scope |
 |-------|------|-------|-------|
-| L0 | Scaffold | in-progress | Layout, governance docs, audited tool surface, FSM, engine tick, hardware-profile loader, OAuth issuer. v0.1 lands the L0 scaffold. |
-| L1 | Subsystem models + state machine | planned | All ten subsystems implement step/truth/sensor_obs; estimators come online; the state machine transitions on derived OperatorState and CommsState. |
+| L0 | Scaffold | stable | Layout, governance docs, audited tool surface, FSM, engine tick, hardware-profile loader, OAuth issuer. v0.1 shipped; the FastMCP lifespan now drives `tick_loop` so the live server advances state (PR #40 + #42). |
+| L1 | Subsystem models + state machine | in-progress | All ten subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) implement step / truth / sensor_obs with live estimators; the state machine transitions on derived OperatorState and CommsState. Self-model wiring (BL-018) is the remaining gap. |
 | L2 | claude.ai integration + scenarios | planned | HTTP transport with OAuth + Caddy lockdown in place; scenario pack runs end-to-end; biometrics physiology-grounded; profile hot-reload. |
 | L3 | STPA completion + benchmarks | planned | STPA derived requirements complete; comms propagation model; learned self-model; multi-tenant claude.ai; real local inference; additional interop adapters. |
 
@@ -63,14 +68,14 @@ the live-MCP probe.
 
 | Component | State | Notes |
 |-----------|-------|-------|
-| `src/nous/server.py` (FastMCP wiring + representative tools) | in-progress | v0.1 wires a representative set; full surface lands in L1. |
+| `src/nous/server.py` (FastMCP wiring + representative tools) | in-progress | Nineteen tools registered: ten subsystem `*_status` reads (power, apu, thermal, compute, storage, comms, position, sensors, biometrics, inference) + `comms_state` (FSM aggregator) + `device_info` + `device_health` + `state_get` + `state_history` + `self_model_assess` + `self_estimator_status` + `interop_formats` + `inference_local`. The new `tick_lifespan` async context manager drives `tick_loop` for the lifetime of the server and calls `engine.stop()` in a `finally` (PR #40 + #42). |
+| `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only. Changes require an ADR. |
 | `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. |
-| `src/nous/engine.py` | in-progress | Tick orchestration; all eleven L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. |
-| `src/nous/tick.py` | in-progress | Async tick loop. |
+| `src/nous/engine.py` | in-progress | Tick orchestration; all ten L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. |
 | `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |
 | `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in (BL-005a). |
 | `src/nous/subsystems/thermal.py` | in-progress | Two-state lumped model: junction + enclosure (BL-005). Drives the FSM thermal-headroom guard and the battery cell temperature. |
@@ -101,7 +106,11 @@ the live-MCP probe.
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge.
+  feature branch before merge. 351 tests pass at `43d0db2`.
 - `make docs-build` (`mkdocs build --strict`) is warning-free.
-- The CI grep ban against em-dashes in markdown and private-repo references
-  in any file passes.
+- `make policy` (em-dash + private-repo greps via
+  `scripts/policy_checks.sh`) is enforced in CI as the `policy` job
+  (PR #41 closed AUDIT-2026-05-23 C6). The script forces
+  `LC_ALL=C.UTF-8` so the `grep -P '\x{2014}'` rule compiles in any
+  contributor locale, and treats grep exit `2` as a policy failure
+  rather than a silent pass.

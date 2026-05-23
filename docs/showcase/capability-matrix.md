@@ -6,13 +6,13 @@ points at the backlog item that is expected to raise the badge.
 
 Last reviewed: 2026-05-23.
 
-> **Deployment note.** The badges below reflect the development line at
-> revision `02f2062`. The live VM tracks `origin/main`, which is behind
-> the development line by the L1 subsystem rollout (PRs #29..#37). Until
-> those merges land on `main`, the live MCP serves the v0.1 stub
-> surface, not the matrix below. See
-> [`docs/audit-2026-05-23.md`](../audit-2026-05-23.md) §4 for the
-> live-MCP probe.
+> **Deployment note.** The badges below reflect `origin/main` at
+> revision `43d0db2` (post PR #42). The catch-up train (PR #38) brought
+> the L1 subsystem rollout onto `main` after the 2026-05-23 baseline,
+> so the live VM picks up the L1 surface on the next auto-update poll.
+> The live MCP audit in [`docs/audit-2026-05-23.md`](../audit-2026-05-23.md)
+> §4 was conducted before the catch-up; §10 records the post-catch-up
+> state.
 
 ## Subsystems
 
