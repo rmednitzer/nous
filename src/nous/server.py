@@ -380,6 +380,43 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         return await _wrap("comms_status", {}, ctx, _work)
 
     @mcp.tool()
+    async def position_status(ctx: Context | None = None) -> str:
+        """Position subsystem: lat/lon/alt ground truth, fix state, drift."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.position.truth())
+            estimate = app.engine.position_est.state()
+            payload = {
+                "lat": round(truth["lat"], 6),
+                "lon": round(truth["lon"], 6),
+                "alt_m": round(truth["alt_m"], 3),
+                "speed_mps": round(truth["speed_mps"], 3),
+                "heading_deg": round(truth["heading_deg"], 3),
+                "vertical_mps": round(truth["vertical_mps"], 3),
+                "has_fix": truth["has_fix"],
+                "dead_reckoning_s": round(truth["dead_reckoning_s"], 3),
+                "fix_rate_hz": round(truth["fix_rate_hz"], 3),
+                "estimate": {
+                    "lat": round(estimate.point.get("lat", 0.0), 6),
+                    "lon": round(estimate.point.get("lon", 0.0), 6),
+                    "alt_m": round(estimate.point.get("alt_m", 0.0), 3),
+                    "lat_sigma": round(
+                        estimate.covariance.get("lat", 0.0) ** 0.5, 8
+                    ),
+                    "lon_sigma": round(
+                        estimate.covariance.get("lon", 0.0) ** 0.5, 8
+                    ),
+                    "alt_sigma_m": round(
+                        estimate.covariance.get("alt_m", 0.0) ** 0.5, 4
+                    ),
+                    "rejected_updates": app.engine.position_est.rejected_updates,
+                },
+            }
+            return json.dumps(payload)
+
+        return await _wrap("position_status", {}, ctx, _work)
+
+    @mcp.tool()
     async def self_model_assess(question: str = "", ctx: Context | None = None) -> str:
         """Self-model capability assessment (placeholder for L1)."""
 
@@ -409,6 +446,7 @@ def build_server(settings: Settings | None = None) -> FastMCP:
                 app.engine.compute_est,
                 app.engine.storage_est,
                 app.engine.comms_est,
+                app.engine.position_est,
             ):
                 state = est.state()
                 rows.append(

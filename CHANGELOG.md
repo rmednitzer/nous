@@ -19,6 +19,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- BL-010 position subsystem. Ground-truth lat / lon / alt advanced
+  each tick by dead-reckoning from `set_velocity(speed_mps,
+  heading_deg)` plus an optional `vertical_mps`; longitude wraps
+  through the antimeridian; latitude clamps. Profile sigmas from
+  `sensors.position` (lat / lon / alt_m) are advertised on the GNSS
+  observation so the v0.1 `PositionEKF` sizes its Kalman gain
+  correctly. `set_fix(False)` simulates loss of fix (empty
+  observation payload; the EKF's variance grows under `predict`
+  until the fix returns); `set_imu_drift` lets a scenario express a
+  biased IMU during a fix-lost interval. New `position_status` MCP
+  tool. Snapshot adds a position block; `self_estimator_status` now
+  includes the position EKF. Full constant-velocity EKF remains
+  BL-026.
 - BL-012 comms subsystem. Per-link envelopes derived from
   `profile["comms"]["links"]` (RSSI, loss, throughput, age, max_age).
   Live state is the subsystem's ground truth: `comms.tx(link_id,

@@ -21,6 +21,7 @@ from .config import Settings, get_settings
 from .estimators.apu import ApuEstimator
 from .estimators.comms import CommsParticleFilter
 from .estimators.compute import ComputeKalman
+from .estimators.position import PositionEKF
 from .estimators.power import PowerEstimator
 from .estimators.storage import StorageKalman
 from .estimators.thermal import ThermalKalman
@@ -31,6 +32,7 @@ from .subsystems.apu import ApuSubsystem
 from .subsystems.comms import CommsSubsystem
 from .subsystems.compute import ComputeSubsystem
 from .subsystems.inference import InferenceSubsystem
+from .subsystems.position import PositionSubsystem
 from .subsystems.power import PowerSubsystem
 from .subsystems.storage import StorageSubsystem
 from .subsystems.thermal import ThermalSubsystem
@@ -76,6 +78,7 @@ class Engine:
         self.inference = InferenceSubsystem(self.profile, compute=self.compute)
         self.storage = StorageSubsystem(self.profile)
         self.comms = CommsSubsystem(self.profile)
+        self.position = PositionSubsystem(self.profile)
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
@@ -96,6 +99,8 @@ class Engine:
         self.comms_est = CommsParticleFilter()
         self.comms_est.update(self.comms.sensor_obs())
         self.state.comms_state, _ = self.comms.derive_state()
+        self.position_est = PositionEKF()
+        self.position_est.update(self.position.sensor_obs())
 
     @property
     def dt_s(self) -> float:
@@ -182,6 +187,7 @@ class Engine:
         self.inference.step(dt)
         self.storage.step(dt)
         self.comms.step(dt)
+        self.position.step(dt)
         load_w = self.compute.draw_w
 
         self.apu.step(dt)
@@ -206,6 +212,8 @@ class Engine:
         self.comms_est.predict(dt)
         self.comms_est.update(self.comms.sensor_obs())
         self.state.comms_state, _ = self.comms.derive_state()
+        self.position_est.predict(dt)
+        self.position_est.update(self.position.sensor_obs())
 
         ctx = TickContext(
             tick=self.state.tick,
@@ -276,6 +284,13 @@ class Engine:
                 "connected_links": sum(
                     1 for link in self.comms if link.is_live()
                 ),
+            },
+            "position": {
+                "lat": round(self.position.lat, 6),
+                "lon": round(self.position.lon, 6),
+                "alt_m": round(self.position.alt_m, 2),
+                "has_fix": self.position.has_fix,
+                "dead_reckoning_s": round(self.position.dead_reckoning_s, 2),
             },
         }
 
