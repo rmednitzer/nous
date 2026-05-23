@@ -9,6 +9,14 @@
 
 set -euo pipefail
 
+# Force a UTF-8 locale before any grep call. ``grep -P '\x{2014}'``
+# requires a UTF-8 locale to compile codepoints above 0x7F; under
+# ``LC_ALL=C`` (or POSIX) grep exits 2 with "character code point
+# value in \x{} or \o{} is too large" and the policy job fails closed
+# even on a clean tree. ``C.UTF-8`` is universally available on glibc
+# (every CI runner this script targets) and on macOS 11+.
+export LC_ALL=C.UTF-8
+
 # Project root resolves whether the script is invoked from CI
 # (working directory is the repo root) or by a contributor from
 # anywhere else in the tree.
