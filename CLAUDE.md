@@ -70,10 +70,11 @@ notes:
 
 - **Markdown style.** No em-dashes anywhere. Use `--` when you need to
   approximate one. Never use `--` as prose punctuation outside code spans;
-  use commas, colons, or parentheses. The CI grep is **not yet wired**
-  (AUDIT-2026-05-23 C6 carries this finding from the 2026-05-20
-  baseline); run `! grep -rPn '\x{2014}' --include='*.md' .` locally
-  until the policy job lands.
+  use commas, colons, or parentheses. The `policy` CI job (and `make
+  policy` locally) runs `scripts/policy_checks.sh`, which enforces the
+  ban; a hit fails the build. The same script is the extension point
+  for the private-repo grep (AGENTS.md "Boundaries"); append to its
+  deny list when a specific private name needs to be banned.
 - **Code comments.** Default to none. If a comment is necessary, it answers
   *why*, never *what*. Identifier names answer *what*.
 - **Long-form prose.** When you write a README, ADR, or STPA section, use

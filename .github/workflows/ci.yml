@@ -37,3 +37,14 @@ jobs:
 
       - name: make check
         run: make check
+
+  policy:
+    name: policy checks (em-dash, private-repo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: make policy
+        run: make policy

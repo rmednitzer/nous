@@ -17,6 +17,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the live server even after a long uptime. New
   `nous.server.tick_lifespan` is exposed for direct use in tests.
   Covered by `tests/integration/test_server_lifespan.py`.
+- AUDIT-2026-05-23 C6: the em-dash and private-repo policy greps that
+  CLAUDE.md advertised are now enforced. New `scripts/policy_checks.sh`
+  runs `grep -rPn '\x{2014}' --include='*.md' .` and a placeholder
+  deny-list grep for private-repo references; a hit prints the
+  offending lines and exits non-zero. The CI workflow adds a `policy`
+  job that calls the script; `make policy` is the local-parity
+  target. The em-dash rule is enforced today; the private-repo
+  deny-list is a structured extension point (no entries yet).
 
 ### Documented
 
