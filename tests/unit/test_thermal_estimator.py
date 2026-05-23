@@ -52,3 +52,29 @@ def test_update_shrinks_variance_below_initial() -> None:
     )
     k.update(obs)
     assert k.state().covariance["junction_c"] < v_initial
+
+
+def test_update_resynchronises_timestamp_to_observation() -> None:
+    k = ThermalKalman()
+    obs = Observation(
+        source="thermal",
+        ts_s=42.5,
+        payload={"junction_c": 30.0},
+        noise={"junction_c_sigma": 1.0},
+    )
+    k.update(obs)
+    assert k.state().ts_s == pytest.approx(42.5)
+
+
+def test_update_ignores_non_finite_timestamp() -> None:
+    k = ThermalKalman()
+    k.predict(2.0)
+    t_before = k.state().ts_s
+    obs = Observation(
+        source="thermal",
+        ts_s=float("nan"),
+        payload={"junction_c": 30.0},
+        noise={"junction_c_sigma": 1.0},
+    )
+    k.update(obs)
+    assert k.state().ts_s == pytest.approx(t_before)

@@ -2,15 +2,17 @@
 
 A linear Kalman filter over a two-state thermal model is the eventual
 home for this estimator (BL-028). The L1 wiring here keeps the same
-predict / update / state contract as the power estimator but uses a
-direct measurement update: the sensor observations on junction and
-enclosure overwrite the belief and reduce its variance toward the
-sensor noise floor. The covariance reported through
-``self_estimator_status`` already tracks meaningfully and lets the
-self-model layer reason about the freshness of the thermal channel.
+predict / update / state contract as the power estimator and folds
+each sensor observation into the belief via a per-channel Kalman
+gain: ``belief = (1 - k) * belief + k * obs``, with the posterior
+variance ``var = (1 - k) * var``. The result is a calibrated belief
+over ``(junction_c, enclosure_c)`` that the self-model and
+``self_estimator_status`` can read without owning subsystem state.
 """
 
 from __future__ import annotations
+
+import math
 
 from ..types import Estimate, Observation
 
@@ -27,10 +29,12 @@ _FALLBACK_NOISE_SIGMA = 1.0
 class ThermalKalman:
     """L1 two-state thermal filter (junction + enclosure).
 
-    Predict adds process noise per second; update folds in the noisy
-    sensor reading. The result is a calibrated belief over
-    ``(junction_c, enclosure_c)`` that the self-model and
-    ``self_estimator_status`` can read without owning subsystem state.
+    Predict adds process noise per second; update folds each channel of
+    the noisy sensor reading toward the prior with a Kalman gain. The
+    update also resynchronises ``_t`` to ``obs.ts_s`` so the estimator's
+    timestamp matches the observation stream even if ``predict`` was
+    skipped or the tick cadence drifted (matches the PowerEstimator /
+    ApuEstimator contract).
     """
 
     name: str = "thermal"
@@ -70,6 +74,12 @@ class ThermalKalman:
                 float(obs.payload["enclosure_c"]) - self._enclosure_c
             )
             self._var_e = (1.0 - k) * self._var_e
+        try:
+            ts = float(obs.ts_s)
+        except (TypeError, ValueError):
+            return
+        if math.isfinite(ts) and ts >= 0.0:
+            self._t = ts
 
     def state(self) -> Estimate:
         return Estimate(

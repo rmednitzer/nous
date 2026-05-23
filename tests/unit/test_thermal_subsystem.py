@@ -124,3 +124,28 @@ def test_defaults_when_thermal_section_missing() -> None:
     t.set_load_w(20.0)
     _settle(t, ticks=20000, dt=0.5)
     assert t.junction_c > 25.0
+
+
+def test_step_remains_stable_at_large_dt() -> None:
+    """Outer dt above the explicit-Euler stability limit must not diverge.
+
+    With the reference jetson-agx-orin defaults (``C_j=5``, ``R_je=0.30``)
+    the fast time constant is 1.5 s, so a single-shot Euler step at
+    ``dt=10`` would oscillate and run away. The subsystem sub-steps
+    internally and converges to the same analytic steady state as the
+    fine-resolution integration.
+    """
+    coarse = ThermalSubsystem(_profile())
+    fine = ThermalSubsystem(_profile())
+    coarse.set_load_w(30.0)
+    fine.set_load_w(30.0)
+    for _ in range(2000):  # 20000 s of simulated time at coarse dt=10
+        coarse.step(10.0)
+    for _ in range(40000):
+        fine.step(0.5)
+    assert coarse.junction_c == pytest.approx(fine.junction_c, abs=0.5)
+    assert coarse.enclosure_c == pytest.approx(fine.enclosure_c, abs=0.5)
+    expected_enclosure = 25.0 + 30.0 * 0.5
+    expected_junction = expected_enclosure + 30.0 * 0.30
+    assert coarse.junction_c == pytest.approx(expected_junction, abs=0.5)
+    assert coarse.enclosure_c == pytest.approx(expected_enclosure, abs=0.5)

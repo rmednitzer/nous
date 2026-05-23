@@ -30,6 +30,7 @@ to load:
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -186,16 +187,32 @@ class ThermalSubsystem:
         self._enclosure_c = float(enclosure_c)
 
     def step(self, dt: float) -> None:
-        """Advance one tick with forward Euler integration."""
+        """Advance one tick with forward Euler integration.
+
+        The junction time constant ``tau_j = C_j * R_je`` is short
+        (seconds on the reference profile), and forward Euler is
+        conditionally stable only for ``dt < 2 * tau_j``. Operators
+        can drive the tick rate down to fractions of a hertz via
+        ``NOUS_TICK_HZ``, so this method sub-steps internally with an
+        inner ``dt`` capped at ``0.5 * tau_j`` (well inside the
+        stability bound). A 10 s outer tick on the AGX Orin profile
+        becomes roughly 14 inner Euler steps; the integral matches
+        the analytic steady state to within 0.3 C.
+        """
         if dt <= 0.0:
             return
         self._t += dt
-        q_je = (self._junction_c - self._enclosure_c) / self._r_je
-        q_ea = (self._enclosure_c - self._ambient_c) / self._r_ea
-        dtj = (self._load_w - q_je) / self._c_j
-        dte = (q_je - q_ea) / self._c_e
-        self._junction_c = self._junction_c + dtj * dt
-        self._enclosure_c = self._enclosure_c + dte * dt
+        tau_fast = self._c_j * self._r_je
+        max_inner_dt = max(0.5 * tau_fast, 1e-6)
+        n_steps = max(1, math.ceil(dt / max_inner_dt))
+        inner_dt = dt / n_steps
+        for _ in range(n_steps):
+            q_je = (self._junction_c - self._enclosure_c) / self._r_je
+            q_ea = (self._enclosure_c - self._ambient_c) / self._r_ea
+            dtj = (self._load_w - q_je) / self._c_j
+            dte = (q_je - q_ea) / self._c_e
+            self._junction_c = self._junction_c + dtj * inner_dt
+            self._enclosure_c = self._enclosure_c + dte * inner_dt
 
     def truth(self) -> Mapping[str, Any]:
         return {
