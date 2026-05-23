@@ -112,10 +112,17 @@ async def test_tick_lifespan_stops_engine_when_tick_task_crashes(
 
     monkeypatch.setattr(engine, "tick", crash)
 
-    with pytest.raises(BaseException):
+    with pytest.raises(ExceptionGroup) as excinfo:
         async with tick_lifespan(engine, tick_hz=100.0):
             await anyio.sleep(0.5)
 
+    runtime_errors = [
+        exc for exc in excinfo.value.exceptions if isinstance(exc, RuntimeError)
+    ]
+    assert any("simulated tick crash" in str(exc) for exc in runtime_errors), (
+        f"expected the simulated tick crash inside the group, "
+        f"got exceptions={excinfo.value.exceptions!r}"
+    )
     assert engine.state.mode is Mode.SHUTDOWN, (
         f"engine.stop must run on tick-task crash, got mode={engine.state.mode}"
     )
