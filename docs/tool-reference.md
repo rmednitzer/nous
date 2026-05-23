@@ -22,6 +22,7 @@ subsystem coverage lands in L1 (see [backlog.md](backlog.md)).
 | `comms_status` | T0 | Per-link envelope and live state: nominal vs. live RSSI / loss / throughput, age, max_age, forced-state flag. |
 | `position_status` | T0 | Position ground truth (lat, lon, alt), velocity, heading, fix state, dead-reckoning duration, EKF estimate + sigmas, rejected-update counter. |
 | `sensors_status` | T0 | Environmental sensor pack: ambient temperature, humidity, barometric pressure, Kalman estimate + sigmas, rejected-update counter. |
+| `biometrics_status` | T0 | Operator biometrics: heart rate, core temp, hydration, cognitive-load proxy, Kalman estimate + sigmas, rejected-update counter. |
 | `self_model_assess` | T0 | Self-model capability assessment (stub until BL-018). |
 | `self_estimator_status` | T0 | Estimator covariances (live for power, APU, thermal, and compute; other estimators land in L1). |
 | `inference_local` | T1 | Local-path inference. Returns synthetic response plus latency, energy joules, and the profile's nominal token rate. |
