@@ -27,6 +27,7 @@ from .state.machine import GuardDenied, Mode, StateMachine
 from .state.operator_state import OperatorState
 from .subsystems.apu import ApuSubsystem
 from .subsystems.compute import ComputeSubsystem
+from .subsystems.inference import InferenceSubsystem
 from .subsystems.power import PowerSubsystem
 from .subsystems.thermal import ThermalSubsystem
 from .types import TickContext
@@ -68,6 +69,7 @@ class Engine:
         self.apu = ApuSubsystem(self.profile)
         self.thermal = ThermalSubsystem(self.profile)
         self.compute = ComputeSubsystem(self.profile)
+        self.inference = InferenceSubsystem(self.profile, compute=self.compute)
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
@@ -164,6 +166,7 @@ class Engine:
 
         self.compute.set_thermal_throttle(throttling=self.thermal.throttling)
         self.compute.step(dt)
+        self.inference.step(dt)
         load_w = self.compute.draw_w
 
         self.apu.step(dt)
@@ -233,6 +236,12 @@ class Engine:
                 "load_pct": round(self.compute.load_pct, 3),
                 "draw_w": round(self.compute.draw_w, 3),
                 "throttled": self.compute.throttled,
+            },
+            "inference": {
+                "local_calls": self.inference.local_calls,
+                "total_tokens": self.inference.total_tokens,
+                "total_energy_j": round(self.inference.total_energy_j, 3),
+                "last_latency_s": round(self.inference.last_latency_s, 4),
             },
         }
 
