@@ -206,9 +206,12 @@ other internal repository, public or private, and must remain so.
 **Implication.** Code patterns may be ported by hand from other projects;
 runtime dependencies on other internal projects are forbidden.
 
-**Tracking.** Enforced by `scripts/policy_checks.sh` (the `policy` CI
-job and `make policy` locally), which runs the em-dash and
-private-repo deny-list greps. PR #41 closed
-AUDIT-2026-05-23 C6. Append a new deny-list entry to
-`private_repo_patterns` in the script when a specific private name
-needs to be banned.
+**Tracking.** The em-dash rule is enforced today by
+`scripts/policy_checks.sh` (the `policy` CI job and `make policy`
+locally; PR #41 closed AUDIT-2026-05-23 C6). The private-repo rule
+ships as a structured extension point in the same script:
+`private_repo_patterns` is currently empty, so the deny-list grep
+does not actively scan and L17 is held by author discipline. Append
+a specific private name to `private_repo_patterns` to activate the
+grep against that name; CI will then fail any commit that introduces
+a reference.

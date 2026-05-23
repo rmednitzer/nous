@@ -12,7 +12,7 @@ Last reviewed: 2026-05-23 (re-audit at HEAD `43d0db2`, post PRs #40
 
 Deployment-side status note: the L1 subsystem rollout is now on
 `origin/main` (PR #38 catch-up train), so the auto-update timer
-lands the seventeen-tool surface on the live VM on its next poll.
+lands the nineteen-tool surface on the live VM on its next poll.
 Three audit-baseline criticals closed since the 2026-05-23 baseline:
 **C3** (FastMCP lifespan ticks the engine, PR #40 + #42 follow-up),
 **C6** (CI policy greps now enforce em-dash and private-repo
@@ -36,7 +36,7 @@ order.
 | Phase | Name | State | Scope |
 |-------|------|-------|-------|
 | L0 | Scaffold | stable | Layout, governance docs, audited tool surface, FSM, engine tick, hardware-profile loader, OAuth issuer. v0.1 shipped; the FastMCP lifespan now drives `tick_loop` so the live server advances state (PR #40 + #42). |
-| L1 | Subsystem models + state machine | in-progress | All eleven subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) implement step / truth / sensor_obs with live estimators; the state machine transitions on derived OperatorState and CommsState. Self-model wiring (BL-018) is the remaining gap. |
+| L1 | Subsystem models + state machine | in-progress | All ten subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) implement step / truth / sensor_obs with live estimators; the state machine transitions on derived OperatorState and CommsState. Self-model wiring (BL-018) is the remaining gap. |
 | L2 | claude.ai integration + scenarios | planned | HTTP transport with OAuth + Caddy lockdown in place; scenario pack runs end-to-end; biometrics physiology-grounded; profile hot-reload. |
 | L3 | STPA completion + benchmarks | planned | STPA derived requirements complete; comms propagation model; learned self-model; multi-tenant claude.ai; real local inference; additional interop adapters. |
 
@@ -68,14 +68,14 @@ order.
 
 | Component | State | Notes |
 |-----------|-------|-------|
-| `src/nous/server.py` (FastMCP wiring + representative tools) | in-progress | Seventeen tools registered (eleven subsystem reads + four state / self-model tools + interop + inference). The new `tick_lifespan` async context manager drives `tick_loop` for the lifetime of the server and calls `engine.stop()` in a `finally` (PR #40 + #42). |
+| `src/nous/server.py` (FastMCP wiring + representative tools) | in-progress | Nineteen tools registered: ten subsystem `*_status` reads (power, apu, thermal, compute, storage, comms, position, sensors, biometrics, inference) + `comms_state` (FSM aggregator) + `device_info` + `device_health` + `state_get` + `state_history` + `self_model_assess` + `self_estimator_status` + `interop_formats` + `inference_local`. The new `tick_lifespan` async context manager drives `tick_loop` for the lifetime of the server and calls `engine.stop()` in a `finally` (PR #40 + #42). |
 | `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only. Changes require an ADR. |
 | `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. |
-| `src/nous/engine.py` | in-progress | Tick orchestration; all eleven L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. |
+| `src/nous/engine.py` | in-progress | Tick orchestration; all ten L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. |
 | `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |
 | `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in (BL-005a). |
 | `src/nous/subsystems/thermal.py` | in-progress | Two-state lumped model: junction + enclosure (BL-005). Drives the FSM thermal-headroom guard and the battery cell temperature. |
