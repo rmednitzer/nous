@@ -57,3 +57,72 @@ async def test_build_server_registers_lifespan(tmp_nous_home: object) -> None:
     # registered (the engine is no longer untickable).
     lifespan_factory = getattr(server._mcp_server, "lifespan", None)
     assert lifespan_factory is not None, "lifespan must be registered on FastMCP"
+
+
+@pytest.mark.asyncio
+async def test_tick_loop_yields_on_sustained_overrun(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``tick_loop`` stays cancellable when every tick exceeds the budget.
+
+    The overrun branch must hit a checkpoint; without it the loop never
+    awaits, never yields, and never observes cancellation. PR #40 P1
+    review finding.
+    """
+    import time
+
+    from nous.tick import tick_loop
+
+    real_tick = engine.tick
+    call_count = 0
+
+    def slow_tick() -> object:
+        nonlocal call_count
+        call_count += 1
+        time.sleep(0.01)
+        return real_tick()
+
+    monkeypatch.setattr(engine, "tick", slow_tick)
+
+    stop = anyio.Event()
+    with anyio.move_on_after(1.0) as scope:
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(tick_loop, engine, 1000.0, stop)
+            await anyio.sleep(0.05)
+            tg.cancel_scope.cancel()
+    assert not scope.cancelled_caught, (
+        "tick_loop did not respond to cancellation within 1s; "
+        "the overrun branch is starving the event loop"
+    )
+    assert call_count > 0, "expected at least one slow tick to have run"
+
+
+@pytest.mark.asyncio
+async def test_tick_lifespan_stops_engine_when_tick_task_crashes(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``engine.stop()`` runs even if the tick task raises inside the group.
+
+    PR #40 review finding: prior code placed ``engine.stop()`` outside
+    the task-group block, so a tick-task exception bypassed it.
+    """
+
+    def crash() -> object:
+        raise RuntimeError("simulated tick crash")
+
+    monkeypatch.setattr(engine, "tick", crash)
+
+    with pytest.raises(ExceptionGroup) as excinfo:
+        async with tick_lifespan(engine, tick_hz=100.0):
+            await anyio.sleep(0.5)
+
+    runtime_errors = [
+        exc for exc in excinfo.value.exceptions if isinstance(exc, RuntimeError)
+    ]
+    assert any("simulated tick crash" in str(exc) for exc in runtime_errors), (
+        f"expected the simulated tick crash inside the group, "
+        f"got exceptions={excinfo.value.exceptions!r}"
+    )
+    assert engine.state.mode is Mode.SHUTDOWN, (
+        f"engine.stop must run on tick-task crash, got mode={engine.state.mode}"
+    )

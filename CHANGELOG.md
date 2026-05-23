@@ -9,14 +9,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - AUDIT-2026-05-23 C3: the FastMCP server now registers a lifespan
-  context that runs `tick_loop(engine, hz=tick_hz)` for the duration
-  of the server, then sets the stop event and calls `engine.stop()`
-  on exit so the FSM lands on SHUTDOWN rather than leaking the
-  running state. Before this fix the engine started but no tick task
-  was ever scheduled; `device_health` returned `tick=0, mode=boot` on
-  the live server even after a long uptime. New
-  `nous.server.tick_lifespan` is exposed for direct use in tests.
+  context that drives the engine through the new
+  `nous.server.tick_lifespan(engine, tick_hz)` async context manager.
+  On entry it spawns `tick_loop(engine, tick_hz, stop)` in an anyio
+  task group; on exit it sets the stop event so the task drains,
+  then calls `engine.stop()` so the FSM lands on SHUTDOWN rather
+  than leaking the running state. Before this fix the engine started
+  but no tick task was ever scheduled; `device_health` returned
+  `tick=0, mode=boot` on the live server even after a long uptime.
+  `engine.stop()` runs in a `finally` so a crashed tick task still
+  surrenders the engine cleanly (PR #40 review follow-up).
   Covered by `tests/integration/test_server_lifespan.py`.
+- AUDIT-2026-05-23 C3 follow-up: `tick_loop` (`src/nous/tick.py`)
+  no longer risks event-loop starvation on a sustained tick overrun.
+  The overrun branch now hits `anyio.lowlevel.checkpoint()` so the
+  loop always yields control and remains cancellable, even when
+  every tick takes longer than its budget (PR #40 review P1).
 - AUDIT-2026-05-23 C6: the em-dash and private-repo policy greps that
   CLAUDE.md advertised are now enforced. New `scripts/policy_checks.sh`
   runs `grep -rPn '\x{2014}' --include='*.md' .` and a placeholder
