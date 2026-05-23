@@ -81,6 +81,28 @@ The audit record stores `output_sha256` and `output_len` only. The body
 is never persisted. Operators who need traceability for a specific
 incident pair `output_sha256` with the body the controller saw.
 
+### Audit-degraded posture and kill switches
+
+`device_info` exposes `audit.degraded` and the failure reason. If the
+field flips to `true`, the JSONL sink could not be opened or fsynced;
+the server falls back to stderr-only logging, which is *not* an
+auditable surface. Treat a degraded sink as a hard incident: stop
+serving the affected MCP endpoint until the sink is restored. The
+2026-05-23 audit (N2) caught this state on the live VM; the runbook
+for triage lives in `skills/nous-troubleshooting.md`.
+
+The live VM auto-update loop (`nous-auto-update.timer`) tracks
+`origin/main` every five minutes. Two kill switches:
+
+```sh
+systemctl disable --now nous-auto-update.timer   # stop the auto-update loop
+systemctl stop nous.service                      # stop the MCP server itself
+```
+
+The audit log is the authoritative incident artefact; preserve
+`/var/log/nous/audit.jsonl` (and any rotated tail) before any
+remediation that touches `/opt/nous` or the systemd units.
+
 ## Prompt-injection posture for `inference_cloud`
 
 The `inference_cloud` tool is the seam through which adversarial content

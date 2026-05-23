@@ -53,8 +53,11 @@ return body
 
 ## External surfaces
 
-- **MCP tools** -- the v0.1 representative set is documented in
-  [tool-reference.md](tool-reference.md). The full set lands in L1.
+- **MCP tools** -- the seventeen-tool surface is documented in
+  [tool-reference.md](tool-reference.md). The development line has the
+  full L1 read surface (one read tool per subsystem plus estimator
+  summary); mutating tools (scenario load / inject, comms send, state
+  transition) are queued for BL-014 and BL-022.
 - **OAuth issuer** -- file-backed, single-client by default. The
   Caddyfile template gates `/authorize` and `/.well-known/oauth-*` on
   the operator's CIDR plus the Anthropic ranges.

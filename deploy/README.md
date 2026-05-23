@@ -12,8 +12,11 @@ walkthrough.
 |------|---------|
 | `cloud-init.yaml` | Cloud-init user data. |
 | `install.sh` | Idempotent installer (venv, systemd, Caddy, OAuth key). |
+| `auto-update.sh` | Fetches `origin/main`, fast-forwards, re-runs `install.sh`, restarts `nous.service`, asserts post-restart health. |
 | `systemd/nous.service` | Main process unit. |
 | `systemd/nous-state-flush.service` | Daily state flush. |
 | `systemd/nous-state-flush.timer` | Daily timer (00:14 UTC). |
+| `systemd/nous-auto-update.service` | Oneshot wrapper around `auto-update.sh` (runs as root). |
+| `systemd/nous-auto-update.timer` | Five-minute timer that drives auto-update. Kill switch: `systemctl disable --now nous-auto-update.timer`. |
 | `Caddyfile.example` | Caddy template (TLS, CIDR gate, OAuth carveout). |
 | `logrotate.conf` | Daily rotation with `chattr +a` on rotate. |

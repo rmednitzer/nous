@@ -177,24 +177,19 @@ should all reference both: the AUDIT line number and the BL-NNN they
 landed under, so a future reader can trace a behaviour back to the
 report that motivated it.
 
-Three concrete walk-throughs grounded in the current `AUDIT.md`:
+Two concrete walk-throughs for the still-open critical findings in
+[`docs/audit-2026-05-23.md`](audit-2026-05-23.md) (the C1 worked
+example is preserved at the end as the canonical pattern for a
+spine-file fix; C1 itself is closed):
 
 ```
-# C1 anthropic_client.py flush before unlock
-# 1. Open src/nous/anthropic_client.py, locate CallCap.increment().
-# 2. Move fh.flush() / os.fsync() above fcntl.flock(LOCK_UN).
-# 3. Add tests/unit/test_anthropic_client.py exercising concurrent
-#    locking with multiprocessing; assert no double-counting.
-# 4. Commit: fix(anthropic): flush daily-cap counter before unlock
-#            References AUDIT.md C1, ADR-0005.
-
 # C2 recursive redaction in audit.py
 # 1. Open src/nous/audit.py, locate redact().
 # 2. Replace the flat dict comprehension with a recursive walker
 #    that recurses through Mapping and Sequence values.
 # 3. Add tests/unit/test_audit.py with a deeply nested payload.
 # 4. Commit: fix(audit): recurse argument redaction through nested
-#            mappings. References AUDIT.md C2.
+#            mappings. References AUDIT-2026-05-23 C2.
 
 # C3 tick task in server lifespan
 # 1. Open src/nous/server.py, register a FastMCP lifespan context
@@ -203,7 +198,15 @@ Three concrete walk-throughs grounded in the current `AUDIT.md`:
 #    lands on shutdown rather than leaking the running state.
 # 3. Cover with tests/integration/test_server_lifespan.py.
 # 4. Commit: fix(server): tick engine through FastMCP lifespan.
-#            References AUDIT.md C3, BL-002.
+#            References AUDIT-2026-05-23 C3, BL-002.
+
+# C1 (closed; kept here as the reference pattern for a spine-file fix)
+# 1. Open src/nous/anthropic_client.py, locate CallCap.increment().
+# 2. Move fh.flush() / os.fsync() above fcntl.flock(LOCK_UN).
+# 3. Add tests/unit/test_anthropic_client.py exercising concurrent
+#    locking with multiprocessing; assert no double-counting.
+# 4. Commit: fix(anthropic): flush daily-cap counter before unlock
+#            References AUDIT.md C1, ADR-0005.
 ```
 
 Whenever an enhance run touches a high blast radius file, add a
@@ -423,20 +426,29 @@ ships; a change that breaks an existing tool signature needs an ADR
 even if the BL row exists.
 
 Pick items by phase first, then by dependency, then by blast radius.
-A practical sprint for the current state of the repo is:
+A practical sprint for the current state of the repo (as of the
+[2026-05-23 audit](audit-2026-05-23.md), which closed C1, C4, C5
+(estimator stubs), H3, H4, H5, and M4 and added N1 deployment drift
+and N2 audit-degraded as new highs):
 
 ```
-# Sprint 1 (close audit Criticals + spine tests)
-BL-021 + AUDIT C1   # anthropic flush-before-unlock + structured CapExhausted
-BL-016 + AUDIT C6   # audit hash chain plus CI policy greps
-BL-035 + AUDIT C5   # self-model sentinels and calibrated quantiles
-# Sprint 2 (close audit Highs that depend on spine work)
-BL-024 + AUDIT H3   # CoT adapter completes the required attributes
-BL-025 + AUDIT H4   # SensorThings adapter normalises to UTC
-BL-033 + AUDIT H5   # NMEA emits the full GGA sentence
-# Sprint 3 (subsystem wiring for L1 readiness)
-BL-005 / BL-007 / BL-005b   # thermal, compute, PMU/PDU
-BL-018                       # self-model assess + viability wiring
+# Sprint A (close the live-VM gap)
+AUDIT N1          # catch-up PR bringing main up to the L1 rollout
+AUDIT N2          # restore the audit JSONL sink on the live VM
+AUDIT C3          # FastMCP lifespan tick task
+# Sprint B (close the remaining baseline criticals)
+AUDIT C2          # recursive argument redaction in audit.py
+AUDIT C6          # CI policy greps (em-dash + private-repo)
+AUDIT H1          # tests/unit/test_runner.py (runner is the only spine
+                  # module still without a unit test)
+# Sprint C (OAuth hardening + auto-update discipline)
+AUDIT H6          # OAuth file-store async lock + parent fsync + 0600 chmod
+AUDIT H7          # refresh-token family revocation
+AUDIT H8          # auto-update rollback record + kill-switch in SECURITY.md
+# Sprint D (subsystem polish + self-model wiring)
+BL-005b           # PMU/PDU subsystem (lifts off PowerSubsystem)
+BL-014            # scenario YAML loader and injectors
+BL-018            # self-model assess + viability wiring
 ```
 
 A finding without a BL-NNN should get one before the work starts; a
@@ -476,7 +488,9 @@ covers a narrower set (six of those files plus the schema; the FSM in
 Treat the two requirements as separate gates: ADRs document the
 decision, Security notes document the threat-model implications.
 
-The known consolidation candidates as of the 2026-05-23 working state:
+The known consolidation candidates as of the 2026-05-23 working state
+(see [`docs/audit-2026-05-23.md`](audit-2026-05-23.md) for the audit
+they came out of):
 
 The first is the estimator base. Each estimator currently implements
 its own `predict / update / state` triple. As more filters land

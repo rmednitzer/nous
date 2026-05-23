@@ -7,19 +7,23 @@
 ## Inputs
 
 - Heart rate, core temperature, hydration, and cognitive load proxy
-  from `BiometricsSubsystem.sensor_obs()`.
+  from `BiometricsSubsystem.sensor_obs()`. Profile sigmas under
+  `sensors.biometrics` size the Kalman gain on each channel.
 
 ## Outputs
 
-`Estimate` with `point = {heart_rate_bpm, core_temp_c, cognitive_load}`
-and a 3x3 covariance. The self-model layer maps the estimate onto the
+`Estimate` with `point = {heart_rate_bpm, core_temp_c, hydration_pct,
+cognitive_load}` and a 4x4 (diagonal) covariance. Invalid readings
+are rejected and tallied on `rejected_updates` without poisoning the
+central estimate. The self-model layer maps the estimate onto the
 `OperatorState` vocabulary.
 
 ## SLA
 
 - Update latency: under 1 ms per call.
 - Covariance bound: heart rate sigma <= 4 bpm, core temperature sigma
-  <= 0.1 C in steady state.
+  <= 0.1 C, hydration sigma <= 1 percentage point, cognitive-load
+  sigma <= 0.05 in steady state.
 
 ## Known failure modes
 

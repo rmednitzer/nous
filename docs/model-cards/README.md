@@ -1,7 +1,7 @@
 # Model cards
 
 A model card documents what a model claims, what it costs, and where
-it breaks. The cards below cover the v0.1 estimators and the local
+it breaks. The cards below cover the current estimators and the local
 inference mock. Each card answers the same questions:
 
 - **Inputs.** What the estimator consumes.

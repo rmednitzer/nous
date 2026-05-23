@@ -21,6 +21,13 @@ in `deploy/` is idempotent.
 4. Edit `/etc/caddy/Caddyfile` to set the public hostname and the
    operator CIDR.
 5. `systemctl enable --now nous.service nous-state-flush.timer caddy`.
+6. Enable auto-update if the live VM should track `main`:
+   `systemctl enable --now nous-auto-update.timer`. The timer polls
+   `origin/main` every five minutes, fast-forwards on a change,
+   re-runs `install.sh`, and restarts the service. It asserts
+   post-restart health (`systemctl is-active`) and exits non-zero on
+   failure so the next tick retries. The kill switch is
+   `systemctl disable --now nous-auto-update.timer`.
 
 ## Verify
 
@@ -28,9 +35,14 @@ in `deploy/` is idempotent.
 - `curl -s http://127.0.0.1:8088/sse` should return a streamable
   response (HTTP transport only).
 - `tail -f $NOUS_HOME/audit.jsonl` shows audit lines as tools fire.
+- `device_info.audit.degraded` must be `false`. If it is `true`, the
+  JSONL sink could not be opened; consult `skills/nous-troubleshooting.md`.
+- `journalctl -u nous-auto-update.service --since "10 minutes ago"`
+  shows the most recent fetch / reset cycle.
 
 ## Tear-down
 
-- `systemctl disable --now nous.service caddy nous-state-flush.timer`.
+- `systemctl disable --now nous.service caddy nous-state-flush.timer
+  nous-auto-update.timer`.
 - `rm -rf /opt/nous $NOUS_HOME` (after backing up the state DB and
   audit log).

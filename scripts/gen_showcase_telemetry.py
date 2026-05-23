@@ -234,7 +234,7 @@ def _format_summary_md(name: str, trace: Mapping[str, Any]) -> str:
     lines.append("")
     lines.append("## Fidelity")
     lines.append("")
-    lines.append("This run exercises the v0.1 substantive subsystems and records the")
+    lines.append("This run exercises the development-line subsystems and records the")
     lines.append("rest as defaults. See [Fidelity](../fidelity.md) for the legend.")
     lines.append("")
     lines.append("| Subsystem | Substance | Source |")
@@ -244,10 +244,34 @@ def _format_summary_md(name: str, trace: Mapping[str, Any]) -> str:
         "| apu | `filtered` | solar MPPT, fuel cell, vehicle, "
         "USB-C PD; per-source Kalman |"
     )
-    lines.append("| thermal | `stub` | ambient default; no dynamics yet |")
-    lines.append("| compute | `stub` | idle draw only; no load curve coupling yet |")
-    lines.append("| comms | `stub` | nominal `CONNECTED`; no link envelope yet |")
-    lines.append("| inference | `planned` | not exercised in v0.1 telemetry |")
+    lines.append("| thermal | `filtered` | two-state lumped model; per-channel Kalman |")
+    lines.append(
+        "| compute | `filtered` | load fraction + profile-driven draw curve; "
+        "per-channel Kalman |"
+    )
+    lines.append(
+        "| storage | `filtered` | NAND wear + capacity accounting; per-channel Kalman |"
+    )
+    lines.append(
+        "| sensors | `filtered` | temp / humidity / baro authoritative ambient; "
+        "multi-channel Kalman |"
+    )
+    lines.append(
+        "| position | `parametric` | dead reckoning + GNSS fix gating; "
+        "EKF passthrough (full EKF is BL-026) |"
+    )
+    lines.append(
+        "| biometrics | `filtered` | HR / core temp / hydration / cognitive "
+        "load with multi-channel Kalman |"
+    )
+    lines.append(
+        "| comms | `parametric` | per-link envelopes drive FSM each tick; "
+        "particle filter is BL-030 |"
+    )
+    lines.append(
+        "| inference | `parametric` | local-path with profile-derived "
+        "latency / energy / capacity |"
+    )
     lines.append("")
     lines.append("## Final state")
     lines.append("")

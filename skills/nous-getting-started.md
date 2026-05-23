@@ -27,11 +27,35 @@ read-only calls before you mutate anything.
 - `apu_status` returns per-source power (solar, fuel cell, vehicle
   tether, USB-C PD) plus fuel level. APU is strictly auxiliary
   (ADR-0015); every watt it produces flows through the battery.
-- `comms_state` is a placeholder until the comms subsystem lands.
-- `self_estimator_status` reports live covariances for the power
-  and APU estimators; other estimators arrive in L1.
+- `thermal_status` returns the two-state thermal model (junction +
+  enclosure + ambient) and the throttle headroom.
+- `compute_status` returns the load fraction, electrical draw, and
+  throttle and saturation flags; this is the authoritative load
+  source the power and thermal subsystems read each tick.
+- `storage_status` returns capacity, used / free space, NAND wear,
+  and write rate.
+- `comms_state` and `comms_status` return the aggregate FSM signal
+  plus the per-link envelopes (live RSSI, loss, throughput, age).
+- `position_status` returns lat / lon / alt, fix state, dead-reckoning
+  duration, and the position EKF estimate.
+- `sensors_status` returns ambient temperature, humidity, and
+  barometric pressure with Kalman covariance.
+- `biometrics_status` returns heart rate, core temperature, hydration,
+  and cognitive-load proxy with Kalman covariance.
+- `inference_status` returns running totals (local calls, tokens,
+  joules, last latency) and the profile's nominal capacity.
+- `self_estimator_status` reports live covariances for every
+  estimator that has landed.
 - `self_model_assess` returns capability claims (calibrated
-  quantiles arrive with the full self-model layer in L1).
+  quantiles arrive with the full self-model layer in L1; BL-018).
+
+## Deployment posture
+
+The live VM tracks `origin/main`; the development line may be ahead
+of `main` and therefore ahead of the live MCP. If the seventeen-tool
+surface above is not all reachable, the live host is on an older
+revision (see [`docs/audit-2026-05-23.md`](../docs/audit-2026-05-23.md)
+§4 for the most recent live-MCP probe).
 
 ## Talking to a model
 

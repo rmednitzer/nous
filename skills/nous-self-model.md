@@ -9,6 +9,11 @@ The self-model layer aggregates estimator state into capability claims
 with calibrated quantiles. Call `self_model_assess` with a question
 (or no question for the default summary).
 
+> The full wiring is BL-018 (planned). Today `self_model_assess`
+> returns the engine's `last_capabilities` dict (empty at boot) plus
+> a stub note. The fields below describe the contract that lands with
+> BL-018, not the current behaviour.
+
 ## Fields
 
 - `endurance` -- minutes of operating life at the current load.

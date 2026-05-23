@@ -1,10 +1,14 @@
-# Tool reference (v0.1)
+# Tool reference
 
-The v0.1 server advertises a representative set of tools. The full
-subsystem coverage lands in L1 (see [backlog.md](backlog.md)).
+The development line registers the seventeen tools below. The live VM
+serves the older eleven-tool roster until `origin/main` catches up
+(see [audit-2026-05-23.md](audit-2026-05-23.md) §4 for the deployment
+drift). Use this page to read the contract for each tool; pair it with
+`device_info` on the live server to see which subset is reachable
+right now.
 
-> This page is hand-edited for v0.1. `scripts/gen_tool_reference.py`
-> will regenerate it from the FastMCP server in L1.
+> This page is hand-edited. `scripts/gen_tool_reference.py` will
+> regenerate it from the FastMCP server in L1 (BL-052).
 
 | Tool | Tier | Effect |
 |------|------|--------|

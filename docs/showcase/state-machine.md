@@ -68,13 +68,24 @@ stateDiagram-v2
 | `reset` | `FAULT -> STOWED`, `SHUTDOWN -> STOWED` | controller |
 | `fault` | `<most modes> -> FAULT` | engine or controller |
 
-## What it does not do today
+## Guards and what it does not do today
 
-The FSM does not yet refuse unsafe transitions on its own. DR-2 in
-the STPA derived requirements records the intent: the FSM should
-refuse `mission` if thermal headroom is exhausted, and should raise
-`low_power` itself when the power estimator drops below a critical
-threshold. That work tracks under BL-022.
+The FSM refuses unsafe transitions when the controller provides the
+relevant safety context. ADR 0018 wires two guards:
+
+- `IDLE -> MISSION`, `DEGRADED -> recover`, `THERMAL_LIMIT -> cool`
+  refuse when `thermal_headroom_c < thermal_headroom_threshold_c`
+  (SC-2 from the STPA artefacts).
+- `LOW_POWER -> recover` refuses when `soc_pct < soc_pct_critical`.
+
+`Engine.request_transition` populates the safety context from live
+subsystem state, so a controller calling the FSM through the engine
+sees the guards in action. A guard refusal raises `GuardDenied` and
+is recorded on `StateMachine.refusals()` for the audit log.
+
+The FSM still does not *initiate* transitions on its own (it raises
+`thermal_limit` and `low_power` only when a controller or the engine
+asks it to). DR-2 tracks that follow-up under BL-022.
 
 The audit log records every transition. The trigger names are stable
 across versions; the schema is captured in `docs/state-machine.md`
