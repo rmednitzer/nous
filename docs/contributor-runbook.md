@@ -208,9 +208,15 @@ Three concrete walk-throughs grounded in the current `AUDIT.md`:
 
 Whenever an enhance run touches a high blast radius file, add a
 "Security note" paragraph to the PR description per
-[`CONTRIBUTING.md`](https://github.com/rmednitzer/nous/blob/main/CONTRIBUTING.md). The seven files that require
-that paragraph are listed there; the audit and review both flag
-omissions, so it is cheaper to add the paragraph proactively.
+[`CONTRIBUTING.md`](https://github.com/rmednitzer/nous/blob/main/CONTRIBUTING.md). The Security-note list there
+covers `policy.py`, `runner.py`, `audit.py`, `anthropic_client.py`,
+`estimators/base.py`, `interop/base.py`, and the hardware-profile
+schema (six files plus the schema). The broader ADR-required list in
+[`CLAUDE.md`](https://github.com/rmednitzer/nous/blob/main/CLAUDE.md) also
+covers `state/machine.py`, but the FSM does not currently require a
+Security-note paragraph by itself; track ADR requirements and
+Security-note requirements as separate gates. Add the paragraph
+proactively whenever the change touches any of the listed surfaces.
 
 ## 4. Validate run
 
@@ -254,7 +260,7 @@ curl -s http://127.0.0.1:8088/.well-known/oauth-authorization-server
 
 # scenario
 uv run nous scenario scenarios/env-monitoring-urban.yaml
-tail -f $NOUS_HOME/audit.jsonl   # confirm audit lines arrive
+tail -f "${NOUS_AUDIT_PATH:-$NOUS_HOME/audit.jsonl}"   # confirm audit lines arrive
 ```
 
 For UI-shaped changes (the showcase site), build the site locally
@@ -333,10 +339,13 @@ audited path. The audit line is the contract; assert on it.
 ### 5.3 Adding a scenario
 
 Drop a YAML file under [`scenarios/<name>.yaml`](https://github.com/rmednitzer/nous/tree/main/scenarios) with
-the three required top-level keys: `meta` (name, description, tags),
-`injectors` (named inputs the scenario can mutate), and `steps` (a
-timeline of actions). Reference the profile the scenario expects; if
-the scenario relies on a non-reference profile, add a sentence to
+the top-level keys the `Scenario` loader expects: `schema_version`,
+`meta` (name, description, tags), `profile` (the hardware profile id),
+`tick_budget` (the maximum number of ticks before the scenario ends),
+and `steps` (a timeline of `{at_min, action, args}` entries; injection
+actions like `inject_sensor_drift` live inside `steps`, not at the top
+level). Reference the profile the scenario expects; if the scenario
+relies on a non-reference profile, add a sentence to
 [`docs/scenarios/README.md`](scenarios/README.md) explaining why.
 
 If the scenario is meant to be replayable in CI, add a test under
@@ -352,11 +361,16 @@ the scenario's tick count or end state.
 Copy [`profiles/jetson-agx-orin.yaml`](https://github.com/rmednitzer/nous/blob/main/profiles/jetson-agx-orin.yaml)
 and edit the curves. The citation header at the top of the YAML is
 mandatory; every numeric value needs to trace to a row in
-[`docs/bom.md`](bom.md). Validate the schema with `make schema` (the
-target regenerates the JSON Schemas under
-[`schemas/`](https://github.com/rmednitzer/nous/tree/main/schemas) so an invalid YAML fails fast). Add a section
-to [`docs/hardware-profiles.md`](hardware-profiles.md) and a one-line
-entry in the profiles README, then update
+[`docs/bom.md`](bom.md). Run `make schema` to regenerate the JSON
+Schemas the project does emit (`AuditRecord`, `Scenario`) under
+[`docs/schema/`](https://github.com/rmednitzer/nous/tree/main/docs/schema);
+note that `Engine._load_profile()` today calls `yaml.safe_load`
+without schema validation, so a typo in a profile key degrades
+silently to the default (AUDIT M10, BL-006). Until BL-006 lands, the
+load-time validation step is a manual diff against
+[`profiles/jetson-agx-orin.yaml`](https://github.com/rmednitzer/nous/blob/main/profiles/jetson-agx-orin.yaml).
+Add a section to [`docs/hardware-profiles.md`](hardware-profiles.md)
+and a one-line entry in the profiles README, then update
 [`STATUS.md`](https://github.com/rmednitzer/nous/blob/main/STATUS.md) if the new profile shifts the maturity of
 the schema row.
 
@@ -454,8 +468,13 @@ High blast radius surfaces require an ADR before any change.
 [`src/nous/estimators/base.py`](https://github.com/rmednitzer/nous/blob/main/src/nous/estimators/base.py),
 [`src/nous/interop/base.py`](https://github.com/rmednitzer/nous/blob/main/src/nous/interop/base.py), and the
 hardware-profile schema in [`profiles/`](https://github.com/rmednitzer/nous/tree/main/profiles) are the seven
-files plus one schema. A change that touches any of them carries the
-"Security note" paragraph in the PR description per `CONTRIBUTING.md`.
+files plus one schema on the ADR-required list. The Security-note
+requirement in
+[`CONTRIBUTING.md`](https://github.com/rmednitzer/nous/blob/main/CONTRIBUTING.md)
+covers a narrower set (six of those files plus the schema; the FSM in
+`state/machine.py` is ADR-gated but not on the Security-note list).
+Treat the two requirements as separate gates: ADRs document the
+decision, Security notes document the threat-model implications.
 
 The known consolidation candidates as of the 2026-05-23 working state:
 
@@ -577,8 +596,9 @@ the CI step lands:
 ```
 
 Replace any hit with `--`, a comma, a colon, or a parenthetical, per
-the convention. Code spans and code blocks are exempt; the grep is
-prose-only.
+the convention. The ban is repository-wide for markdown (including
+fenced code blocks); only source-code strings under `src/` may
+contain U+2014 if the string genuinely needs one.
 
 ### 8.4 Cross-check maturity claims
 
