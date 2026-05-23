@@ -12,9 +12,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   0016). `deploy/install.sh` selects `python3.14` -> `python3.13` ->
   `python3` so the bundle still works on 24.04 hosts. ADR 0008 is
   superseded.
+- `Engine._safety_context` now derives `thermal_headroom_c` from the
+  live junction temperature reported by the thermal subsystem rather
+  than a `junction_temp_throttle - ambient` placeholder. The SC-2
+  guard therefore sees real heat soak.
+- `Engine.tick` feeds the battery's cell temperature from the thermal
+  subsystem's enclosure node instead of a static ambient constant, so
+  Peukert + thermal-derate respond to actual case heating.
 
 ### Added
 
+- BL-005 thermal subsystem: two-state lumped model (junction +
+  enclosure) wired through the engine, with new optional profile
+  fields `enclosure_to_ambient_resistance_c_per_w`,
+  `junction_heat_capacity_j_per_k`, and `headroom_threshold_c`.
+  Adds a `thermal_status` MCP tool and surfaces the thermal estimator
+  through `self_estimator_status`. Existing profiles without the new
+  fields fall back to sensible defaults.
 - Hardening on `deploy/systemd/nous.service`: `ProtectClock`,
   `ProtectHostname`, `ProtectProc=invisible`, `ProcSubset=pid`,
   `RestrictNamespaces`, `RestrictAddressFamilies=AF_UNIX AF_INET

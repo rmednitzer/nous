@@ -20,11 +20,13 @@ import yaml
 from .config import Settings, get_settings
 from .estimators.apu import ApuEstimator
 from .estimators.power import PowerEstimator
+from .estimators.thermal import ThermalKalman
 from .state.comms_state import CommsState
 from .state.machine import GuardDenied, Mode, StateMachine
 from .state.operator_state import OperatorState
 from .subsystems.apu import ApuSubsystem
 from .subsystems.power import PowerSubsystem
+from .subsystems.thermal import ThermalSubsystem
 from .types import TickContext
 
 __all__ = ["Engine", "EngineState"]
@@ -62,11 +64,16 @@ class Engine:
 
         self.power = PowerSubsystem(self.profile)
         self.apu = ApuSubsystem(self.profile)
+        self.thermal = ThermalSubsystem(self.profile)
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
         )
         self.apu_est = ApuEstimator()
+        self.thermal_est = ThermalKalman(
+            initial_junction_c=self.thermal.junction_c,
+            initial_enclosure_c=self.thermal.enclosure_c,
+        )
 
     @property
     def dt_s(self) -> float:
@@ -126,14 +133,11 @@ class Engine:
         return True, new, ""
 
     def _safety_context(self) -> dict[str, Any]:
-        thermal_cfg = self.profile.get("thermal") or {}
         power_cfg = self.profile.get("power") or {}
-        junction_max = float(thermal_cfg.get("junction_temp_throttle", 85.0))
-        ambient = float(thermal_cfg.get("ambient_c_default", _DEFAULT_AMBIENT_C))
         return {
-            "thermal_headroom_c": junction_max - ambient,
+            "thermal_headroom_c": float(self.thermal.headroom_c),
             "thermal_headroom_threshold_c": float(
-                thermal_cfg.get("headroom_threshold_c", 5.0)
+                self.thermal.headroom_threshold_c
             ),
             "soc_pct": float(self.power.soc_pct),
             "soc_pct_critical": float(
@@ -150,18 +154,23 @@ class Engine:
         self.state.ts_s += dt
 
         load_w = self._default_load_w()
-        cell_c = self._default_cell_c()
+        ambient_c = self._default_ambient_c()
 
         self.apu.step(dt)
+        self.thermal.set_load_w(load_w)
+        self.thermal.set_ambient_c(ambient_c)
+        self.thermal.step(dt)
         self.power.set_load_w(load_w)
         self.power.set_charge_w(self.apu.total_w)
-        self.power.set_cell_c(cell_c)
+        self.power.set_cell_c(self.thermal.enclosure_c)
         self.power.step(dt)
 
         self.power_est.predict(dt)
         self.power_est.update(self.power.sensor_obs())
         self.apu_est.predict(dt)
         self.apu_est.update(self.apu.sensor_obs())
+        self.thermal_est.predict(dt)
+        self.thermal_est.update(self.thermal.sensor_obs())
 
         ctx = TickContext(
             tick=self.state.tick,
@@ -183,8 +192,15 @@ class Engine:
         compute_cfg = self.profile.get("compute") or {}
         return float(compute_cfg.get("draw_w_idle", 0.0))
 
-    def _default_cell_c(self) -> float:
-        """Ambient temperature fallback for the battery's thermal derate."""
+    def _default_ambient_c(self) -> float:
+        """Ambient temperature input for the thermal subsystem.
+
+        Until a scenario injector drives ambient (BL-014), the engine
+        uses ``profile.thermal.ambient_c_default``. The two-state
+        thermal model in :mod:`nous.subsystems.thermal` integrates from
+        this baseline and the compute load to produce the enclosure
+        temperature that drives the battery's thermal derate.
+        """
         thermal_cfg = self.profile.get("thermal") or {}
         return float(thermal_cfg.get("ambient_c_default", _DEFAULT_AMBIENT_C))
 
@@ -205,6 +221,12 @@ class Engine:
             "apu": {
                 "total_w": round(self.apu.total_w, 3),
                 "fuel_pct": round(self.apu.fuel_pct, 3),
+            },
+            "thermal": {
+                "junction_c": round(self.thermal.junction_c, 3),
+                "enclosure_c": round(self.thermal.enclosure_c, 3),
+                "headroom_c": round(self.thermal.headroom_c, 3),
+                "throttling": self.thermal.throttling,
             },
         }
 
