@@ -18,7 +18,7 @@ possible.
 - BL-005a [in-progress] (L1) APU subsystem (solar PV + MPPT, methanol fuel cell, vehicle tether, USB-C PD-in). Subsystem, per-source Kalman, and `apu_status` tool wired; see ADR-0015.
 - BL-005b [planned] (L1) PMU/PDU subsystem (bus regulation, source arbitration, CC/CV charge profile, dual-slot battery hot-swap). Lifts `charge_limit_w` and the offered/accepted clamp off `PowerSubsystem` onto a new `PmuSubsystem`. Supersedes ADR-0015. New ADR documents the dual-slot hot-swap state machine (primary + secondary battery, PMU arbitrates the active source; the inactive slot can be removed without bus collapse).
 - BL-006 [planned] (L1) Hardware profile schema model + validator.
-- BL-007 [planned] (L1) Compute subsystem with load curves from the profile.
+- BL-007 [in-progress] (L1) Compute subsystem with load curves from the profile. Load fraction set via `compute.set_load_pct` or `set_inference_rate`; draw watts come from the profile's piecewise-linear `load_curve`. The engine reads `compute.draw_w` each tick and feeds it into both power (electrical draw) and thermal (junction dissipation). Thermal throttling automatically caps delivered load. `compute_status` MCP tool added.
 - BL-008 [planned] (L1) Storage subsystem with wear curve.
 - BL-009 [planned] (L1) Environmental sensor pack subsystem.
 - BL-010 [planned] (L1) Position subsystem (GNSS + 9-DoF IMU).

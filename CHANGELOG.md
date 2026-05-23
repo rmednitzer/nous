@@ -12,6 +12,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   0016). `deploy/install.sh` selects `python3.14` -> `python3.13` ->
   `python3` so the bundle still works on 24.04 hosts. ADR 0008 is
   superseded.
+- `Engine.tick` reads the per-tick load from `compute.draw_w` rather
+  than the `_default_load_w()` placeholder; the helper is removed.
+  Tests that previously monkeypatched it now drive load through
+  `engine.compute.set_load_pct(...)`.
+
+### Added
+
+- BL-007 compute subsystem: load fraction + profile-driven draw curve.
+  `compute.set_load_pct` / `set_inference_rate` steer the request;
+  draw watts come from the piecewise-linear `compute.load_curve` in
+  the profile. The engine feeds `compute.draw_w` into both power
+  (electrical draw) and thermal (junction dissipation). When the
+  thermal subsystem reports throttling, the compute subsystem
+  automatically clips delivered load to mimic hardware DVFS;
+  `requested_load_pct` preserves the original request so the
+  controller can see how much was clipped. New `compute_status` MCP
+  tool; compute estimator added to `self_estimator_status`.
 - `Engine._safety_context` now derives `thermal_headroom_c` from the
   live junction temperature reported by the thermal subsystem rather
   than a `junction_temp_throttle - ambient` placeholder. The SC-2

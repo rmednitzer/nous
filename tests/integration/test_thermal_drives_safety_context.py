@@ -27,20 +27,14 @@ def engine(tmp_nous_home: Path) -> Engine:
 
 
 def test_compute_load_heats_junction_above_ambient(engine: Engine) -> None:
-    def _heavy_load() -> float:
-        return 60.0
-
-    engine._default_load_w = _heavy_load  # type: ignore[method-assign]
+    engine.compute.set_load_pct(100.0)
     for _ in range(120):
         engine.tick()
     assert engine.thermal.junction_c > engine.thermal.ambient_c + 5.0
 
 
 def test_enclosure_drives_battery_cell_temperature(engine: Engine) -> None:
-    def _heavy_load() -> float:
-        return 60.0
-
-    engine._default_load_w = _heavy_load  # type: ignore[method-assign]
+    engine.compute.set_load_pct(100.0)
     engine.thermal.set_enclosure_c(70.0)
     engine.tick()
     truth = engine.power.truth()
@@ -67,10 +61,7 @@ def test_cool_junction_admits_mission_via_safety_context(engine: Engine) -> None
 
 
 def test_thermal_estimator_tracks_junction(engine: Engine) -> None:
-    def _twenty_w() -> float:
-        return 20.0
-
-    engine._default_load_w = _twenty_w  # type: ignore[method-assign]
+    engine.compute.set_load_pct(25.0)
     for _ in range(120):
         engine.tick()
     estimate = engine.thermal_est.state()
