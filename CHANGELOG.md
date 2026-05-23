@@ -36,6 +36,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Documented
 
+- `docs/assumptions.md`: per-subsystem modelling-honesty document with
+  a fidelity disclaimer at the top. Complements `LIMITATIONS.md`
+  (scope boundaries) by recording the simplifications *inside* the
+  components that do exist, each cross-referenced to its source file.
+  Structural pattern adapted from
+  `6dof-ascent-sim/docs/assumptions.md`.
+- ADRs 0019 through 0022 proposed: deterministic seed and clock seam
+  at the engine boundary (0019), property-based invariants for
+  subsystem physics (0020), per-subsystem MCP tool modules (0021),
+  and a runtime safety enforcer with structured result (0022). All
+  four are in Proposed status; they capture the design work needed
+  to land patterns identified in the `6dof-ascent-sim` review that
+  do not fit a single PR.
 - Full system audit at revision `02f2062` published as
   [`docs/audit-2026-05-23.md`](docs/audit-2026-05-23.md). Delta against
   the 2026-05-20 baseline (`AUDIT.md`) and the 2026-05-21 in-depth
@@ -66,6 +79,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `pyproject.toml`: ruff pinned to `>=0.15,<0.16` (minor-range pin) so
+  CI and developer environments agree on the rule set without
+  surprises from a floating major. Bump deliberately when adopting a
+  new minor's lint output. Pattern borrowed from
+  `6dof-ascent-sim`'s exact-pin discipline.
 - Deployment baseline moves to Ubuntu 26.04 LTS / Python 3.14 (ADR
   0016). `deploy/install.sh` selects `python3.14` -> `python3.13` ->
   `python3` so the bundle still works on 24.04 hosts. ADR 0008 is
@@ -83,6 +101,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `tests/regression/test_audit_findings.py`: regression suite that pins
+  closed audit findings as named test classes. Each class docstring
+  summarises the original defect (`AUDIT.md` finding id) and the tests
+  assert the specific behaviour that closed it. Initial coverage:
+  C1 (anthropic-cap fsync inside flock), C4 (MISB KLV overflow
+  refusal), C5 (thermal / compute / storage / sensors / biometrics
+  estimator covariance actually shrinks), H3 (CoT events carry
+  `time` / `start` / `stale` / `how`), and M8 (engine tick reachable
+  from a unit test). The structural pattern is adapted from
+  `6dof-ascent-sim/tests/test_audit_regressions.py`.
+- `Engine.tick` now ends with `_assert_post_tick_finite`, which raises
+  `RuntimeError` if any estimator emits a non-finite point estimate or
+  a negative / non-finite covariance. The check catches the C5-class
+  failure mode (a stub returning a plausible-looking but invalid
+  belief) at the source rather than at a downstream consumer. Pattern
+  borrowed from `6dof-ascent-sim/sim/core/integrator.py`'s
+  end-of-step NaN guard.
+- `benchmark.py` at the repo root: a small `timeit` harness over one
+  engine tick, one audit-log fsync round trip, and a representative
+  Kalman update. No baselines, no JSON, no regression tracker; the
+  point is that "did this PR slow the loop?" has a runnable answer.
 - BL-011 biometrics subsystem (parametric, not physiology-grounded).
   `BiometricsSubsystem` carries heart rate, core temperature,
   hydration percentage, and a unitless cognitive-load proxy as
