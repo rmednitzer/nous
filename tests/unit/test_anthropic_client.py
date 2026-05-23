@@ -5,10 +5,14 @@ called out in the audit recommendation are covered: cap exhaustion, UTC
 rollover, concurrent multiprocess locking, and corrupted-state recovery.
 The concurrent-locking test is the regression test that pins AUDIT.md
 C1 closed: the legacy ordering released the flock before flushing the
-buffer, so a second process could observe stale state and double-count
-the same day. The patch flushes and fsyncs inside the locked region,
-so two processes that each increment once must leave the on-disk
-counter at exactly 2.
+buffer, so a second process could acquire the lock, read stale
+(pre-flush) state, re-read the same base count, and overwrite the
+first process's increment. The symptom on disk is a lost update; the
+operational symptom is that the daily cap can be bypassed because the
+on-disk count grows more slowly than actual calls. The patched
+ordering flushes and fsyncs inside the locked region, so N workers
+that each call `increment()` K times must leave the on-disk counter
+at exactly N*K.
 
 The tests exercise `CallCap` directly; the Anthropic SDK is never
 called.
@@ -97,15 +101,24 @@ def _bump_in_loop(path_str: str, iters: int, barrier: object) -> None:
     pickle and re-import it in the child. The barrier synchronises the
     start of every worker so they contend for the flock together,
     maximising the race window between unlock and flush in the
-    unpatched code path.
+    unpatched code path. The barrier wait is bounded so a sibling
+    worker crashing during import surfaces as a non-zero exit code in
+    the parent rather than stranding the cohort.
     """
     cap = CallCap(Path(path_str), cap=10_000)
-    barrier.wait()  # type: ignore[attr-defined]
+    barrier.wait(timeout=20)  # type: ignore[attr-defined]
     for _ in range(iters):
         cap.increment()
 
 
-def test_concurrent_increments_do_not_double_count(tmp_path: Path) -> None:
+def test_concurrent_increments_no_lost_updates(tmp_path: Path) -> None:
+    now = datetime.now(UTC)
+    next_midnight = (now + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    if (next_midnight - now).total_seconds() < 60:
+        pytest.skip("Too close to UTC midnight; counter rollover would mask the race")
+
     path = tmp_path / "cap.json"
     ctx = mp.get_context("spawn")
     workers = 4
@@ -115,10 +128,21 @@ def test_concurrent_increments_do_not_double_count(tmp_path: Path) -> None:
         ctx.Process(target=_bump_in_loop, args=(str(path), iters_per_worker, barrier))
         for _ in range(workers)
     ]
+    try:
+        for p in procs:
+            p.start()
+        for p in procs:
+            p.join(timeout=30)
+    finally:
+        for p in procs:
+            if p.is_alive():
+                p.terminate()
+                p.join(timeout=5)
+            if p.is_alive():
+                p.kill()
+                p.join(timeout=5)
+
     for p in procs:
-        p.start()
-    for p in procs:
-        p.join(timeout=30)
         assert p.exitcode == 0, f"worker exited with {p.exitcode}"
 
     payload = json.loads(path.read_text())
