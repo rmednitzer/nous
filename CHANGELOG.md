@@ -25,6 +25,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- BL-011 biometrics subsystem (parametric, not physiology-grounded).
+  `BiometricsSubsystem` carries heart rate, core temperature,
+  hydration percentage, and a unitless cognitive-load proxy as
+  ground truth with physiological-range clamps (HR `[20, 240]`, core
+  temp `[28, 44] C`, hydration `[0, 100] %`, cognitive load
+  `[0, 1]`). Scenario seams `set_heart_rate_bpm`, `set_core_temp_c`,
+  `set_hydration_pct`, `set_cognitive_load`. Profile sigmas under
+  `sensors.biometrics` are advertised on the observation; defaults
+  for the four channels can be seeded under the same key
+  (`*_default`). `BiometricsKalman` extended with a `hydration_pct`
+  channel (bounds + process noise + initial state) so the existing
+  PositionEKF / EnvironmentalKalman validation contract now covers
+  four biometric channels rather than three. New
+  `biometrics_status` MCP tool (already T0 in policy); biometrics
+  estimator added to `self_estimator_status`.
 - BL-009 environmental sensor pack. `SensorsSubsystem` carries
   ambient temperature, humidity, and barometric pressure as ground
   truth and is the authoritative ambient source the engine feeds

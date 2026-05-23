@@ -450,6 +450,48 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         return await _wrap("sensors_status", {}, ctx, _work)
 
     @mcp.tool()
+    async def biometrics_status(ctx: Context | None = None) -> str:
+        """Operator biometrics: heart rate, core temp, hydration, cognitive load."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.biometrics.truth())
+            estimate = app.engine.biometrics_est.state()
+            payload = {
+                "heart_rate_bpm": round(truth["heart_rate_bpm"], 2),
+                "core_temp_c": round(truth["core_temp_c"], 3),
+                "hydration_pct": round(truth["hydration_pct"], 2),
+                "cognitive_load": round(truth["cognitive_load"], 3),
+                "estimate": {
+                    "heart_rate_bpm": round(
+                        estimate.point.get("heart_rate_bpm", 0.0), 2
+                    ),
+                    "heart_rate_bpm_sigma": round(
+                        estimate.covariance.get("heart_rate_bpm", 0.0) ** 0.5, 3
+                    ),
+                    "core_temp_c": round(estimate.point.get("core_temp_c", 0.0), 3),
+                    "core_temp_c_sigma": round(
+                        estimate.covariance.get("core_temp_c", 0.0) ** 0.5, 4
+                    ),
+                    "hydration_pct": round(
+                        estimate.point.get("hydration_pct", 0.0), 2
+                    ),
+                    "hydration_pct_sigma": round(
+                        estimate.covariance.get("hydration_pct", 0.0) ** 0.5, 3
+                    ),
+                    "cognitive_load": round(
+                        estimate.point.get("cognitive_load", 0.0), 3
+                    ),
+                    "cognitive_load_sigma": round(
+                        estimate.covariance.get("cognitive_load", 0.0) ** 0.5, 4
+                    ),
+                    "rejected_updates": app.engine.biometrics_est.rejected_updates,
+                },
+            }
+            return json.dumps(payload)
+
+        return await _wrap("biometrics_status", {}, ctx, _work)
+
+    @mcp.tool()
     async def self_model_assess(question: str = "", ctx: Context | None = None) -> str:
         """Self-model capability assessment (placeholder for L1)."""
 
@@ -481,6 +523,7 @@ def build_server(settings: Settings | None = None) -> FastMCP:
                 app.engine.comms_est,
                 app.engine.position_est,
                 app.engine.sensors_est,
+                app.engine.biometrics_est,
             ):
                 state = est.state()
                 rows.append(

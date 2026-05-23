@@ -19,6 +19,7 @@ import yaml
 
 from .config import Settings, get_settings
 from .estimators.apu import ApuEstimator
+from .estimators.biometrics import BiometricsKalman
 from .estimators.comms import CommsParticleFilter
 from .estimators.compute import ComputeKalman
 from .estimators.position import PositionEKF
@@ -30,6 +31,7 @@ from .state.comms_state import CommsState
 from .state.machine import GuardDenied, Mode, StateMachine
 from .state.operator_state import OperatorState
 from .subsystems.apu import ApuSubsystem
+from .subsystems.biometrics import BiometricsSubsystem
 from .subsystems.comms import CommsSubsystem
 from .subsystems.compute import ComputeSubsystem
 from .subsystems.inference import InferenceSubsystem
@@ -79,6 +81,7 @@ class Engine:
         self.comms = CommsSubsystem(self.profile)
         self.position = PositionSubsystem(self.profile)
         self.sensors = SensorsSubsystem(self.profile)
+        self.biometrics = BiometricsSubsystem(self.profile)
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
@@ -103,6 +106,8 @@ class Engine:
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est = EnvironmentalKalman()
         self.sensors_est.update(self.sensors.sensor_obs())
+        self.biometrics_est = BiometricsKalman()
+        self.biometrics_est.update(self.biometrics.sensor_obs())
 
     @property
     def dt_s(self) -> float:
@@ -189,6 +194,7 @@ class Engine:
         self.comms.step(dt)
         self.position.step(dt)
         self.sensors.step(dt)
+        self.biometrics.step(dt)
         load_w = self.compute.draw_w
         ambient_c = self.sensors.temp_c
 
@@ -218,6 +224,8 @@ class Engine:
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est.predict(dt)
         self.sensors_est.update(self.sensors.sensor_obs())
+        self.biometrics_est.predict(dt)
+        self.biometrics_est.update(self.biometrics.sensor_obs())
 
         ctx = TickContext(
             tick=self.state.tick,
@@ -288,6 +296,12 @@ class Engine:
                 "temp_c": round(self.sensors.temp_c, 3),
                 "humidity_pct": round(self.sensors.humidity_pct, 3),
                 "baro_kpa": round(self.sensors.baro_kpa, 3),
+            },
+            "biometrics": {
+                "heart_rate_bpm": round(self.biometrics.heart_rate_bpm, 2),
+                "core_temp_c": round(self.biometrics.core_temp_c, 3),
+                "hydration_pct": round(self.biometrics.hydration_pct, 2),
+                "cognitive_load": round(self.biometrics.cognitive_load, 3),
             },
         }
 

@@ -19,11 +19,13 @@ __all__ = ["BiometricsKalman"]
 _BOUNDS: dict[str, tuple[float, float]] = {
     "heart_rate_bpm": (20.0, 240.0),
     "core_temp_c": (28.0, 44.0),
+    "hydration_pct": (0.0, 100.0),
     "cognitive_load": (0.0, 1.0),
 }
 _PROCESS_SIGMA: dict[str, float] = {
     "heart_rate_bpm": 1.0,
     "core_temp_c": 0.01,
+    "hydration_pct": 0.1,
     "cognitive_load": 0.05,
 }
 
@@ -38,11 +40,13 @@ class BiometricsKalman:
         self._point: dict[str, float] = {
             "heart_rate_bpm": 70.0,
             "core_temp_c": 37.0,
+            "hydration_pct": 90.0,
             "cognitive_load": 0.2,
         }
         self._var: dict[str, float] = {
             "heart_rate_bpm": 4.0,
             "core_temp_c": 0.0025,
+            "hydration_pct": 4.0,
             "cognitive_load": 0.01,
         }
         self._rejected = 0
