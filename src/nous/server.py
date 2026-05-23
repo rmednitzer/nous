@@ -417,6 +417,39 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         return await _wrap("position_status", {}, ctx, _work)
 
     @mcp.tool()
+    async def sensors_status(ctx: Context | None = None) -> str:
+        """Environmental sensor pack: ambient temp, humidity, baro pressure."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.sensors.truth())
+            estimate = app.engine.sensors_est.state()
+            payload = {
+                "temp_c": round(truth["temp_c"], 3),
+                "humidity_pct": round(truth["humidity_pct"], 3),
+                "baro_kpa": round(truth["baro_kpa"], 3),
+                "estimate": {
+                    "temp_c": round(estimate.point.get("temp_c", 0.0), 3),
+                    "temp_c_sigma": round(
+                        estimate.covariance.get("temp_c", 0.0) ** 0.5, 4
+                    ),
+                    "humidity_pct": round(
+                        estimate.point.get("humidity_pct", 0.0), 3
+                    ),
+                    "humidity_pct_sigma": round(
+                        estimate.covariance.get("humidity_pct", 0.0) ** 0.5, 4
+                    ),
+                    "baro_kpa": round(estimate.point.get("baro_kpa", 0.0), 3),
+                    "baro_kpa_sigma": round(
+                        estimate.covariance.get("baro_kpa", 0.0) ** 0.5, 4
+                    ),
+                    "rejected_updates": app.engine.sensors_est.rejected_updates,
+                },
+            }
+            return json.dumps(payload)
+
+        return await _wrap("sensors_status", {}, ctx, _work)
+
+    @mcp.tool()
     async def self_model_assess(question: str = "", ctx: Context | None = None) -> str:
         """Self-model capability assessment (placeholder for L1)."""
 
@@ -447,6 +480,7 @@ def build_server(settings: Settings | None = None) -> FastMCP:
                 app.engine.storage_est,
                 app.engine.comms_est,
                 app.engine.position_est,
+                app.engine.sensors_est,
             ):
                 state = est.state()
                 rows.append(

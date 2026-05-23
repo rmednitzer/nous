@@ -23,6 +23,7 @@ from .estimators.comms import CommsParticleFilter
 from .estimators.compute import ComputeKalman
 from .estimators.position import PositionEKF
 from .estimators.power import PowerEstimator
+from .estimators.sensors import EnvironmentalKalman
 from .estimators.storage import StorageKalman
 from .estimators.thermal import ThermalKalman
 from .state.comms_state import CommsState
@@ -34,14 +35,12 @@ from .subsystems.compute import ComputeSubsystem
 from .subsystems.inference import InferenceSubsystem
 from .subsystems.position import PositionSubsystem
 from .subsystems.power import PowerSubsystem
+from .subsystems.sensors import SensorsSubsystem
 from .subsystems.storage import StorageSubsystem
 from .subsystems.thermal import ThermalSubsystem
 from .types import TickContext
 
 __all__ = ["Engine", "EngineState"]
-
-
-_DEFAULT_AMBIENT_C = 25.0
 
 
 @dataclass
@@ -79,6 +78,7 @@ class Engine:
         self.storage = StorageSubsystem(self.profile)
         self.comms = CommsSubsystem(self.profile)
         self.position = PositionSubsystem(self.profile)
+        self.sensors = SensorsSubsystem(self.profile)
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
@@ -101,6 +101,8 @@ class Engine:
         self.state.comms_state, _ = self.comms.derive_state()
         self.position_est = PositionEKF()
         self.position_est.update(self.position.sensor_obs())
+        self.sensors_est = EnvironmentalKalman()
+        self.sensors_est.update(self.sensors.sensor_obs())
 
     @property
     def dt_s(self) -> float:
@@ -180,15 +182,15 @@ class Engine:
         dt = self.dt_s
         self.state.ts_s += dt
 
-        ambient_c = self._default_ambient_c()
-
         self.compute.set_thermal_throttle(throttling=self.thermal.throttling)
         self.compute.step(dt)
         self.inference.step(dt)
         self.storage.step(dt)
         self.comms.step(dt)
         self.position.step(dt)
+        self.sensors.step(dt)
         load_w = self.compute.draw_w
+        ambient_c = self.sensors.temp_c
 
         self.apu.step(dt)
         self.thermal.set_load_w(load_w)
@@ -214,6 +216,8 @@ class Engine:
         self.state.comms_state, _ = self.comms.derive_state()
         self.position_est.predict(dt)
         self.position_est.update(self.position.sensor_obs())
+        self.sensors_est.predict(dt)
+        self.sensors_est.update(self.sensors.sensor_obs())
 
         ctx = TickContext(
             tick=self.state.tick,
@@ -223,18 +227,6 @@ class Engine:
             profile=self.settings.profile,
         )
         return ctx
-
-    def _default_ambient_c(self) -> float:
-        """Ambient temperature input for the thermal subsystem.
-
-        Until a scenario injector drives ambient (BL-014), the engine
-        uses ``profile.thermal.ambient_c_default``. The two-state
-        thermal model in :mod:`nous.subsystems.thermal` integrates from
-        this baseline and the compute load to produce the enclosure
-        temperature that drives the battery's thermal derate.
-        """
-        thermal_cfg = self.profile.get("thermal") or {}
-        return float(thermal_cfg.get("ambient_c_default", _DEFAULT_AMBIENT_C))
 
     def snapshot(self) -> dict[str, Any]:
         """Return a JSON-safe summary of engine state."""
@@ -291,6 +283,11 @@ class Engine:
                 "alt_m": round(self.position.alt_m, 2),
                 "has_fix": self.position.has_fix,
                 "dead_reckoning_s": round(self.position.dead_reckoning_s, 2),
+            },
+            "sensors": {
+                "temp_c": round(self.sensors.temp_c, 3),
+                "humidity_pct": round(self.sensors.humidity_pct, 3),
+                "baro_kpa": round(self.sensors.baro_kpa, 3),
             },
         }
 

@@ -61,7 +61,7 @@ Last reviewed: 2026-05-21.
 | `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. |
-| `src/nous/engine.py` | in-progress | Tick orchestration; power, APU, thermal, compute, inference, storage, comms, and position subsystems wired through the tick loop. Comms aggregator drives `state.comms_state` each tick. |
+| `src/nous/engine.py` | in-progress | Tick orchestration; power, APU, thermal, compute, inference, storage, comms, position, and sensors subsystems wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. |
 | `src/nous/tick.py` | in-progress | Async tick loop. |
 | `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |
 | `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in (BL-005a). |
@@ -71,7 +71,8 @@ Last reviewed: 2026-05-21.
 | `src/nous/subsystems/storage.py` | in-progress | NAND wear and capacity accounting (BL-008): one-shot `write(gib)` and sustained `set_write_rate`; wear inflated by `write_amplification` against a TBW endurance budget. |
 | `src/nous/subsystems/comms.py` | in-progress | Per-link envelopes (BL-012): live RSSI / loss / throughput / age per radio; `tx` resets age; `set_link_state` for scenario overrides; aggregator drives FSM `state.comms_state`. |
 | `src/nous/subsystems/position.py` | in-progress | Lat / lon / alt ground truth (BL-010) with dead-reckoning, GNSS fix gating, IMU drift bias. Profile sigmas advertised on the GNSS observation. |
-| `src/nous/subsystems/{sensors,biometrics}.py` | planned | Typed stubs in v0.1. |
+| `src/nous/subsystems/sensors.py` | in-progress | Ambient temperature, humidity, baro pressure (BL-009). Authoritative ambient source for the thermal subsystem each tick. |
+| `src/nous/subsystems/biometrics.py` | planned | Typed stub in v0.1. |
 | `src/nous/estimators/power.py` | in-progress | 1-D Kalman over (SoC, voltage); covariance bound documented in the model card. |
 | `src/nous/estimators/apu.py` | in-progress | Per-source 1-D Kalman; tracks four source channels plus the total. |
 | `src/nous/estimators/thermal.py` | in-progress | 1-D Kalman per channel over (junction_c, enclosure_c); covariance shrinks under observation. Full multi-state filter lands with BL-028. |
@@ -79,7 +80,8 @@ Last reviewed: 2026-05-21.
 | `src/nous/estimators/storage.py` | in-progress | 1-D Kalman per channel over (used_gib, wear_pct); slow process variance matches the physical reality of NAND wear. |
 | `src/nous/estimators/comms.py` | in-progress | Per-link belief tracker (BL-012); aggregate Estimate over (connected_links, total_links). Full transition particle filter (BL-030) deferred. |
 | `src/nous/estimators/position.py` | in-progress | v0.1 pass-through with NaN/Inf/range validation (BL-010 plumbing); full constant-velocity EKF lands with BL-026. |
-| `src/nous/estimators/biometrics.py` | planned | Typed stub in v0.1. |
+| `src/nous/estimators/sensors.py` | in-progress | Multi-channel Kalman over (temp_c, humidity_pct, baro_kpa); validates against physical bounds, rejects without poisoning the central estimate. |
+| `src/nous/estimators/biometrics.py` | in-progress | Multi-channel Kalman over biometric channels with validation. Subsystem driver still planned (BL-011). |
 | `src/nous/self_model/*` | planned | Assess/explain/viability shipped as stubs. |
 | `src/nous/interop/*` | planned | Each adapter ships as a typed stub in v0.1. |
 | `src/nous/auth/oauth.py` | in-progress | File-backed issuer shape. |
