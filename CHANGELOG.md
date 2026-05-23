@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- AUDIT-2026-05-23 C3: the FastMCP server now registers a lifespan
+  context that runs `tick_loop(engine, hz=tick_hz)` for the duration
+  of the server, then sets the stop event and calls `engine.stop()`
+  on exit so the FSM lands on SHUTDOWN rather than leaking the
+  running state. Before this fix the engine started but no tick task
+  was ever scheduled; `device_health` returned `tick=0, mode=boot` on
+  the live server even after a long uptime. New
+  `nous.server.tick_lifespan` is exposed for direct use in tests.
+  Covered by `tests/integration/test_server_lifespan.py`.
+
 ### Documented
 
 - Full system audit at revision `02f2062` published as

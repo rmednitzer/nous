@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import contextlib
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from typing import Any
 
+import anyio
 from mcp.server.fastmcp import Context, FastMCP
 
 from . import __version__
@@ -20,8 +22,9 @@ from .config import Settings, get_settings
 from .engine import Engine
 from .policy import PolicyMode
 from .runner import run as audited_run
+from .tick import tick_loop
 
-__all__ = ["Nous", "build_server"]
+__all__ = ["Nous", "build_server", "tick_lifespan"]
 
 
 Work = Callable[[], Awaitable[str]]
@@ -53,10 +56,37 @@ class Nous:
         return PolicyMode(self.settings.policy)
 
 
+@asynccontextmanager
+async def tick_lifespan(
+    engine: Engine, tick_hz: float
+) -> AsyncIterator[None]:
+    """Run ``tick_loop`` for the lifetime of the context.
+
+    On entry, spawn a background task that advances ``engine.tick()`` at
+    ``tick_hz``. On exit, set the stop event so the task drains cleanly,
+    then call ``engine.stop()`` so the FSM lands on SHUTDOWN rather than
+    leaking the running state. Closes AUDIT-2026-05-23 C3 (engine starts
+    but the FastMCP server never ticks it).
+    """
+    stop = anyio.Event()
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(tick_loop, engine, tick_hz, stop)
+        try:
+            yield
+        finally:
+            stop.set()
+    engine.stop()
+
+
 def build_server(settings: Settings | None = None) -> FastMCP:
     """Construct the FastMCP server with every tool registered."""
     cfg = settings or get_settings()
     app = Nous(cfg)
+
+    @asynccontextmanager
+    async def _lifespan(_server: FastMCP[None]) -> AsyncIterator[None]:
+        async with tick_lifespan(app.engine, cfg.tick_hz):
+            yield
 
     host, _, port_str = cfg.http_bind.partition(":")
     try:
@@ -75,6 +105,7 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         # directly. OAuth metadata, /authorize, /token, /register and /revoke
         # are SDK-registered as siblings; no conflict at the routing layer.
         "streamable_http_path": "/",
+        "lifespan": _lifespan,
     }
     if cfg.transport == "http" and cfg.oauth_enabled:
         from urllib.parse import urlparse
