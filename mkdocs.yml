@@ -100,6 +100,7 @@ nav:
       - "08 Loss scenarios": stpa/08-loss-scenarios.md
       - "09 Derived requirements": stpa/09-derived-requirements.md
   - Backlog: backlog.md
+  - Contributor runbook: contributor-runbook.md
   - Deployment: deployment.md
   - Releasing: releasing.md
 
