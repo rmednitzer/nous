@@ -28,6 +28,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `tests/unit/test_anthropic_client.py` lands as the dedicated
+  spine test for `src/nous/anthropic_client.py` (AUDIT.md C1 + H1
+  partial, ADR-0005, BL-021). Cap exhaustion, UTC rollover,
+  corrupted-state fail-closed, and concurrent multiprocess locking
+  via `multiprocessing.Barrier` are all covered. The concurrency
+  test pins C1 closed: it fails deterministically against the
+  legacy unlock-before-flush ordering and passes deterministically
+  against the patched flush-then-fsync-then-unlock ordering.
+  `tests/unit/test_call_cap.py` is consolidated into the new file.
+
 - `deploy/systemd/nous.service` now lists `/var/log/nous` in
   `ReadWritePaths=` so the audit log can be written when
   `NOUS_AUDIT_PATH=/var/log/nous/audit.jsonl` (the path the
