@@ -16,9 +16,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   than the `_default_load_w()` placeholder; the helper is removed.
   Tests that previously monkeypatched it now drive load through
   `engine.compute.set_load_pct(...)`.
+- `Engine.tick` reads the per-tick ambient temperature from
+  `sensors.temp_c` rather than the `_default_ambient_c()`
+  placeholder; the helper is removed. The sensors subsystem seeds
+  itself from `sensors.environmental.temp_c_default` (falling back
+  to `thermal.ambient_c_default`) so existing profiles keep their
+  ambient baseline.
 
 ### Added
 
+- BL-009 environmental sensor pack. `SensorsSubsystem` carries
+  ambient temperature, humidity, and barometric pressure as ground
+  truth and is the authoritative ambient source the engine feeds
+  into `thermal.set_ambient_c` each tick. Scenario seams
+  `set_temp_c`, `set_humidity_pct`, `set_baro_kpa` (humidity clamps
+  to `[0, 100]`; baro to `[10, 200]` kPa). Profile sigmas under
+  `sensors.environmental` are advertised on the observation. New
+  multi-channel `EnvironmentalKalman` over the three channels with
+  input validation (rejected readings are counted on
+  `rejected_updates` without poisoning the central estimate). New
+  `sensors_status` MCP tool (already T0 in policy); sensors
+  estimator added to `self_estimator_status`.
 - BL-010 position subsystem. Ground-truth lat / lon / alt advanced
   each tick by dead-reckoning from `set_velocity(speed_mps,
   heading_deg)` plus an optional `vertical_mps`; longitude wraps
