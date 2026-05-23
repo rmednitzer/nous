@@ -350,15 +350,34 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         """Comms-stack summary (per ADR-0006)."""
 
         async def _work() -> str:
+            label, reason = app.engine.comms.derive_state()
+            links = [link.model_dump() for link in app.engine.comms.link_estimates()]
             return json.dumps(
                 {
-                    "state": app.engine.state.comms_state.value,
-                    "links": [],
-                    "note": "links emit through the comms estimator in L1",
+                    "state": label.value,
+                    "reason": reason,
+                    "links": links,
                 }
             )
 
         return await _wrap("comms_state", {}, ctx, _work)
+
+    @mcp.tool()
+    async def comms_status(ctx: Context | None = None) -> str:
+        """Comms subsystem: per-link envelope, live RSSI, loss, throughput, age."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.comms.truth())
+            label, reason = app.engine.comms.derive_state()
+            payload = {
+                "state": label.value,
+                "reason": reason,
+                "link_count": len(truth["links"]),
+                "links": truth["links"],
+            }
+            return json.dumps(payload)
+
+        return await _wrap("comms_status", {}, ctx, _work)
 
     @mcp.tool()
     async def self_model_assess(question: str = "", ctx: Context | None = None) -> str:
@@ -389,6 +408,7 @@ def build_server(settings: Settings | None = None) -> FastMCP:
                 app.engine.thermal_est,
                 app.engine.compute_est,
                 app.engine.storage_est,
+                app.engine.comms_est,
             ):
                 state = est.state()
                 rows.append(

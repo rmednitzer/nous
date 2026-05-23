@@ -19,6 +19,7 @@ import yaml
 
 from .config import Settings, get_settings
 from .estimators.apu import ApuEstimator
+from .estimators.comms import CommsParticleFilter
 from .estimators.compute import ComputeKalman
 from .estimators.power import PowerEstimator
 from .estimators.storage import StorageKalman
@@ -27,6 +28,7 @@ from .state.comms_state import CommsState
 from .state.machine import GuardDenied, Mode, StateMachine
 from .state.operator_state import OperatorState
 from .subsystems.apu import ApuSubsystem
+from .subsystems.comms import CommsSubsystem
 from .subsystems.compute import ComputeSubsystem
 from .subsystems.inference import InferenceSubsystem
 from .subsystems.power import PowerSubsystem
@@ -73,6 +75,7 @@ class Engine:
         self.compute = ComputeSubsystem(self.profile)
         self.inference = InferenceSubsystem(self.profile, compute=self.compute)
         self.storage = StorageSubsystem(self.profile)
+        self.comms = CommsSubsystem(self.profile)
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
@@ -90,6 +93,9 @@ class Engine:
             initial_used_gib=self.storage.used_gib,
             initial_wear_pct=self.storage.wear_pct,
         )
+        self.comms_est = CommsParticleFilter()
+        self.comms_est.update(self.comms.sensor_obs())
+        self.state.comms_state, _ = self.comms.derive_state()
 
     @property
     def dt_s(self) -> float:
@@ -175,6 +181,7 @@ class Engine:
         self.compute.step(dt)
         self.inference.step(dt)
         self.storage.step(dt)
+        self.comms.step(dt)
         load_w = self.compute.draw_w
 
         self.apu.step(dt)
@@ -196,6 +203,9 @@ class Engine:
         self.compute_est.update(self.compute.sensor_obs())
         self.storage_est.predict(dt)
         self.storage_est.update(self.storage.sensor_obs())
+        self.comms_est.predict(dt)
+        self.comms_est.update(self.comms.sensor_obs())
+        self.state.comms_state, _ = self.comms.derive_state()
 
         ctx = TickContext(
             tick=self.state.tick,
@@ -259,6 +269,13 @@ class Engine:
                 "wear_pct": round(self.storage.wear_pct, 4),
                 "at_capacity": self.storage.at_capacity,
                 "worn_out": self.storage.worn_out,
+            },
+            "comms": {
+                "state": self.state.comms_state.value,
+                "link_count": len(self.comms.link_ids),
+                "connected_links": sum(
+                    1 for link in self.comms if link.is_live()
+                ),
             },
         }
 

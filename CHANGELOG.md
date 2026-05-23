@@ -19,6 +19,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- BL-012 comms subsystem. Per-link envelopes derived from
+  `profile["comms"]["links"]` (RSSI, loss, throughput, age, max_age).
+  Live state is the subsystem's ground truth: `comms.tx(link_id,
+  bytes)` resets the age counter and refreshes throughput;
+  `comms.set_link_state(link_id, ...)` is a sticky controller /
+  scenario override; the engine ticks each link's age forward and
+  drops `connected` once `age_s > max_age_s`. The aggregator
+  `comms.derive_state()` is consulted every engine tick to update
+  `state.comms_state` (the FSM signal that gates cloud-bound flows
+  and the inference fallback ladder). `comms_state` MCP tool now
+  returns the aggregate label, derivation reason, and per-link
+  beliefs; new `comms_status` tool (T0) exposes the full envelope
+  including age and forced-state. `CommsParticleFilter` upgraded
+  from a no-op stub to a per-link belief tracker (the full
+  transition particle filter remains BL-030).
 - BL-008 storage subsystem. NAND wear and capacity accounting driven
   by physical writes: `storage.write(gib)` accepts a one-shot logical
   write (clamped by free space, inflated by

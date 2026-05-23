@@ -23,7 +23,7 @@ possible.
 - BL-009 [planned] (L1) Environmental sensor pack subsystem.
 - BL-010 [planned] (L1) Position subsystem (GNSS + 9-DoF IMU).
 - BL-011 [planned] (L1) Biometrics subsystem (parametric, not physiology-grounded).
-- BL-012 [planned] (L1) Comms subsystem with link envelopes.
+- BL-012 [in-progress] (L1) Comms subsystem with link envelopes. Live per-link state from `profile["comms"]["links"]` (RSSI, loss, throughput, age); `tx(link_id, bytes)` resets age; links time out after `max_age_s`; `set_link_state` lets a scenario degrade or restore a link sticky. Engine derives `state.comms_state` from live links each tick via `derive()`. `comms_state` and `comms_status` MCP tools live; `CommsParticleFilter` upgraded from no-op stub to a per-link belief tracker (full transition particle filter is BL-030).
 - BL-013 [in-progress] (L1) Inference subsystem (local + cloud paths). Local path lives in `subsystems/inference.py`: a request returns profile-derived latency (`tok_per_s_p50`) and energy (`energy_j_per_tok`); totals accumulate; `set_continuous_rate` writes through to `ComputeSubsystem.set_inference_rate` so a sustained workload propagates into draw watts. `inference_local` MCP tool now returns the cost figures; new `inference_status` MCP tool exposes the totals. Cloud path (fallback ladder + cap accounting) deferred to a follow-up ADR.
 - BL-014 [planned] (L1) Scenario YAML loader + injectors.
 - BL-015 [planned] (L1) SQLite schema + Alembic baseline migration.
