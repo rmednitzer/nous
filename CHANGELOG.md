@@ -19,6 +19,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- BL-013 local-path inference subsystem. `InferenceSubsystem.request_local`
+  returns a profile-derived `latency_s` (from
+  `compute.inference_local.tok_per_s_p50`) and `energy_j` (from
+  `energy_j_per_tok`) alongside the synthetic response. Running totals
+  for `local_calls`, `total_tokens`, and `total_energy_j` accumulate
+  over the simulator's lifetime and surface in `engine.snapshot()`.
+  `set_continuous_rate(tok_per_s)` writes through to
+  `ComputeSubsystem.set_inference_rate` so a sustained workload
+  propagates into draw watts via the existing BL-007 wiring. The
+  `inference_local` MCP tool now returns the cost figures (was a fixed
+  echo); new `inference_status` MCP tool exposes the totals. Cloud
+  path (fallback ladder + cap accounting) deferred.
 - BL-007 compute subsystem: load fraction + profile-driven draw curve.
   `compute.set_load_pct` / `set_inference_rate` steer the request;
   draw watts come from the piecewise-linear `compute.load_curve` in

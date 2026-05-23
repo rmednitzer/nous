@@ -61,13 +61,14 @@ Last reviewed: 2026-05-21.
 | `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. |
-| `src/nous/engine.py` | in-progress | Tick orchestration; power, APU, thermal, and compute subsystems wired through the tick loop. |
+| `src/nous/engine.py` | in-progress | Tick orchestration; power, APU, thermal, compute, and inference subsystems wired through the tick loop. |
 | `src/nous/tick.py` | in-progress | Async tick loop. |
 | `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |
 | `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in (BL-005a). |
 | `src/nous/subsystems/thermal.py` | in-progress | Two-state lumped model: junction + enclosure (BL-005). Drives the FSM thermal-headroom guard and the battery cell temperature. |
 | `src/nous/subsystems/compute.py` | in-progress | Load fraction + profile-driven draw curve (BL-007). Authoritative load source for power and thermal. Auto-clips delivered load when thermal reports throttling. |
-| `src/nous/subsystems/{storage,sensors,position,biometrics,comms,inference}.py` | planned | Typed stubs in v0.1. |
+| `src/nous/subsystems/inference.py` | in-progress | Local-path inference (BL-013): profile-derived latency and energy per request; running totals; `set_continuous_rate` writes through to compute. Cloud path deferred. |
+| `src/nous/subsystems/{storage,sensors,position,biometrics,comms}.py` | planned | Typed stubs in v0.1. |
 | `src/nous/estimators/power.py` | in-progress | 1-D Kalman over (SoC, voltage); covariance bound documented in the model card. |
 | `src/nous/estimators/apu.py` | in-progress | Per-source 1-D Kalman; tracks four source channels plus the total. |
 | `src/nous/estimators/thermal.py` | in-progress | 1-D Kalman per channel over (junction_c, enclosure_c); covariance shrinks under observation. Full multi-state filter lands with BL-028. |

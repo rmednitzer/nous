@@ -68,6 +68,7 @@ _READ_ONLY_TOOLS = frozenset(
         "position_status",
         "biometrics_status",
         "compute_status",
+        "inference_status",
         "storage_status",
         "sensors_status",
         "self_model_assess",
