@@ -46,5 +46,5 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Run policy checks
-        run: bash scripts/policy_checks.sh
+      - name: make policy
+        run: make policy
