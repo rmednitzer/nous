@@ -252,6 +252,37 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         return await _wrap("apu_status", {}, ctx, _work)
 
     @mcp.tool()
+    async def thermal_status(ctx: Context | None = None) -> str:
+        """Two-state thermal model (junction + enclosure + ambient)."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.thermal.truth())
+            estimate = app.engine.thermal_est.state()
+            payload = {
+                "junction_c": round(truth["junction_c"], 3),
+                "enclosure_c": round(truth["enclosure_c"], 3),
+                "ambient_c": round(truth["ambient_c"], 3),
+                "load_w": round(truth["load_w"], 3),
+                "headroom_c": round(truth["headroom_c"], 3),
+                "throttling": truth["throttling"],
+                "junction_temp_throttle": round(truth["junction_temp_throttle"], 3),
+                "junction_temp_max": round(truth["junction_temp_max"], 3),
+                "estimate": {
+                    "junction_c": round(estimate.point["junction_c"], 3),
+                    "junction_c_sigma": round(
+                        estimate.covariance["junction_c"] ** 0.5, 4
+                    ),
+                    "enclosure_c": round(estimate.point["enclosure_c"], 3),
+                    "enclosure_c_sigma": round(
+                        estimate.covariance["enclosure_c"] ** 0.5, 4
+                    ),
+                },
+            }
+            return json.dumps(payload)
+
+        return await _wrap("thermal_status", {}, ctx, _work)
+
+    @mcp.tool()
     async def comms_state(ctx: Context | None = None) -> str:
         """Comms-stack summary (per ADR-0006)."""
 
@@ -289,7 +320,11 @@ def build_server(settings: Settings | None = None) -> FastMCP:
 
         async def _work() -> str:
             rows = []
-            for est in (app.engine.power_est, app.engine.apu_est):
+            for est in (
+                app.engine.power_est,
+                app.engine.apu_est,
+                app.engine.thermal_est,
+            ):
                 state = est.state()
                 rows.append(
                     {
@@ -355,7 +390,7 @@ never written to disk. The audit log path is reported by `device_info`.
 
 Representative v0.1 tools:
   device_info / device_health / state_get / state_history
-  power_status / apu_status / comms_state
+  power_status / apu_status / thermal_status / comms_state
   self_model_assess / self_estimator_status
   inference_local / interop_formats
 

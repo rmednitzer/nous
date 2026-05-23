@@ -64,7 +64,13 @@ apu:
 thermal:
   ambient_c_default: 25
   junction_temp_max: 95
-  thermal_resistance_c_per_w: 0.3
+  junction_temp_throttle: 85
+  thermal_resistance_c_per_w: 0.3                # junction-to-enclosure
+  enclosure_to_ambient_resistance_c_per_w: 0.5   # enclosure-to-ambient (optional, default 0.5)
+  enclosure_mass_kg: 1.2
+  enclosure_specific_heat_j_per_kg_k: 900
+  junction_heat_capacity_j_per_k: 5.0            # optional, default 5.0
+  headroom_threshold_c: 5.0                      # SC-2 guard threshold
 
 compute:
   draw_w_idle: 8
