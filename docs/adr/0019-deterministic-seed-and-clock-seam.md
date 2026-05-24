@@ -1,7 +1,7 @@
 # ADR 0019: Deterministic seed and clock seam at the engine boundary
 
-- **Status:** Proposed
-- **Date:** 2026-05-23
+- **Status:** Accepted
+- **Date:** 2026-05-24
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0010, ADR 0013
 
@@ -10,13 +10,18 @@
 The engine and its subsystems mix randomness and wall-clock time in
 ways that are individually defensible but collectively make the
 simulator non-reproducible. `Engine` reads `time.monotonic()` directly
-(`src/nous/engine.py:125`). Each subsystem that needs noise (sensor
-observations, comms link flicker, position GNSS sigma) reaches for the
-default `numpy.random` global or for a per-instance `set_*` seed
-helper. `AUDIT.md` M8 and M9 flagged the absence of a tick-level
-deterministic seam; the property tests in
-`tests/unit/test_estimator_properties.py` work around it by
-re-instantiating estimators inside each Hypothesis case.
+(`src/nous/engine.py:126`). Subsystem `sensor_obs()` payloads already
+declare per-channel sigmas (`PowerSubsystem.sensor_obs()` exposes
+`soc_pct_sigma`, `voltage_v_sigma`, `current_a_sigma`; the apu,
+thermal, comms, and storage subsystems do the same) so that the
+estimator layer can weight observations. The next step is to actually
+sample those sigmas at the subsystem boundary, and the moment that
+happens the simulator needs a single RNG handle to draw from, or the
+sampling will reach for the `numpy.random` global by default. `AUDIT.md`
+M8 and M9 are adjacent: both ask for engine-tick coverage that a
+deterministic seam makes cheap (a unit test can assert exact tick
+trajectories without re-instantiating the engine in every Hypothesis
+case, the way `tests/unit/test_estimator_properties.py` does today).
 
 The shape that closes this gap is well established in simulator
 practice: a single `np.random.default_rng(seed)` threaded through
@@ -51,9 +56,9 @@ class Engine:
 
 `seed` flows into a single `numpy.random.Generator` that the engine
 hands to every subsystem and estimator at construction. Each
-subsystem's `set_*` helpers stay (scenarios still need to inject
-specific values), but the per-instance default randomness now derives
-from the engine RNG, not from the numpy global. A seed of `None`
+subsystem's existing scenario-control `set_*` helpers stay; once
+observation sampling lands, the per-instance default RNG derives from
+the engine handle rather than the numpy global. A seed of `None`
 preserves today's behaviour by falling back to the OS entropy source,
 so existing tests that do not care about determinism keep passing.
 
