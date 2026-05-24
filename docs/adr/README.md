@@ -25,3 +25,4 @@
 | 0020 | [Property-based invariants for subsystem physics](0020-subsystem-physics-invariants.md) | Proposed | 2026-05-23 |
 | 0021 | [Per-subsystem MCP tool modules](0021-per-subsystem-tool-modules.md) | Proposed | 2026-05-23 |
 | 0022 | [Runtime safety enforcer with structured result](0022-runtime-safety-enforcer.md) | Proposed | 2026-05-23 |
+| 0023 | [Audit cadence and regression-suite pattern](0023-audit-cadence-and-regression-suite.md) | Accepted | 2026-05-24 |

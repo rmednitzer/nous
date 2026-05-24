@@ -7,20 +7,29 @@ yet?" questions.
 
 The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`.
 
-Last reviewed: 2026-05-23 (re-audit at HEAD `43d0db2`, post PRs #40
-/ #41 / #42).
+Last reviewed: 2026-05-24 (code-index audit at HEAD `fb8356f`, post
+PR #44 borrowed regression suite + tick finiteness guard + ADRs 0019
+through 0022).
 
-Deployment-side status note: the L1 subsystem rollout is now on
-`origin/main` (PR #38 catch-up train), so the auto-update timer
-lands the nineteen-tool surface on the live VM on its next poll.
-Three audit-baseline criticals closed since the 2026-05-23 baseline:
-**C3** (FastMCP lifespan ticks the engine, PR #40 + #42 follow-up),
-**C6** (CI policy greps now enforce em-dash and private-repo
-bans, PR #41), and **N1** (deployment drift -- `main` caught up).
+Deployment-side status note: the L1 subsystem rollout has been on
+`origin/main` since PR #38, so the auto-update timer lands the
+nineteen-tool surface on the live VM on the next poll after
+`origin/main` advances (no-op when the remote HEAD is unchanged).
+Eight audit findings have closed since the 2026-05-23 baseline and
+the post-baseline §10 re-audit: **C3** (FastMCP lifespan ticks the
+engine, PR #40 + #42 follow-up), **C6** (CI policy greps enforce
+em-dash and private-repo bans, PR #41), **N1** (deployment drift
+between development line and `main`, PR #38), plus the
+regression-pin closure of **C1**, **C4**, **C5**, **H3**, and
+**M8** under PR #44 (`tests/regression/test_audit_findings.py`).
 **N2** (live audit sink degraded) carries forward as the next
-live-VM action item. See [`docs/audit-2026-05-23.md`](docs/audit-2026-05-23.md)
-§10 for the post-catch-up re-audit and the revised remediation
-order.
+live-VM action item. See
+[`docs/audit-2026-05-24.md`](docs/audit-2026-05-24.md) for the
+fresh code-index audit and the validation against the conformance
+documents; the cadence and the regression-pin pattern are codified
+in [ADR 0023](docs/adr/0023-audit-cadence-and-regression-suite.md).
+365 pytest tests pass at HEAD `fb8356f` (up from 351 at the §10
+re-audit).
 
 ## Maturity taxonomy
 
