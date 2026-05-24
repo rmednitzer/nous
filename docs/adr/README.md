@@ -22,7 +22,7 @@
 | 0017 | [Public showcase site on the existing docs Pages target](0017-public-showcase-site.md) | Accepted | 2026-05-21 |
 | 0018 | [FSM transition guards for STPA safety constraints](0018-fsm-guards-for-stpa-constraints.md) | Accepted | 2026-05-21 |
 | 0019 | [Deterministic seed and clock seam at the engine boundary](0019-deterministic-seed-and-clock-seam.md) | Accepted | 2026-05-24 |
-| 0020 | [Property-based invariants for subsystem physics](0020-subsystem-physics-invariants.md) | Proposed | 2026-05-23 |
+| 0020 | [Property-based invariants for subsystem physics](0020-subsystem-physics-invariants.md) | Accepted | 2026-05-24 |
 | 0021 | [Per-subsystem MCP tool modules](0021-per-subsystem-tool-modules.md) | Proposed | 2026-05-23 |
 | 0022 | [Runtime safety enforcer with structured result](0022-runtime-safety-enforcer.md) | Proposed | 2026-05-23 |
 | 0023 | [Audit cadence and regression-suite pattern](0023-audit-cadence-and-regression-suite.md) | Accepted | 2026-05-24 |
