@@ -14,8 +14,7 @@ This document is the per-subsystem counterpart to `LIMITATIONS.md`.
 `nous` is not yet, and what it does not aim to be). This document
 records the *modelling shortcuts* inside the components that do exist,
 each cross-referenced to its source file so a reviewer can trace an
-assumption back to the line of code that embodies it. The structural
-pattern is adapted from `6dof-ascent-sim/docs/assumptions.md`.
+assumption back to the line of code that embodies it.
 
 When a subsystem is rewritten and a simplification disappears, delete
 the bullet. When a new subsystem lands, add a section in the same

@@ -25,13 +25,13 @@ landed in `tests/regression/test_audit_findings.py` pins the *fixed*
 behaviour; this ADR is about catching the *next* such defect before it
 gets a finding id.
 
-`6dof-ascent-sim` does this for its physics layer: RK4 verified
-against `dx/dt = x -> e^t` at `rtol=1e-8`; gravity recovers the
-inverse-square law at large `r`; ideal-gas `rho = P / (R * T)` holds
-across the atmosphere model; energy is conserved across a full orbit
-at `rtol=1e-4`. The invariants are closed-form facts about the
-modelled physics, not numeric examples; a regression that breaks the
-invariant fails on every seed.
+The shape of the test is closed-form facts about the modelled physics,
+not numeric examples. An RK4 integrator is checked against
+`dx/dt = x -> e^t` at tight tolerance; gravity recovers the
+inverse-square law at large `r`; an atmosphere model satisfies
+`rho = P / (R * T)`; energy is conserved across a full orbit. A
+regression that breaks the invariant fails on every seed, not only
+on the seed that produced the example test.
 
 The deterministic seed seam in ADR-0019 is a prerequisite. Without it,
 Hypothesis cannot shrink to a failing seed, and a flaky property test
@@ -70,12 +70,11 @@ contractual basis. A failure prints the shrunk input. Tolerances are
 named constants in the test module (`_THERMAL_STEADY_STATE_REL_TOL`
 etc.) so a relaxed tolerance is reviewable in diff.
 
-The 6dof-style "regression test for each prior defect" pattern stays
-in `tests/regression/`; property invariants belong with the unit
-suite. A future open-source contribution that proposes a new
-subsystem must ship the invariant section with the implementation
-(extension to `CONTRIBUTING.md` lands with this ADR's
-implementation).
+The "regression test for each prior defect" pattern stays in
+`tests/regression/`; property invariants belong with the unit suite.
+A future open-source contribution that proposes a new subsystem must
+ship the invariant section with the implementation (extension to
+`CONTRIBUTING.md` lands with this ADR's implementation).
 
 ## Consequences
 

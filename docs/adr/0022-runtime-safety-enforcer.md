@@ -23,13 +23,12 @@ clamped." A controller that wants to know whether the device entered
 a safe-mode regime today has to crawl the audit log for inferred
 patterns.
 
-`6dof-ascent-sim` solves the same shape of problem with a single
-`BoundaryEnforcer` whose every check returns a structured
-`BoundaryResult(approved, value, was_clamped, violation_type,
-evidence)`. The enforcer carries a cumulative violation counter, and
-its STPA doc cross-references each constraint to a hazard. The
-runtime artefact (a `BoundaryResult` value) is the bridge between the
-constraint as written and the constraint as enforced.
+The shape that closes this gap is a single chokepoint whose every
+check returns a structured `Result(approved, value, was_clamped,
+violation_type, evidence)`. The enforcer carries a cumulative
+violation counter; the STPA doc cross-references each constraint id
+to a hazard. The runtime artefact (a `Result` value) is the bridge
+between the constraint as written and the constraint as enforced.
 
 The nous-specific extension is the tier-classified audit log. A
 safety check that fires is already a high-blast-radius event; surfacing

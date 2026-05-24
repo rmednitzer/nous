@@ -21,10 +21,10 @@ under `estimators/`, the `Subsystem` and `Estimator` Protocols, the
 matching docs under `docs/subsystems/`. The tool surface is the only
 layer that breaks the per-subsystem decomposition.
 
-The sibling 6dof-ascent-sim organises its `sim/` directory by
-physical or functional concern (`gnc/`, `safety/`, `telemetry/`,
-`montecarlo/`). The pattern that lifts to nous is "the public surface
-follows the model decomposition." Today's `server.py` does not.
+The pattern the public surface should follow is "the tool layer mirrors
+the model decomposition." Today's `server.py` does not: ten subsystems,
+one tool file. The audited-runner wrapping is centralised (which is
+correct); only the per-subsystem grouping of handlers is missing.
 
 This is also a forward-looking concern: BL-014 (scenario loader) and
 BL-018 (self-model wiring) will each want their own tools.  Adding

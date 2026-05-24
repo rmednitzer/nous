@@ -18,12 +18,13 @@ deterministic seam; the property tests in
 `tests/unit/test_estimator_properties.py` work around it by
 re-instantiating estimators inside each Hypothesis case.
 
-A sibling simulator (`6dof-ascent-sim`) threads a single
-`np.random.default_rng(seed)` through every randomised component, and
-the Monte Carlo dispatcher derives per-run seeds as `base_seed + i` so
-runs do not poison each other's globals. The same shape is missing
-here, and we feel its absence wherever the test suite needs to assert
-"running the same scenario twice produces the same trajectory."
+The shape that closes this gap is well established in simulator
+practice: a single `np.random.default_rng(seed)` threaded through
+every randomised component, and a Monte Carlo dispatcher that derives
+per-run seeds as `base_seed + i` so runs do not poison each other's
+globals. The same shape is missing here, and we feel its absence
+wherever the test suite needs to assert "running the same scenario
+twice produces the same trajectory."
 
 The simulator's value proposition is legibility (`CLAUDE.md` "Repo
 purpose"). A non-reproducible run is illegible: the controller cannot

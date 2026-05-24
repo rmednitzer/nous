@@ -6,10 +6,9 @@ asserts the specific behaviour that closed it. A future change that
 re-opens the finding surfaces here, with the original defect summarised
 in the class docstring rather than re-discovered from scratch.
 
-The structural pattern is adapted from ``6dof-ascent-sim``'s
-``tests/test_audit_regressions.py``: one class per defect, prior bug
-documented in the docstring, tests asserting the fix. Findings that are
-still open are not represented; add a class only after the fix lands.
+The pattern is: one class per defect, prior bug documented in the
+docstring, tests asserting the fix. Findings that are still open are
+not represented; add a class only after the fix lands.
 """
 
 from __future__ import annotations

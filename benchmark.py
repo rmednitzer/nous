@@ -1,7 +1,6 @@
 """Developer-runnable microbenchmarks for the tick loop and audit sink.
 
-Adapts the small-script discipline from ``6dof-ascent-sim/benchmark.py``:
-no baseline comparison, no JSON, no regression tracking. The point is
+No baseline comparison, no JSON, no regression tracking. The point is
 that "did this PR slow the loop?" has a runnable answer that lives in
 the repo. Hot paths covered today: one engine tick, one audit-log
 fsync round trip, and a representative Kalman update. Add a section

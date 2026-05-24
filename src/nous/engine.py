@@ -242,11 +242,10 @@ class Engine:
     def _assert_post_tick_finite(self) -> None:
         """Fail loud if a subsystem or estimator emits NaN/Inf or a negative variance.
 
-        The pattern is borrowed from 6dof-ascent-sim's ``rk4_step``,
-        which raises ``RuntimeError`` at the integrator boundary on any
-        non-finite state component. The covariance >= 0 guard is the
-        nous-specific extension: a 1-D variance that goes negative is
-        the signature of the C5-class stub-pretending-to-be-real bug.
+        Trips at the tick boundary on any non-finite point estimate.
+        The covariance ``>= 0`` guard is the catch for the C5-class
+        stub-pretending-to-be-real bug: a 1-D variance that goes
+        negative is a posterior the filter could not actually compute.
         """
         for name, est in (
             ("power", self.power_est),
