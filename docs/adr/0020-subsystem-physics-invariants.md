@@ -1,7 +1,7 @@
 # ADR 0020: Property-based invariants for subsystem physics
 
-- **Status:** Proposed
-- **Date:** 2026-05-23
+- **Status:** Accepted
+- **Date:** 2026-05-24
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0013, ADR 0019
 

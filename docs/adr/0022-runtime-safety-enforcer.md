@@ -1,7 +1,7 @@
 # ADR 0022: Runtime safety enforcer with structured result
 
-- **Status:** Proposed
-- **Date:** 2026-05-23
+- **Status:** Accepted
+- **Date:** 2026-05-24
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0009, ADR 0018
 
@@ -63,9 +63,14 @@ class SafetyEnforcer:
 `docs/stpa/05-safety-constraints.md`. The enforcer owns a
 `violation_count` per id and a total counter exposed through
 `device_info`. Every `SafetyResult` is mirrored to the audit log
-under a new tier `Tier.SAFETY` (T1.5, between read-only and reversible;
-the writes do not change observable state but the fact of the check
-is part of the audit trail).
+under a new `Tier.SAFETY` classification: a safety check never
+mutates observable state, so it is adjacent to `READ_ONLY` on the
+data-modification axis, but the fact of the check is itself a
+distinct audit event that a controller should be able to query
+without conflating it with ordinary reads. The exact integer
+placement (a new value at the end of the enum vs. renumbering the
+existing tiers) is left to the implementation PR, since `Tier` is an
+`IntEnum` and the ordering matters to `policy.decide()`.
 
 The FSM guards in ADR-0018 are the first caller. `request_transition`
 constructs a `SafetyEnforcer` `check("SC-2", thermal_headroom_c,
@@ -90,12 +95,13 @@ the safe-mode posture at a glance. STPA-Pro audit trails become a
 mechanical join: pull every `Tier.SAFETY` audit record, group by
 `constraint_id`, present.
 
-Harder: `audit.py` grows a new tier; the tier-classifier frozensets
-in `policy.py` need a new tier-aware path. The `Tier` enum gains one
-value. The audit-log schema gains an optional
-`safety: SafetyResult` field, versioned via ADR-0012. Existing
-constraints in the FSM guard table all need a `constraint_id` so the
-audit join is unambiguous.
+Harder: `audit.py` grows a new tier classification; the
+tier-classifier frozensets in `policy.py` need a new entry and the
+`Tier` enum gains one value, with the integer placement chosen so
+existing ordered comparisons in `policy.decide()` still hold. The
+audit-log schema gains an optional `safety: SafetyResult` field,
+versioned via ADR-0012. Existing constraints in the FSM guard table
+all need a `constraint_id` so the audit join is unambiguous.
 
 Alternatives rejected:
 

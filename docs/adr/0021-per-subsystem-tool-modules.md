@@ -1,7 +1,7 @@
 # ADR 0021: Per-subsystem MCP tool modules
 
-- **Status:** Proposed
-- **Date:** 2026-05-23
+- **Status:** Accepted
+- **Date:** 2026-05-24
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0001, ADR 0007, ADR 0013
 
