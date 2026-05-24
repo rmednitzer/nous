@@ -9,6 +9,7 @@ Python.
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -227,6 +228,8 @@ class Engine:
         self.biometrics_est.predict(dt)
         self.biometrics_est.update(self.biometrics.sensor_obs())
 
+        self._assert_post_tick_finite()
+
         ctx = TickContext(
             tick=self.state.tick,
             ts_s=self.state.ts_s,
@@ -235,6 +238,42 @@ class Engine:
             profile=self.settings.profile,
         )
         return ctx
+
+    def _assert_post_tick_finite(self) -> None:
+        """Fail loud if a subsystem or estimator emits NaN/Inf or a negative variance.
+
+        Trips at the tick boundary on any non-finite point estimate.
+        The covariance ``>= 0`` guard is the catch for the C5-class
+        stub-pretending-to-be-real bug: a 1-D variance that goes
+        negative is a posterior the filter could not actually compute.
+        """
+        for name, est in (
+            ("power", self.power_est),
+            ("apu", self.apu_est),
+            ("thermal", self.thermal_est),
+            ("compute", self.compute_est),
+            ("storage", self.storage_est),
+            ("comms", self.comms_est),
+            ("position", self.position_est),
+            ("sensors", self.sensors_est),
+            ("biometrics", self.biometrics_est),
+        ):
+            estimate = est.state()
+            for key, value in estimate.point.items():
+                if not math.isfinite(value):
+                    raise RuntimeError(
+                        f"non-finite estimate {name}.point.{key}={value!r} "
+                        f"at tick {self.state.tick}"
+                    )
+            for key, raw in estimate.covariance.items():
+                if not isinstance(raw, (int, float)):
+                    continue
+                value = float(raw)
+                if not math.isfinite(value) or value < 0.0:
+                    raise RuntimeError(
+                        f"invalid covariance {name}.covariance.{key}={value!r} "
+                        f"at tick {self.state.tick}"
+                    )
 
     def snapshot(self) -> dict[str, Any]:
         """Return a JSON-safe summary of engine state."""

@@ -53,7 +53,10 @@ dependencies = [
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.24",
-    "ruff>=0.8",
+    # ruff is pinned to a minor range so contributors and CI agree on
+    # the same rule set. Bump together with the lint output the new
+    # minor produces.
+    "ruff>=0.15,<0.16",
     "mypy>=1.13",
     "hypothesis>=6.115",
     "types-PyYAML>=6.0",
