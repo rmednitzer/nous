@@ -13,9 +13,10 @@ through 0022).
 
 Deployment-side status note: the L1 subsystem rollout has been on
 `origin/main` since PR #38, so the auto-update timer lands the
-nineteen-tool surface on the live VM on every poll. Five audit
-findings have closed since the 2026-05-23 baseline and the
-post-baseline §10 re-audit: **C3** (FastMCP lifespan ticks the
+nineteen-tool surface on the live VM on the next poll after
+`origin/main` advances (no-op when the remote HEAD is unchanged).
+Eight audit findings have closed since the 2026-05-23 baseline and
+the post-baseline §10 re-audit: **C3** (FastMCP lifespan ticks the
 engine, PR #40 + #42 follow-up), **C6** (CI policy greps enforce
 em-dash and private-repo bans, PR #41), **N1** (deployment drift
 between development line and `main`, PR #38), plus the

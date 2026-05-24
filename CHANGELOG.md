@@ -20,8 +20,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the tick boundary. §4 walks each interop adapter against its
   `docs/conformance/` document and confirms the encoders match.
   Carry-forward open items (C2, H1, H2, H6, H7, H8, H9, M1, M10,
-  N2 through N7) are re-verified at `file:line` against the
-  source. New observations: **N8** (ADRs 0019 through 0022 are
+  N2 through N7, and L9 from the 2026-05-20 baseline) are
+  re-verified at `file:line` against the source. New observations: **N8** (ADRs 0019 through 0022 are
   Proposed but unimplemented), **N9** (sensors and biometrics
   subsystems lack `docs/conformance/` entries), **N10** (six L1
   subsystem read tools missing from `_INSTRUCTIONS`).

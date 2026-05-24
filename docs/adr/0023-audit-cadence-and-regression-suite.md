@@ -85,8 +85,14 @@ Three coupled conventions, effective from 2026-05-24:
 
 The conventions apply prospectively. Existing closed findings (C1,
 C4, C5, H3, M8) were retroactively regression-pinned in PR #44; the
-remaining closures (C3, C6) should be pinned the next time the
-regression suite is touched.
+remaining code-level closures (C3 server lifespan, C6 CI policy
+greps) should be pinned the next time the regression suite is
+touched. N1 (deployment drift between the development line and
+`main`) is a deployment-state finding rather than a code defect:
+the closure evidence is a `git log` invariant (`origin/main`
+matches `HEAD`), not an assertion that fits the unit-test surface,
+so it is not regression-pinned. The cadence convention (this ADR's
+first rule) is the durable guard against it re-opening.
 
 ## Consequences
 
