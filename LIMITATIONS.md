@@ -4,7 +4,9 @@ This document is authoritative on what `nous` is *not* yet, and what it does
 not aim to be at all. Read it before opening an issue claiming a missing
 capability.
 
-Last reviewed: 2026-05-23.
+Last reviewed: 2026-05-24
+([`docs/audit-2026-05-24.md`](docs/audit-2026-05-24.md), code-index
+audit at HEAD `fb8356f`).
 
 ## L1. Pre-1.0
 

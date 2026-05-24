@@ -6,6 +6,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documented
+
+- Full code-index audit at revision `fb8356f` published as
+  [`docs/audit-2026-05-24.md`](docs/audit-2026-05-24.md). Delta
+  against the 2026-05-23 audit (including its §10 re-audit): the
+  borrowed regression suite at
+  `tests/regression/test_audit_findings.py` formally pins **C1**,
+  **C4**, **C5** (five estimators), **H3**, and **M8** as closed
+  with the prior defect in the class docstring; the
+  `engine._assert_post_tick_finite` guard is a new defensive
+  measure catching the C5-class "stub emits NaN" failure mode at
+  the tick boundary. §4 walks each interop adapter against its
+  `docs/conformance/` document and confirms the encoders match.
+  Carry-forward open items (C2, H1, H2, H6, H7, H8, H9, M1, M10,
+  N2 through N7) are re-verified at `file:line` against the
+  source. New observations: **N8** (ADRs 0019 through 0022 are
+  Proposed but unimplemented), **N9** (sensors and biometrics
+  subsystems lack `docs/conformance/` entries), **N10** (six L1
+  subsystem read tools missing from `_INSTRUCTIONS`).
+- ADR 0023 accepted: audit cadence and regression-suite pattern.
+  Codifies the delta-audit format
+  (`docs/audit-YYYY-MM-DD.md`), the regression-pin convention
+  (`tests/regression/test_audit_findings.py` classes named after
+  the finding id, prior defect in the docstring), and the
+  open-finding traceability rule (every open finding re-verified
+  with a `file:line` reference in each audit document). The
+  conventions apply prospectively; existing closed findings were
+  retroactively pinned in PR #44.
+
 ### Fixed
 
 - AUDIT-2026-05-23 C3: the FastMCP server now registers a lifespan

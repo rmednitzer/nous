@@ -1,9 +1,14 @@
 # AUDIT
 
-> **Superseded for current state by [`docs/audit-2026-05-23.md`](docs/audit-2026-05-23.md).**
-> This document is preserved as the 2026-05-20 baseline; consult the
-> 2026-05-23 audit for which findings closed, which remain open, and
-> for the live-MCP probe results.
+> **Superseded for current state by [`docs/audit-2026-05-24.md`](docs/audit-2026-05-24.md).**
+> This document is preserved as the 2026-05-20 baseline. The 2026-05-23
+> audit ([`docs/audit-2026-05-23.md`](docs/audit-2026-05-23.md)) is the
+> intermediate delta with the live-MCP probe; the 2026-05-24 audit is
+> the most recent code-index audit and the canonical source for which
+> findings closed (with regression-pin evidence), which remain open
+> (re-verified at `file:line`), and which conformance documents the
+> shipped adapters match. The cadence is codified in
+> [ADR 0023](docs/adr/0023-audit-cadence-and-regression-suite.md).
 
 Point-in-time repository audit of `nous` against Python, FastMCP, OAuth
 2.1, OGC/MISB/NMEA/CoT, and STPA-Pro best practices. The audit covers
