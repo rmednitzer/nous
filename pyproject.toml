@@ -59,7 +59,7 @@ dev = [
     "ruff>=0.15,<0.16",
     "mypy>=1.13",
     "hypothesis>=6.115",
-    "types-PyYAML>=6.0",
+    "types-PyYAML>=6.0.12.20260518",
 ]
 docs = [
     "mkdocs>=1.6",
