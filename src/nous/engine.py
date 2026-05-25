@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .config import Settings, get_settings
 from .estimators.apu import ApuEstimator
@@ -44,6 +45,13 @@ from .subsystems.thermal import ThermalSubsystem
 from .types import TickContext
 
 __all__ = ["Engine", "EngineState"]
+
+
+class ProfileModel(BaseModel):
+    """Minimal schema gate for hardware profile YAML files."""
+
+    model_config = ConfigDict(extra="allow")
+    name: str
 
 
 @dataclass
@@ -346,11 +354,19 @@ class Engine:
 
 
 def _load_profile(name: str) -> Mapping[str, Any]:
-    """Load ``profiles/<name>.yaml`` from the source tree or fall back to defaults."""
+    """Load and validate ``profiles/<name>.yaml`` from the source tree."""
     root = Path(__file__).resolve().parents[2] / "profiles" / f"{name}.yaml"
-    if root.exists():
-        with root.open(encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
-        if isinstance(data, dict):
-            return data
-    return {"name": name, "source": "default-fallback"}
+    if not root.exists():
+        msg = f"profile YAML not found: {root}"
+        raise FileNotFoundError(msg)
+    with root.open(encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+    if not isinstance(data, dict):
+        msg = f"profile YAML must decode to a mapping: {root}"
+        raise ValueError(msg)
+    try:
+        ProfileModel.model_validate(data)
+    except ValidationError as exc:
+        msg = f"profile YAML failed schema validation: {root}"
+        raise ValueError(msg) from exc
+    return data
