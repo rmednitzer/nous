@@ -66,7 +66,7 @@ docs = [
     "mkdocs-material>=9.5",
     "mkdocs-mermaid2-plugin>=1.2.3",
     "mkdocstrings[python]>=0.27",
-    "pymdown-extensions>=10.12",
+    "pymdown-extensions>=10.21.3",
 ]
 prod = [
     "gunicorn>=26.0.0",
