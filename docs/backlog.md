@@ -35,7 +35,7 @@ possible.
 
 - BL-019 [stable] (L2) OAuth issuer wired into FastMCP via the SDK provider.
 - BL-020 [planned] (L2) HTTP transport with OAuth and Caddy template.
-- BL-021 [planned] (L2) Anthropic client cap surfacing + structured `CapExhausted` payload.
+- BL-021 [in-progress] (L2) Anthropic client cap surfacing + structured `CapExhausted` payload. New `nous.anthropic_status` module wraps `CallCap.peek()` and renders cap state as a JSON payload (`available`, `count_today`, `cap`, `remaining`, `exhausted`, `cap_disabled`, `model_default`, `model_advanced`). `cap_exhausted_payload(exc, settings=...)` renders the exception as the same shape so a controller catching `CapExhausted` from `inference_cloud` gets a structured branch. New `anthropic_cap_status` MCP tool (T0) surfaces it.
 - BL-022 [planned] (L2) State machine refuses unsafe transitions per DR-2.
 - BL-023 [in-progress] (L2) Scenario pack: env-monitoring, c2-degraded-comms, relay-mountain, operator-heat-strain, standalone-comms-hub, apu-solar-sustained, apu-fuelcell-overnight. Seven canonical scenarios under `scenarios/` are runnable end-to-end through the BL-014 runner; the integration suite (`tests/integration/test_canonical_scenarios.py`) walks every YAML against the live engine and asserts the runner produces a sane report. The runner auto-issues `ready` after `start` so a scenario can begin with `mission` / `relay` / `monitoring` / `c2` without a BOOT prefix step.
 - BL-024 [planned] (L2) CoT/TAK adapter (XML encode + decode).
@@ -44,19 +44,19 @@ possible.
 - BL-027 [planned] (L2) Power SoC estimator.
 - BL-028 [planned] (L2) Thermal Kalman filter.
 - BL-029 [planned] (L2) Biometrics Kalman filter.
-- BL-030 [planned] (L2) Comms particle filter.
+- BL-030 [in-progress] (L2) Comms particle filter. `CommsParticleFilter` upgraded from the per-link deterministic tracker to a Sequential Importance Resampling filter with N binary-state particles per link, a sticky Markov transition model conditioned on RSSI + packet loss, and a log-throughput observation model with systematic resampling. Deterministic under the engine seed (`numpy.random.default_rng`). `state()` now reports a real `connected_links_belief` (soft sum) alongside the integer `connected_links` count.
 - BL-031 [planned] (L2) Daily audit hash chain (BL-016 follow-up).
 - BL-031a [planned] (L2) Compute Kalman filter.
 - BL-032 [planned] (L2) MISB KLV adapter.
 - BL-033 [planned] (L2) NMEA 0183 adapter (pynmea2).
 - BL-034 [planned] (L2) STANAG 4774/4778 confidentiality-label adapter.
-- BL-035 [planned] (L2) Self-model assessment with calibrated quantiles per DR-1.
+- BL-035 [in-progress] (L2) Self-model assessment with calibrated quantiles per DR-1. `assess(question, engine=..., mode="monte_carlo", seed=0)` now samples each estimator's posterior with `numpy.random.default_rng(seed)`, pushes the samples through the capability functions (endurance, headroom, inference capacity), and takes empirical 5/50/95 quantiles. Honest under the non-linearities (endurance divides by net load; capacity respects the 100% load clamp). `mode="gaussian"` opt-out retained for v0.1 callers.
 - BL-036 [planned] (L2) MQTT adapter (paho).
 - BL-037 [planned] (L2) OTEL instrumentation on the tick loop.
 - BL-038 [planned] (L2) Logrotate hardening (`postrotate chattr +a`).
 - BL-039 [in-progress] (L2) Profile hot-reload. `Engine.reload_profile(name)` re-reads the named YAML, validates it through the `ProfileModel` gate, and rebuilds every subsystem and estimator while preserving FSM mode and tick counter. New `profile_reload` MCP tool surfaces it. Failed loads (missing file, bad schema) raise and keep the previous profile mounted.
 - BL-040 [planned] (L2) Physiology-grounded biometrics model.
-- BL-041 [planned] (L2) Tier-2/Tier-3 subsystem mutators (per ADR-0013).
+- BL-041 [in-progress] (L2) Tier-2/Tier-3 subsystem mutators (per ADR-0013). Interop encoder/decoder mutators surface live: `interop_encode(adapter, data)` (T1) and `interop_decode(adapter, payload_hex)` (T1) wired through the audited runner and tested end-to-end. New `nous.interop.REGISTRY` exposes every shipped adapter (`cot`, `sensorthings`, `misb_klv`, `nmea0183`, `stanag_4774`, `mqtt`) so the tool surface stays auto-discoverable.
 
 ## L3 -- STPA completion and benchmarks
 

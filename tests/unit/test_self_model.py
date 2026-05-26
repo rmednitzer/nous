@@ -119,3 +119,32 @@ def test_engine_tick_refreshes_last_capabilities(engine: Engine) -> None:
     assert "endurance_min" in caps
     assert "thermal_headroom_c" in caps
     assert "inference_capacity_tok_per_s" in caps
+
+
+def test_monte_carlo_and_gaussian_modes_agree_on_point(engine: Engine) -> None:
+    """The headline point is mode-invariant; only the bands shift between MC and Gaussian."""
+    mc = assess("status", engine=engine, mode="monte_carlo")
+    gauss = assess("status", engine=engine, mode="gaussian")
+    assert mc.endurance is not None and gauss.endurance is not None
+    assert mc.endurance.point == pytest.approx(gauss.endurance.point)
+    assert mc.thermal_headroom is not None and gauss.thermal_headroom is not None
+    assert mc.thermal_headroom.point == pytest.approx(gauss.thermal_headroom.point)
+
+
+def test_assess_is_deterministic_under_seed(engine: Engine) -> None:
+    """Two calls with the same seed produce identical quantile bands."""
+    a = assess("status", engine=engine, seed=99)
+    b = assess("status", engine=engine, seed=99)
+    assert a.endurance is not None and b.endurance is not None
+    assert a.endurance.p5 == pytest.approx(b.endurance.p5)
+    assert a.endurance.p95 == pytest.approx(b.endurance.p95)
+
+
+def test_monte_carlo_quantiles_respect_endurance_floor(engine: Engine) -> None:
+    """Sampled SoC at 0 should not produce negative endurance quantiles."""
+    engine.power.set_soc_pct(10.0)
+    for _ in range(5):
+        engine.tick()
+    a = assess("low soc", engine=engine, mode="monte_carlo")
+    assert a.endurance is not None
+    assert a.endurance.p5 >= 0.0

@@ -77,6 +77,7 @@ _READ_ONLY_TOOLS = frozenset(
         "interop_formats",
         "scenario_status",
         "audit_summary",
+        "anthropic_cap_status",
     }
 )
 

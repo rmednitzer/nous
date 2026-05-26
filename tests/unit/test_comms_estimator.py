@@ -128,3 +128,89 @@ def test_loss_pct_clamped_to_zero_one_hundred() -> None:
         )
     )
     assert f.links()[0].loss_pct == pytest.approx(100.0)
+
+
+def test_belief_converges_to_connected_on_healthy_link() -> None:
+    """A healthy link with good throughput should converge to belief ~ 1."""
+    f = CommsParticleFilter(particles=64, seed=42)
+    for tick in range(20):
+        f.predict(1.0)
+        f.update(
+            _obs(
+                {
+                    "link_id": "lte",
+                    "rssi_dbm": -65.0,
+                    "loss_pct": 0.5,
+                    "throughput_bps": 1_000_000.0,
+                    "connected": True,
+                },
+                ts=float(tick + 1),
+            )
+        )
+    belief = f.belief("lte")
+    assert belief is not None
+    assert belief > 0.85
+
+
+def test_belief_converges_to_disconnected_on_silent_link() -> None:
+    """A link with zero throughput should converge to belief ~ 0."""
+    f = CommsParticleFilter(particles=64, seed=7)
+    for tick in range(20):
+        f.predict(1.0)
+        f.update(
+            _obs(
+                {
+                    "link_id": "lora",
+                    "rssi_dbm": -115.0,
+                    "loss_pct": 95.0,
+                    "throughput_bps": 0.0,
+                    "connected": False,
+                },
+                ts=float(tick + 1),
+            )
+        )
+    belief = f.belief("lora")
+    assert belief is not None
+    assert belief < 0.15
+
+
+def test_state_covariance_is_finite_and_non_negative() -> None:
+    """Aggregate covariance must respect the engine's post-tick invariants."""
+    f = CommsParticleFilter(particles=32, seed=3)
+    f.update(
+        _obs(
+            {
+                "link_id": "lte",
+                "rssi_dbm": -80.0,
+                "loss_pct": 5.0,
+                "throughput_bps": 500_000.0,
+                "connected": True,
+            }
+        )
+    )
+    state = f.state()
+    cov = state.covariance["connected_links"]
+    assert isinstance(cov, float)
+    assert cov >= 0.0
+    assert cov < 1.0
+
+
+def test_deterministic_under_seed() -> None:
+    """Two filters with the same seed produce identical particle trajectories."""
+    obs = _obs(
+        {
+            "link_id": "lte",
+            "rssi_dbm": -90.0,
+            "loss_pct": 30.0,
+            "throughput_bps": 50_000.0,
+            "connected": True,
+        }
+    )
+    a = CommsParticleFilter(particles=16, seed=11)
+    b = CommsParticleFilter(particles=16, seed=11)
+    for _ in range(5):
+        a.predict(1.0)
+        a.update(obs)
+        b.predict(1.0)
+        b.update(obs)
+    assert a.belief("lte") == pytest.approx(b.belief("lte"))
