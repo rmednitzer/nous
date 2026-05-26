@@ -19,6 +19,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from . import __version__
 from .audit import AuditLogger
 from .config import Settings, get_settings
+from .db import StateTransitionLog, init_db
 from .engine import Engine
 from .policy import PolicyMode
 from .runner import run as audited_run
@@ -48,7 +49,15 @@ class Nous:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.audit = AuditLogger(str(settings.resolved_audit_path()))
-        self.engine = Engine(settings=settings)
+        db_engine = None
+        try:
+            db_engine = init_db(settings.resolved_db_url())
+        except Exception:  # noqa: BLE001
+            db_engine = None
+        self.transition_log = StateTransitionLog(db_engine)
+        self.engine = Engine(
+            settings=settings, transition_log=self.transition_log
+        )
         self.engine.start()
 
     @property
@@ -211,13 +220,42 @@ def build_server(settings: Settings | None = None) -> FastMCP:
 
     @mcp.tool()
     async def state_history(limit: int = 16, ctx: Context | None = None) -> str:
-        """Recent FSM transitions (oldest first; up to ``limit`` rows)."""
+        """Recent FSM transitions (oldest first; up to ``limit`` rows).
+
+        Prefers the SQLite ``state_transitions`` table when available so
+        history survives a restart; falls back to the in-memory FSM
+        history when the DB is unreachable (kept consistent with the
+        audit logger's "best effort" posture).
+        """
 
         async def _work() -> str:
-            hist = app.engine.fsm.history()[-max(1, min(limit, 256)) :]
-            rows = [
-                {"from": f.value, "trigger": t, "to": n.value} for (f, t, n) in hist
-            ]
+            n = max(1, min(limit, 256))
+            db_rows = app.transition_log.tail(n)
+            if db_rows:
+                rows = [
+                    {
+                        "from": r.from_mode,
+                        "trigger": r.trigger,
+                        "to": r.to_mode,
+                        "reason": r.reason,
+                        "ts": r.ts.isoformat(),
+                        "source": "sqlite",
+                    }
+                    for r in db_rows
+                ]
+            else:
+                hist = app.engine.fsm.history()[-n:]
+                rows = [
+                    {
+                        "from": f.value,
+                        "trigger": t,
+                        "to": n2.value,
+                        "reason": "",
+                        "ts": "",
+                        "source": "memory",
+                    }
+                    for (f, t, n2) in hist
+                ]
             return json.dumps(rows, indent=2)
 
         return await _wrap(
@@ -528,19 +566,76 @@ def build_server(settings: Settings | None = None) -> FastMCP:
 
     @mcp.tool()
     async def self_model_assess(question: str = "", ctx: Context | None = None) -> str:
-        """Self-model capability assessment (placeholder for L1)."""
+        """Self-model capability assessment with calibrated p5/p50/p95 bands."""
 
         async def _work() -> str:
+            from .self_model.assess import assess
+            from .self_model.explain import explain
+
+            a = assess(question, engine=app.engine)
+            payload = {
+                "question": a.question,
+                "capabilities": {
+                    cap.name: cap.model_dump()
+                    for cap in (
+                        a.endurance,
+                        a.thermal_headroom,
+                        a.inference_capacity,
+                    )
+                    if cap is not None
+                },
+                "explanation": explain(a),
+            }
+            return json.dumps(payload)
+
+        return await _wrap(
+            "self_model_assess", {"question": question}, ctx, _work
+        )
+
+    @mcp.tool()
+    async def self_model_viability(
+        task: str,
+        endurance_min: float | None = None,
+        thermal_headroom_c: float | None = None,
+        inference_tok_per_s: float | None = None,
+        ctx: Context | None = None,
+    ) -> str:
+        """Decide whether a task is feasible against the current capabilities."""
+
+        async def _work() -> str:
+            from .self_model.assess import assess
+            from .self_model.viability import viability
+
+            requirements: dict[str, float] = {}
+            if endurance_min is not None:
+                requirements["endurance_min"] = float(endurance_min)
+            if thermal_headroom_c is not None:
+                requirements["thermal_headroom_c"] = float(thermal_headroom_c)
+            if inference_tok_per_s is not None:
+                requirements["inference_tok_per_s"] = float(inference_tok_per_s)
+
+            a = assess(task, engine=app.engine)
+            v = viability(a, task, requirements=requirements or None)
             return json.dumps(
                 {
-                    "question": question or "default",
-                    "capabilities": app.engine.state.last_capabilities,
-                    "note": "self-model layer lands in L1",
+                    "task": task,
+                    "feasible": v.feasible,
+                    "confidence": v.confidence,
+                    "reason": v.reason,
+                    "requirements": requirements,
                 }
             )
 
         return await _wrap(
-            "self_model_assess", {"question": question}, ctx, _work
+            "self_model_viability",
+            {
+                "task": task,
+                "endurance_min": endurance_min,
+                "thermal_headroom_c": thermal_headroom_c,
+                "inference_tok_per_s": inference_tok_per_s,
+            },
+            ctx,
+            _work,
         )
 
     @mcp.tool()
@@ -639,6 +734,52 @@ def build_server(settings: Settings | None = None) -> FastMCP:
             )
 
         return await _wrap("interop_formats", {}, ctx, _work)
+
+    @mcp.tool()
+    async def scenario_load(path: str, ctx: Context | None = None) -> str:
+        """Load and run a scenario YAML against the engine.
+
+        Returns the structured run report (steps fired, snapshot after
+        the last tick). The runner advances the engine through the
+        scenario's tick budget, so a long scenario blocks the tool
+        call -- a future enhancement (BL-014) can switch to background
+        execution if the controller needs to interleave reads.
+        """
+
+        async def _work() -> str:
+            from .scenarios import load_scenario_file, run_scenario
+
+            scenario = load_scenario_file(path)
+            report = run_scenario(app.engine, scenario)
+            return json.dumps(dict(report))
+
+        return await _wrap("scenario_load", {"path": path}, ctx, _work)
+
+    @mcp.tool()
+    async def scenario_inject(
+        action: str,
+        args: dict[str, Any] | None = None,
+        ctx: Context | None = None,
+    ) -> str:
+        """Fire a single scenario injector against the live engine.
+
+        Useful for ad-hoc what-ifs without the overhead of writing a
+        YAML scenario. ``action`` matches the names in
+        :mod:`nous.scenarios.injectors`.
+        """
+
+        async def _work() -> str:
+            from .scenarios.injectors import apply_injection
+
+            outcome = apply_injection(app.engine, action, args or {})
+            return json.dumps(outcome)
+
+        return await _wrap(
+            "scenario_inject",
+            {"action": action, "args": dict(args or {})},
+            ctx,
+            _work,
+        )
 
     return mcp
 

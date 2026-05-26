@@ -20,6 +20,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .config import Settings, get_settings
+from .db import StateTransitionLog
 from .estimators.apu import ApuEstimator
 from .estimators.biometrics import BiometricsKalman
 from .estimators.comms import CommsParticleFilter
@@ -32,6 +33,7 @@ from .estimators.thermal import ThermalKalman
 from .state.comms_state import CommsState
 from .state.machine import GuardDenied, Mode, StateMachine
 from .state.operator_state import OperatorState
+from .state.operator_state import derive as derive_operator
 from .subsystems.apu import ApuSubsystem
 from .subsystems.biometrics import BiometricsSubsystem
 from .subsystems.comms import CommsSubsystem
@@ -60,7 +62,9 @@ class EngineState:
     ts_s: float = 0.0
     mode: Mode = Mode.STOWED
     operator_state: OperatorState = OperatorState.NOMINAL
+    operator_state_reason: str = ""
     comms_state: CommsState = CommsState.CONNECTED
+    comms_state_reason: str = ""
     last_capabilities: dict[str, float] = field(default_factory=dict)
 
 
@@ -72,12 +76,14 @@ class Engine:
         settings: Settings | None = None,
         profile: Mapping[str, Any] | None = None,
         scenario: Mapping[str, Any] | None = None,
+        transition_log: StateTransitionLog | None = None,
     ) -> None:
         self.settings: Settings = settings or get_settings()
         self.profile: Mapping[str, Any] = profile or _load_profile(self.settings.profile)
         self.scenario: Mapping[str, Any] | None = scenario
         self.fsm = StateMachine()
         self.state = EngineState(mode=self.fsm.current)
+        self.transition_log = transition_log or StateTransitionLog(None)
         self._started = False
         self._wall_start = 0.0
 
@@ -110,13 +116,18 @@ class Engine:
         )
         self.comms_est = CommsParticleFilter()
         self.comms_est.update(self.comms.sensor_obs())
-        self.state.comms_state, _ = self.comms.derive_state()
+        self.state.comms_state, self.state.comms_state_reason = (
+            self.comms.derive_state()
+        )
         self.position_est = PositionEKF()
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est = EnvironmentalKalman()
         self.sensors_est.update(self.sensors.sensor_obs())
         self.biometrics_est = BiometricsKalman()
         self.biometrics_est.update(self.biometrics.sensor_obs())
+        self.state.operator_state, self.state.operator_state_reason = (
+            derive_operator(self.biometrics_est.state())
+        )
 
     @property
     def dt_s(self) -> float:
@@ -127,9 +138,13 @@ class Engine:
         if self._started:
             return
         if self.fsm.current is Mode.SHUTDOWN or self.fsm.current is Mode.FAULT:
-            self.fsm.transition("reset")
+            prev_reset: Mode = self.fsm.current
+            new_reset = self.fsm.transition("reset")
+            self._record_transition(prev_reset, "reset", new_reset, reason="boot reset")
         if self.fsm.current is Mode.STOWED:
-            self.fsm.transition("boot")
+            prev_boot: Mode = self.fsm.current
+            new_boot = self.fsm.transition("boot")
+            self._record_transition(prev_boot, "boot", new_boot, reason="boot")
         self._started = True
         self._wall_start = time.monotonic()
         self.state.mode = self.fsm.current
@@ -148,7 +163,10 @@ class Engine:
             return
         self._started = False
         if self.fsm.can("shutdown"):
-            self.state.mode = self.fsm.transition("shutdown")
+            prev = self.fsm.current
+            new = self.fsm.transition("shutdown")
+            self._record_transition(prev, "shutdown", new, reason="engine.stop")
+            self.state.mode = new
         else:
             self.state.mode = self.fsm.current
 
@@ -166,14 +184,37 @@ class Engine:
         ctx: dict[str, Any] = self._safety_context()
         if context:
             ctx.update(context)
+        prev = self.fsm.current
         try:
             new = self.fsm.transition(trigger, context=ctx)
         except GuardDenied as exc:
+            self._record_transition(
+                prev, trigger, exc.to, reason=f"refused: {exc.reason}", denied=True
+            )
             return False, self.fsm.current, exc.reason
         except ValueError as exc:
             return False, self.fsm.current, str(exc)
+        self._record_transition(prev, trigger, new, reason="controller")
         self.state.mode = new
         return True, new, ""
+
+    def _record_transition(
+        self,
+        frm: Mode,
+        trigger: str,
+        to: Mode,
+        *,
+        reason: str = "",
+        denied: bool = False,
+    ) -> None:
+        """Persist a transition to the SQLite log; never raises."""
+        prefix = "denied: " if denied else ""
+        self.transition_log.append(
+            from_mode=frm.value,
+            to_mode=to.value,
+            trigger=trigger,
+            reason=f"{prefix}{reason}"[:256],
+        )
 
     def _safety_context(self) -> dict[str, Any]:
         power_cfg = self.profile.get("power") or {}
@@ -228,14 +269,20 @@ class Engine:
         self.storage_est.update(self.storage.sensor_obs())
         self.comms_est.predict(dt)
         self.comms_est.update(self.comms.sensor_obs())
-        self.state.comms_state, _ = self.comms.derive_state()
+        self.state.comms_state, self.state.comms_state_reason = (
+            self.comms.derive_state()
+        )
         self.position_est.predict(dt)
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est.predict(dt)
         self.sensors_est.update(self.sensors.sensor_obs())
         self.biometrics_est.predict(dt)
         self.biometrics_est.update(self.biometrics.sensor_obs())
+        self.state.operator_state, self.state.operator_state_reason = (
+            derive_operator(self.biometrics_est.state())
+        )
 
+        self._refresh_capabilities()
         self._assert_post_tick_finite()
 
         ctx = TickContext(
@@ -246,6 +293,22 @@ class Engine:
             profile=self.settings.profile,
         )
         return ctx
+
+    def _refresh_capabilities(self) -> None:
+        """Refresh ``state.last_capabilities`` from the self-model.
+
+        Imported lazily to keep the engine module free of a self_model
+        import at module load (the self_model imports engine through
+        ``TYPE_CHECKING`` only).
+        """
+        from .self_model.assess import assess
+
+        a = assess("tick", engine=self)
+        caps: dict[str, float] = {}
+        for cap in (a.endurance, a.thermal_headroom, a.inference_capacity):
+            if cap is not None:
+                caps[cap.name] = cap.point
+        self.state.last_capabilities = caps
 
     def _assert_post_tick_finite(self) -> None:
         """Fail loud if a subsystem or estimator emits NaN/Inf or a negative variance.
@@ -290,7 +353,9 @@ class Engine:
             "ts_s": self.state.ts_s,
             "mode": self.state.mode.value,
             "operator_state": self.state.operator_state.value,
+            "operator_state_reason": self.state.operator_state_reason,
             "comms_state": self.state.comms_state.value,
+            "comms_state_reason": self.state.comms_state_reason,
             "profile": self.settings.profile,
             "scenario": self.settings.scenario or None,
             "power": {

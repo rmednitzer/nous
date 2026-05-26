@@ -70,8 +70,8 @@ def test_unknown_tool_blocked_by_guarded_without_allow(tool: str) -> None:
         "power_status", "apu_status", "thermal_status", "comms_state",
         "comms_status", "position_status", "biometrics_status",
         "compute_status", "inference_status", "storage_status", "sensors_status",
-        "self_model_assess", "self_estimator_status", "interop_formats",
-        "scenario_status", "audit_summary",
+        "self_model_assess", "self_model_viability", "self_estimator_status",
+        "interop_formats", "scenario_status", "audit_summary",
     }:
         return
     if tool in {

@@ -78,14 +78,9 @@ def _cmd_tick(args: argparse.Namespace) -> int:
 
 
 def _cmd_scenario(args: argparse.Namespace) -> int:
-    from pathlib import Path
+    from .scenarios import load_scenario_file, run_scenario
 
-    import yaml
-
-    from .scenarios.loader import load_scenario
-
-    data = yaml.safe_load(Path(args.path).read_text(encoding="utf-8"))
-    scenario = load_scenario(data)
+    scenario = load_scenario_file(args.path)
     engine = Engine(
         scenario={
             "meta": scenario.meta,
@@ -93,9 +88,8 @@ def _cmd_scenario(args: argparse.Namespace) -> int:
         }
     )
     engine.start()
-    for _ in range(scenario.tick_budget):
-        engine.tick()
-    json.dump(engine.snapshot(), sys.stdout, indent=2)
+    report = run_scenario(engine, scenario)
+    json.dump(report, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0
 

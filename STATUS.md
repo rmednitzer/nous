@@ -45,7 +45,7 @@ re-audit).
 | Phase | Name | State | Scope |
 |-------|------|-------|-------|
 | L0 | Scaffold | stable | Layout, governance docs, audited tool surface, FSM, engine tick, hardware-profile loader, OAuth issuer. v0.1 shipped; the FastMCP lifespan now drives `tick_loop` so the live server advances state (PR #40 + #42). |
-| L1 | Subsystem models + state machine | in-progress | All ten subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) implement step / truth / sensor_obs with live estimators; the state machine transitions on derived OperatorState and CommsState. Self-model wiring (BL-018) is the remaining gap. |
+| L1 | Subsystem models + state machine | in-progress | All ten subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) implement step / truth / sensor_obs with live estimators; the state machine transitions on derived OperatorState and CommsState. Self-model layer (BL-018) now emits real capability claims; scenario loader / injectors / runner (BL-014) drive the engine end-to-end; SQLite migration (BL-015) and FSM transition persistence (BL-017) ship. Remaining L1 gap: audit hash chain (BL-016, optional). |
 | L2 | claude.ai integration + scenarios | planned | HTTP transport with OAuth + Caddy lockdown in place; scenario pack runs end-to-end; biometrics physiology-grounded; profile hot-reload. |
 | L3 | STPA completion + benchmarks | planned | STPA derived requirements complete; comms propagation model; learned self-model; multi-tenant claude.ai; real local inference; additional interop adapters. |
 
@@ -104,10 +104,10 @@ re-audit).
 | `src/nous/estimators/position.py` | in-progress | v0.1 pass-through with NaN/Inf/range validation (BL-010 plumbing); full constant-velocity EKF lands with BL-026. |
 | `src/nous/estimators/sensors.py` | in-progress | Multi-channel Kalman over (temp_c, humidity_pct, baro_kpa); validates against physical bounds, rejects without poisoning the central estimate. |
 | `src/nous/estimators/biometrics.py` | in-progress | Multi-channel Kalman over biometric channels with physiological-bounds validation; `hydration_pct` added as a fourth tracked channel in BL-011. |
-| `src/nous/self_model/*` | planned | Assess/explain/viability shipped as stubs. |
+| `src/nous/self_model/*` | in-progress | `assess` / `explain` / `viability` (BL-018) read live estimator state and emit calibrated capability claims with Gaussian quantile bands. `BL-035` will replace the Gaussian approximation with the calibrated quantile mapping. |
 | `src/nous/interop/*` | planned | Each adapter ships as a typed stub in v0.1. |
 | `src/nous/auth/oauth.py` | in-progress | File-backed issuer shape. |
-| `src/nous/scenarios/*` | planned | Loader + injectors shipped as stubs. |
+| `src/nous/scenarios/*` | in-progress | `loader` parses YAML from disk into typed `Scenario` objects; `injectors` mutate the live engine for ten action kinds (FSM, biometrics, thermal, APU, comms, sensors, position, velocity, compute, inference); `runner` drives the engine through a scenario timeline and returns a JSON-safe report (BL-014). |
 | `profiles/jetson-agx-orin.yaml` | in-progress | Reference profile with placeholder curves. |
 | `deploy/*` | in-progress | Systemd / Caddy / logrotate / install.sh / cloud-init. |
 | Test suite | in-progress | Unit, integration scaffold, stdio smoke. |
