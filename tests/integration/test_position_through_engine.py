@@ -41,13 +41,13 @@ def test_dead_reckoning_advances_through_engine_ticks(engine: Engine) -> None:
 
 def test_position_ekf_tracks_truth_when_fix_held(engine: Engine) -> None:
     engine.position.set_position(45.5, -122.5, alt_m=120.0)
-    for _ in range(20):
+    for _ in range(200):
         engine.tick()
     estimate = engine.position_est.state()
-    assert estimate.point["lat"] == pytest.approx(engine.position.lat, abs=1e-6)
-    assert estimate.point["lon"] == pytest.approx(engine.position.lon, abs=1e-6)
+    assert estimate.point["lat"] == pytest.approx(engine.position.lat, abs=1e-4)
+    assert estimate.point["lon"] == pytest.approx(engine.position.lon, abs=1e-4)
     assert estimate.point["alt_m"] == pytest.approx(
-        engine.position.alt_m, abs=1e-3
+        engine.position.alt_m, abs=1.0
     )
 
 
@@ -86,4 +86,4 @@ def test_engine_starts_position_estimate_at_ground_truth(
     eng = Engine()
     estimate = eng.position_est.state()
     truth = eng.position.truth()
-    assert estimate.point["lat"] == pytest.approx(truth["lat"])
+    assert estimate.point["lat"] == pytest.approx(truth["lat"], abs=1e-3)

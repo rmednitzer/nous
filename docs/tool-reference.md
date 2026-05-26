@@ -1,44 +1,377 @@
 # Tool reference
 
-The development line registers the seventeen tools below. The live VM
-serves the older eleven-tool roster until `origin/main` catches up
-(see [audit-2026-05-23.md](audit-2026-05-23.md) §4 for the deployment
-drift). Use this page to read the contract for each tool; pair it with
-`device_info` on the live server to see which subset is reachable
-right now.
+Generated from the FastMCP registry by
+`scripts/gen_tool_reference.py`. Hand-editing this file is
+discouraged: regenerate with `make tool-reference` or
+`uv run python scripts/gen_tool_reference.py`. The `--check`
+flag is wired into CI so a drift between source and docs fails the
+build.
 
-> This page is hand-edited. `scripts/gen_tool_reference.py` will
-> regenerate it from the FastMCP server in L1 (BL-052).
-
-| Tool | Tier | Effect |
-|------|------|--------|
-| `device_info` | T0 | Version, profile, transport, policy mode, audit path. |
+| Tool | Tier | Summary |
+|------|------|---------|
+| `apu_status` | T0 | Auxiliary-power-unit state (solar, fuel cell, vehicle, USB-C PD). |
+| `biometrics_status` | T0 | Operator biometrics: heart rate, core temp, hydration, cognitive load. |
+| `comms_state` | T0 | Comms-stack summary (per ADR-0006). |
+| `comms_status` | T0 | Comms subsystem: per-link envelope, live RSSI, loss, throughput, age. |
+| `compute_status` | T0 | Compute subsystem: load fraction, electrical draw, throttling. |
 | `device_health` | T0 | Engine snapshot: tick, ts_s, mode, operator/comms state. |
-| `state_get` | T0 | Current FSM mode. |
-| `state_history` | T0 | Recent FSM transitions. |
-| `power_status` | T0 | Live Li-ion pack: SoC, terminal voltage, current, accepted vs offered APU charge, endurance, low/critical flag. |
-| `apu_status` | T0 | Per-source APU power (solar, fuel cell, vehicle, USB-C PD) plus fuel level. |
-| `thermal_status` | T0 | Two-state thermal model: junction and enclosure temperature, ambient, throttle headroom, throttling flag. |
-| `compute_status` | T0 | Compute load fraction, electrical draw, throttling and saturation flags, profile-reported token capacity. |
-| `inference_status` | T0 | Inference totals: local calls, tokens generated, joules consumed, last latency, profile capacity. |
-| `storage_status` | T0 | Storage capacity, used / free space, NAND wear, write rate, capacity / wear flags, estimator covariance. |
-| `comms_state` | T0 | Comms-stack summary: aggregate state label, derivation reason, per-link beliefs (id, connected, rssi, loss, throughput). |
-| `comms_status` | T0 | Per-link envelope and live state: nominal vs. live RSSI / loss / throughput, age, max_age, forced-state flag. |
-| `position_status` | T0 | Position ground truth (lat, lon, alt), velocity, heading, fix state, dead-reckoning duration, EKF estimate + sigmas, rejected-update counter. |
-| `sensors_status` | T0 | Environmental sensor pack: ambient temperature, humidity, barometric pressure, Kalman estimate + sigmas, rejected-update counter. |
-| `biometrics_status` | T0 | Operator biometrics: heart rate, core temp, hydration, cognitive-load proxy, Kalman estimate + sigmas, rejected-update counter. |
-| `self_model_assess` | T0 | Self-model capability assessment (stub until BL-018). |
-| `self_estimator_status` | T0 | Estimator covariances (live for power, APU, thermal, and compute; other estimators land in L1). |
-| `inference_local` | T1 | Local-path inference. Returns synthetic response plus latency, energy joules, and the profile's nominal token rate. |
+| `device_info` | T0 | Report nous version, profile, transport, policy mode, audit path. |
+| `inference_local` | T1 | Local-path inference. |
+| `inference_status` | T0 | Inference subsystem totals: calls, tokens, joules, last latency. |
 | `interop_formats` | T0 | List the interop adapters the server knows about. |
+| `position_status` | T0 | Position subsystem: lat/lon/alt ground truth, fix state, drift. |
+| `power_status` | T0 | Battery state-of-charge, draw, projected endurance. |
+| `profile_reload` | T2 | Hot-reload the hardware profile from disk. |
+| `scenario_inject` | T2 | Fire a single scenario injector against the live engine. |
+| `scenario_load` | T2 | Load and run a scenario YAML against the engine. |
+| `self_estimator_status` | T0 | Estimator covariances, last update times, divergence flags. |
+| `self_model_assess` | T0 | Self-model capability assessment with calibrated p5/p50/p95 bands. |
+| `self_model_viability` | T0 | Decide whether a task is feasible against the current capabilities. |
+| `sensors_status` | T0 | Environmental sensor pack: ambient temp, humidity, baro pressure. |
+| `state_get` | T0 | Current FSM mode. |
+| `state_history` | T0 | Recent FSM transitions (oldest first; up to ``limit`` rows). |
+| `storage_status` | T0 | Storage subsystem: capacity, used, wear, write rate. |
+| `thermal_status` | T0 | Two-state thermal model (junction + enclosure + ambient). |
 
 Every tool runs through the audited runner. Output bodies are SHA-256
 hashed; the audit record never contains the body itself. See
 `src/nous/runner.py` and ADR-0001.
 
-## Adding a tool
+## Parameter schemas
 
-See [AGENTS.md](https://github.com/rmednitzer/nous/blob/main/AGENTS.md#adding-an-mcp-tool). The handler must call
-the audited runner with a sensible `policy_text` (for the deny/allow
-regex), a `tier`-aware classification (via `policy.py`), and a
-truncatable `max_output`.
+Per-tool JSON Schema for the input shape. Generated from the FastMCP
+tool registry.
+
+### `apu_status`
+
+```json
+{
+  "properties": {},
+  "title": "apu_statusArguments",
+  "type": "object"
+}
+```
+
+### `biometrics_status`
+
+```json
+{
+  "properties": {},
+  "title": "biometrics_statusArguments",
+  "type": "object"
+}
+```
+
+### `comms_state`
+
+```json
+{
+  "properties": {},
+  "title": "comms_stateArguments",
+  "type": "object"
+}
+```
+
+### `comms_status`
+
+```json
+{
+  "properties": {},
+  "title": "comms_statusArguments",
+  "type": "object"
+}
+```
+
+### `compute_status`
+
+```json
+{
+  "properties": {},
+  "title": "compute_statusArguments",
+  "type": "object"
+}
+```
+
+### `device_health`
+
+```json
+{
+  "properties": {},
+  "title": "device_healthArguments",
+  "type": "object"
+}
+```
+
+### `device_info`
+
+```json
+{
+  "properties": {},
+  "title": "device_infoArguments",
+  "type": "object"
+}
+```
+
+### `inference_local`
+
+```json
+{
+  "properties": {
+    "max_tokens": {
+      "default": 128,
+      "title": "Max Tokens",
+      "type": "integer"
+    },
+    "prompt": {
+      "title": "Prompt",
+      "type": "string"
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "title": "inference_localArguments",
+  "type": "object"
+}
+```
+
+### `inference_status`
+
+```json
+{
+  "properties": {},
+  "title": "inference_statusArguments",
+  "type": "object"
+}
+```
+
+### `interop_formats`
+
+```json
+{
+  "properties": {},
+  "title": "interop_formatsArguments",
+  "type": "object"
+}
+```
+
+### `position_status`
+
+```json
+{
+  "properties": {},
+  "title": "position_statusArguments",
+  "type": "object"
+}
+```
+
+### `power_status`
+
+```json
+{
+  "properties": {},
+  "title": "power_statusArguments",
+  "type": "object"
+}
+```
+
+### `profile_reload`
+
+```json
+{
+  "properties": {
+    "name": {
+      "default": "",
+      "title": "Name",
+      "type": "string"
+    }
+  },
+  "title": "profile_reloadArguments",
+  "type": "object"
+}
+```
+
+### `scenario_inject`
+
+```json
+{
+  "properties": {
+    "action": {
+      "title": "Action",
+      "type": "string"
+    },
+    "args": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Args"
+    }
+  },
+  "required": [
+    "action"
+  ],
+  "title": "scenario_injectArguments",
+  "type": "object"
+}
+```
+
+### `scenario_load`
+
+```json
+{
+  "properties": {
+    "path": {
+      "title": "Path",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "title": "scenario_loadArguments",
+  "type": "object"
+}
+```
+
+### `self_estimator_status`
+
+```json
+{
+  "properties": {},
+  "title": "self_estimator_statusArguments",
+  "type": "object"
+}
+```
+
+### `self_model_assess`
+
+```json
+{
+  "properties": {
+    "question": {
+      "default": "",
+      "title": "Question",
+      "type": "string"
+    }
+  },
+  "title": "self_model_assessArguments",
+  "type": "object"
+}
+```
+
+### `self_model_viability`
+
+```json
+{
+  "properties": {
+    "endurance_min": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Endurance Min"
+    },
+    "inference_tok_per_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Inference Tok Per S"
+    },
+    "task": {
+      "title": "Task",
+      "type": "string"
+    },
+    "thermal_headroom_c": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Thermal Headroom C"
+    }
+  },
+  "required": [
+    "task"
+  ],
+  "title": "self_model_viabilityArguments",
+  "type": "object"
+}
+```
+
+### `sensors_status`
+
+```json
+{
+  "properties": {},
+  "title": "sensors_statusArguments",
+  "type": "object"
+}
+```
+
+### `state_get`
+
+```json
+{
+  "properties": {},
+  "title": "state_getArguments",
+  "type": "object"
+}
+```
+
+### `state_history`
+
+```json
+{
+  "properties": {
+    "limit": {
+      "default": 16,
+      "title": "Limit",
+      "type": "integer"
+    }
+  },
+  "title": "state_historyArguments",
+  "type": "object"
+}
+```
+
+### `storage_status`
+
+```json
+{
+  "properties": {},
+  "title": "storage_statusArguments",
+  "type": "object"
+}
+```
+
+### `thermal_status`
+
+```json
+{
+  "properties": {},
+  "title": "thermal_statusArguments",
+  "type": "object"
+}
+```

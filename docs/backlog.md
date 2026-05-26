@@ -13,7 +13,7 @@ possible.
 
 - BL-002 [in-progress] (L1) FastMCP server: full subsystem read tool surface. Power and APU tools now return real engine values; remaining subsystems still stub.
 - BL-003 [in-progress] (L1) Power subsystem (Li-ion + Peukert + thermal derate). Subsystem and SoC Kalman live; controller wiring in `server.py::power_status`.
-- BL-004 [planned] (L1) State machine wired to derived OperatorState and CommsState.
+- BL-004 [in-progress] (L1) State machine wired to derived OperatorState and CommsState. `state.operator_state` is now refreshed each tick from `derive_operator(biometrics_est.state())`; `state.comms_state` is refreshed from `comms.derive_state()`. Both labels (plus reasons) appear in the engine snapshot. The FSM itself does not yet auto-trigger on the labels; that gate lands with BL-022 / DR-2.
 - BL-005 [in-progress] (L1) Thermal subsystem with two-state model. Two-state lumped model (junction + enclosure) wired through the engine so the FSM thermal-headroom guard reads live junction temperature and the battery's cell temperature tracks the enclosure. `thermal_status` MCP tool added; thermal Kalman filter active with shrinking covariance.
 - BL-005a [in-progress] (L1) APU subsystem (solar PV + MPPT, methanol fuel cell, vehicle tether, USB-C PD-in). Subsystem, per-source Kalman, and `apu_status` tool wired; see ADR-0015.
 - BL-005b [planned] (L1) PMU/PDU subsystem (bus regulation, source arbitration, CC/CV charge profile, dual-slot battery hot-swap). Lifts `charge_limit_w` and the offered/accepted clamp off `PowerSubsystem` onto a new `PmuSubsystem`. Supersedes ADR-0015. New ADR documents the dual-slot hot-swap state machine (primary + secondary battery, PMU arbitrates the active source; the inactive slot can be removed without bus collapse).
@@ -25,11 +25,11 @@ possible.
 - BL-011 [in-progress] (L1) Biometrics subsystem (parametric, not physiology-grounded). Heart rate, core temp, hydration, cognitive load as ground truth with physiological-range clamps; profile sigmas from `sensors.biometrics` advertised on the observation. `BiometricsKalman` extended with a `hydration_pct` channel. `biometrics_status` MCP tool added. L2 physiology model still out of scope.
 - BL-012 [in-progress] (L1) Comms subsystem with link envelopes. Live per-link state from `profile["comms"]["links"]` (RSSI, loss, throughput, age); `tx(link_id, bytes)` resets age; links time out after `max_age_s`; `set_link_state` lets a scenario degrade or restore a link sticky. Engine derives `state.comms_state` from live links each tick via `derive()`. `comms_state` and `comms_status` MCP tools live; `CommsParticleFilter` upgraded from no-op stub to a per-link belief tracker (full transition particle filter is BL-030).
 - BL-013 [in-progress] (L1) Inference subsystem (local + cloud paths). Local path lives in `subsystems/inference.py`: a request returns profile-derived latency (`tok_per_s_p50`) and energy (`energy_j_per_tok`); totals accumulate; `set_continuous_rate` writes through to `ComputeSubsystem.set_inference_rate` so a sustained workload propagates into draw watts. `inference_local` MCP tool now returns the cost figures; new `inference_status` MCP tool exposes the totals. Cloud path (fallback ladder + cap accounting) deferred to a follow-up ADR.
-- BL-014 [planned] (L1) Scenario YAML loader + injectors.
-- BL-015 [planned] (L1) SQLite schema + Alembic baseline migration.
+- BL-014 [in-progress] (L1) Scenario YAML loader + injectors. `load_scenario_file` reads YAML from disk; `apply_injection` drives the engine for ten injector kinds (FSM transitions, biometrics deltas, thermal ambient shifts, APU overrides, comms loss, sensor drift, position teleport, velocity, compute steer, inference request); `run_scenario` walks the timeline against a tick budget and returns a JSON-safe report. New `scenario_load` / `scenario_inject` MCP tools surface the runner to controllers.
+- BL-015 [in-progress] (L1) SQLite schema + Alembic baseline migration. `alembic.ini` + `alembic/versions/0001_baseline.py` create `state_transitions` and `audit_entries` mirroring the SQLModel definitions in `db.py`. `alembic upgrade head` is wired through standard alembic configuration. Future schema evolution lands as additional revisions (BL-051).
 - BL-016 [planned] (L1) Audit JSONL hash chain (optional).
-- BL-017 [planned] (L1) `state_history` query path against SQLite.
-- BL-018 [planned] (L1) Self-model assess + explain + viability wired to estimators.
+- BL-017 [in-progress] (L1) `state_history` query path against SQLite. `StateTransitionLog` in `db.py` persists every successful FSM transition (and every guard refusal, with `denied:` prefix) to the `state_transitions` table; the `state_history` MCP tool prefers the SQLite rows when available and falls back to in-memory FSM history when the DB is unreachable.
+- BL-018 [in-progress] (L1) Self-model assess + explain + viability wired to estimators. `assess(question, engine=...)` reads the live power / thermal / compute estimator state and emits calibrated `Capability` claims (endurance_min, thermal_headroom_c, inference_capacity_tok_per_s) with Gaussian quantile bands; `explain` renders them plus a limiting-driver line; `viability` checks structured or keyword-sniffed requirements against the `p5` band. New `self_model_viability` MCP tool. The engine's `state.last_capabilities` is refreshed each tick. Calibrated mapping replacement is BL-035.
 
 ## L2 -- claude.ai integration and scenarios
 
@@ -37,10 +37,10 @@ possible.
 - BL-020 [planned] (L2) HTTP transport with OAuth and Caddy template.
 - BL-021 [planned] (L2) Anthropic client cap surfacing + structured `CapExhausted` payload.
 - BL-022 [planned] (L2) State machine refuses unsafe transitions per DR-2.
-- BL-023 [planned] (L2) Scenario pack: env-monitoring, c2-degraded-comms, relay-mountain, operator-heat-strain, standalone-comms-hub, apu-solar-sustained, apu-fuelcell-overnight.
+- BL-023 [in-progress] (L2) Scenario pack: env-monitoring, c2-degraded-comms, relay-mountain, operator-heat-strain, standalone-comms-hub, apu-solar-sustained, apu-fuelcell-overnight. Seven canonical scenarios under `scenarios/` are runnable end-to-end through the BL-014 runner; the integration suite (`tests/integration/test_canonical_scenarios.py`) walks every YAML against the live engine and asserts the runner produces a sane report. The runner auto-issues `ready` after `start` so a scenario can begin with `mission` / `relay` / `monitoring` / `c2` without a BOOT prefix step.
 - BL-024 [planned] (L2) CoT/TAK adapter (XML encode + decode).
 - BL-025 [planned] (L2) OGC SensorThings adapter.
-- BL-026 [planned] (L2) Position EKF.
+- BL-026 [in-progress] (L2) Position EKF. Constant-velocity kinematic EKF over `(lat, lon, alt, v_lat, v_lon, v_alt_m)`; predict propagates state under constant velocity, update folds GNSS observations via the standard Kalman gain. Velocity tracking deliberately left as predict-only (GNSS-noise floor makes a differentiated-velocity estimator unstable); an IMU observation channel lands the velocity state.
 - BL-027 [planned] (L2) Power SoC estimator.
 - BL-028 [planned] (L2) Thermal Kalman filter.
 - BL-029 [planned] (L2) Biometrics Kalman filter.
@@ -54,7 +54,7 @@ possible.
 - BL-036 [planned] (L2) MQTT adapter (paho).
 - BL-037 [planned] (L2) OTEL instrumentation on the tick loop.
 - BL-038 [planned] (L2) Logrotate hardening (`postrotate chattr +a`).
-- BL-039 [planned] (L2) Profile hot-reload.
+- BL-039 [in-progress] (L2) Profile hot-reload. `Engine.reload_profile(name)` re-reads the named YAML, validates it through the `ProfileModel` gate, and rebuilds every subsystem and estimator while preserving FSM mode and tick counter. New `profile_reload` MCP tool surfaces it. Failed loads (missing file, bad schema) raise and keep the previous profile mounted.
 - BL-040 [planned] (L2) Physiology-grounded biometrics model.
 - BL-041 [planned] (L2) Tier-2/Tier-3 subsystem mutators (per ADR-0013).
 
@@ -70,7 +70,7 @@ possible.
 - BL-049 [planned] (L3) Team coordination (multi-unit, buddy pair).
 - BL-050 [planned] (L3) Model card coverage for every estimator.
 - BL-051 [planned] (L3) Versioned schema migrations (`scripts/migrate_*.py`).
-- BL-052 [planned] (L3) Tool reference autogenerated from FastMCP schemas.
+- BL-052 [in-progress] (L3) Tool reference autogenerated from FastMCP schemas. `scripts/gen_tool_reference.py` walks the FastMCP registry, emits one Markdown table row per tool, and dumps the JSON Schema for every parameter shape. `--check` flag exits non-zero on drift so CI catches an added tool that forgot to regenerate the reference.
 - BL-053 [planned] (L3) Docs workflow + GitHub Pages deploy (depends on enabling Pages).
 - BL-054 [planned] (L3) Self-driving demo wiring Anthropic + nous MCP via stdio.
 - BL-055 [planned] (L3) Thermo-optical subsystem and estimator (EO/IR detection confidence, calibration drift, obscurant effects, and thermal contrast limits) with model card and profile-backed parameters.

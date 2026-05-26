@@ -70,8 +70,8 @@ def test_unknown_tool_blocked_by_guarded_without_allow(tool: str) -> None:
         "power_status", "apu_status", "thermal_status", "comms_state",
         "comms_status", "position_status", "biometrics_status",
         "compute_status", "inference_status", "storage_status", "sensors_status",
-        "self_model_assess", "self_estimator_status", "interop_formats",
-        "scenario_status", "audit_summary",
+        "self_model_assess", "self_model_viability", "self_estimator_status",
+        "interop_formats", "scenario_status", "audit_summary",
     }:
         return
     if tool in {
@@ -104,7 +104,8 @@ def test_args_irreversible_promotes_unclassified(
             "scenario_status", "audit_summary",
             "scenario_pause", "scenario_resume", "scenario_reset", "tick_advance",
             "inference_local", "interop_encode", "interop_decode",
-            "scenario_load", "scenario_inject", "comms_send", "comms_publish",
+            "scenario_load", "scenario_inject", "profile_reload",
+            "comms_send", "comms_publish",
             "inference_cloud", "inference_request", "self_model_publish",
             "state_transition", "request_transition",
         }

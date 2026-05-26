@@ -6,6 +6,6 @@ profile: jetson-agx-orin
 tick_budget: 600
 steps:
   - { at_min: 0, action: state_transition, args: { trigger: monitoring } }
-  - { at_min: 5, action: inject_sensor_drift, args: { source: position, lat_bias_m: 4.0 } }
-  - { at_min: 25, action: inject_sensor_drift, args: { source: position, lat_bias_m: 0.0 } }
+  - { at_min: 5, action: inject_sensor_drift, args: { source: position, north_mps: 0.1 } }
+  - { at_min: 25, action: inject_sensor_drift, args: { source: position, north_mps: 0.0 } }
   - { at_min: 55, action: state_transition, args: { trigger: complete } }

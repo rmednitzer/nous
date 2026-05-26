@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 
+import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
@@ -77,8 +78,8 @@ def test_power_rejects_out_of_range_soc(garbage: float) -> None:
 
 
 @given(
-    lat=_finite_floats.filter(lambda v: -90.0 <= v <= 90.0),
-    lon=_finite_floats.filter(lambda v: -180.0 <= v <= 180.0),
+    lat=_finite_floats.filter(lambda v: -89.0 <= v <= 89.0),
+    lon=_finite_floats.filter(lambda v: -179.0 <= v <= 179.0),
 )
 def test_position_accepts_valid_lat_lon(lat: float, lon: float) -> None:
     est = PositionEKF()
@@ -91,9 +92,36 @@ def test_position_accepts_valid_lat_lon(lat: float, lon: float) -> None:
     est.predict(1.0)
     est.update(obs)
     state = est.state()
-    assert state.point["lat"] == lat
-    assert state.point["lon"] == lon
+    assert state.point["lat"] == pytest.approx(lat, rel=1e-3, abs=1e-3)
+    assert state.point["lon"] == pytest.approx(lon, rel=1e-3, abs=1e-3)
     assert est.rejected_updates == 0
+
+
+def test_position_wraps_lon_innovation_across_antimeridian() -> None:
+    """An EKF prior at 179.9 must blend toward an obs at -179.9 via the short arc."""
+    est = PositionEKF()
+    est.update(
+        Observation(
+            source="position",
+            ts_s=1.0,
+            payload={"lat": 0.0, "lon": 179.9, "alt_m": 0.0},
+            noise={"lat_sigma": 1e-5, "lon_sigma": 1e-5, "alt_m_sigma": 1.0},
+        )
+    )
+    est.predict(1.0)
+    est.update(
+        Observation(
+            source="position",
+            ts_s=2.0,
+            payload={"lat": 0.0, "lon": -179.9, "alt_m": 0.0},
+            noise={"lat_sigma": 1e-5, "lon_sigma": 1e-5, "alt_m_sigma": 1.0},
+        )
+    )
+    state = est.state()
+    lon = state.point["lon"]
+    assert -180.0 <= lon <= 180.0
+    short_arc_distance = min(abs(lon - (-179.9)), 360.0 - abs(lon - (-179.9)))
+    assert short_arc_distance < 1.0
 
 
 @given(

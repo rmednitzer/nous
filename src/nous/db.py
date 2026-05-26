@@ -7,15 +7,22 @@ opened with WAL so reads and writes do not block each other.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, desc, event
 from sqlalchemy.engine import Engine
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Session, SQLModel, select
 
-__all__ = ["AuditEntry", "StateTransition", "init_db", "make_engine"]
+__all__ = [
+    "AuditEntry",
+    "StateTransition",
+    "StateTransitionLog",
+    "init_db",
+    "make_engine",
+]
 
 
 class StateTransition(SQLModel, table=True):
@@ -67,3 +74,63 @@ def init_db(url: str, *, ensure_parent: bool = True) -> Engine:
     engine = make_engine(url)
     SQLModel.metadata.create_all(engine)
     return engine
+
+
+class StateTransitionLog:
+    """Append + tail-query wrapper around ``StateTransition`` rows (BL-017).
+
+    The engine constructs one of these per process and calls
+    :meth:`append` whenever the FSM admits a transition. The
+    ``state_history`` MCP tool calls :meth:`tail` to read the last
+    ``limit`` rows. Append failures degrade silently so a flaky DB
+    cannot prevent the engine from advancing -- consistent with the
+    audit logger's "best effort" posture.
+    """
+
+    def __init__(self, engine: Engine | None) -> None:
+        self.engine = engine
+        self.append_failures = 0
+        self.last_error = ""
+
+    def append(
+        self,
+        *,
+        from_mode: str,
+        to_mode: str,
+        trigger: str,
+        reason: str = "",
+    ) -> None:
+        if self.engine is None:
+            return
+        row = StateTransition(
+            from_mode=from_mode,
+            to_mode=to_mode,
+            trigger=trigger,
+            reason=reason,
+        )
+        try:
+            with Session(self.engine) as session:
+                session.add(row)
+                session.commit()
+        except Exception as exc:  # noqa: BLE001
+            self.append_failures += 1
+            self.last_error = f"{exc.__class__.__name__}: {exc}"
+
+    def tail(self, limit: int = 16) -> list[StateTransition]:
+        """Return the most recent ``limit`` rows, oldest first."""
+        if self.engine is None:
+            return []
+        n = max(1, min(limit, 1024))
+        try:
+            with Session(self.engine) as session:
+                stmt = (
+                    select(StateTransition)
+                    .order_by(desc("id"))
+                    .limit(n)
+                )
+                rows: Iterable[StateTransition] = session.exec(stmt).all()
+                return list(reversed(list(rows)))
+        except Exception as exc:  # noqa: BLE001
+            self.append_failures += 1
+            self.last_error = f"{exc.__class__.__name__}: {exc}"
+            return []
