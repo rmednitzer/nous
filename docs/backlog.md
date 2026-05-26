@@ -37,7 +37,7 @@ possible.
 - BL-020 [planned] (L2) HTTP transport with OAuth and Caddy template.
 - BL-021 [planned] (L2) Anthropic client cap surfacing + structured `CapExhausted` payload.
 - BL-022 [planned] (L2) State machine refuses unsafe transitions per DR-2.
-- BL-023 [planned] (L2) Scenario pack: env-monitoring, c2-degraded-comms, relay-mountain, operator-heat-strain, standalone-comms-hub, apu-solar-sustained, apu-fuelcell-overnight.
+- BL-023 [in-progress] (L2) Scenario pack: env-monitoring, c2-degraded-comms, relay-mountain, operator-heat-strain, standalone-comms-hub, apu-solar-sustained, apu-fuelcell-overnight. Seven canonical scenarios under `scenarios/` are runnable end-to-end through the BL-014 runner; the integration suite (`tests/integration/test_canonical_scenarios.py`) walks every YAML against the live engine and asserts the runner produces a sane report. The runner auto-issues `ready` after `start` so a scenario can begin with `mission` / `relay` / `monitoring` / `c2` without a BOOT prefix step.
 - BL-024 [planned] (L2) CoT/TAK adapter (XML encode + decode).
 - BL-025 [planned] (L2) OGC SensorThings adapter.
 - BL-026 [in-progress] (L2) Position EKF. Constant-velocity kinematic EKF over `(lat, lon, alt, v_lat, v_lon, v_alt_m)`; predict propagates state under constant velocity, update folds GNSS observations via the standard Kalman gain. Velocity tracking deliberately left as predict-only (GNSS-noise floor makes a differentiated-velocity estimator unstable); an IMU observation channel lands the velocity state.

@@ -83,9 +83,16 @@ def run_scenario(engine: Engine, scenario: Scenario) -> ScenarioReport:
 
     The runner does not start or stop the engine; the caller owns
     lifecycle so the runner is composable with the FastMCP lifespan
-    and with the CLI's ``nous scenario`` subcommand.
+    and with the CLI's ``nous scenario`` subcommand. The runner does
+    issue the ``ready`` trigger after start if the FSM is sitting in
+    BOOT so the canonical scenarios (which start with a mission /
+    relay / monitoring / c2 trigger) admit cleanly.
     """
     engine.start()
+    from ..state.machine import Mode
+
+    if engine.fsm.current is Mode.BOOT:
+        engine.request_transition("ready")
 
     steps = scenario.steps_sorted()
     pending: list[tuple[int, ScenarioStep]] = list(enumerate(steps))
