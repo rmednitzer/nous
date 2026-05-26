@@ -63,7 +63,16 @@ class Scenario(BaseModel):
         return str(meta_name) if meta_name else "scenario"
 
     def steps_sorted(self) -> list[ScenarioStep]:
-        return sorted(self.steps, key=lambda s: (s.at_min, s.action))
+        """Return steps in firing order.
+
+        Sort key is ``at_min`` alone; Python's ``sorted`` is stable, so
+        the original declaration order is preserved for steps sharing
+        the same timestamp. Scenario authors can therefore rely on
+        ``inject_X`` -> ``state_transition`` sequencing at a single
+        ``at_min`` instead of having the runner reorder them
+        alphabetically.
+        """
+        return sorted(self.steps, key=lambda s: s.at_min)
 
 
 def load_scenario(data: Mapping[str, Any]) -> Scenario:

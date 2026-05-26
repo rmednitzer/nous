@@ -64,6 +64,14 @@ def apply_injection(
     Returns a JSON-safe mapping ``{"action", "args", "applied",
     "result?", "error?"}`` so the runner can mirror the step into
     the audit trail.
+
+    An injector that ran without raising but signalled a soft refusal
+    via ``{"ok": False, "reason": ...}`` (the shape ``_state_transition``
+    uses for guard denials) is recorded as ``applied=False`` with the
+    reason copied to ``error``. This keeps the report's
+    ``steps_fired`` / ``steps_skipped`` counters honest: a denied FSM
+    transition produces no state change and must not look fired in the
+    summary.
     """
     args = dict(args or {})
     fn = INJECTORS.get(action)
@@ -77,6 +85,14 @@ def apply_injection(
             "args": args,
             "applied": False,
             "error": f"{exc.__class__.__name__}: {exc}",
+        }
+    if isinstance(result, Mapping) and result.get("ok") is False:
+        return {
+            "action": action,
+            "args": args,
+            "applied": False,
+            "result": dict(result),
+            "error": str(result.get("reason", "soft refusal")),
         }
     return {"action": action, "args": args, "applied": True, "result": result}
 

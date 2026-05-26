@@ -133,7 +133,11 @@ class PositionEKF:
             s = p + r
             k = p / s
             innovation = z - self._point[key]
+            if key == "lon":
+                innovation = ((innovation + 180.0) % 360.0) - 180.0
             self._point[key] += k * innovation
+            if key == "lon":
+                self._point[key] = ((self._point[key] + 180.0) % 360.0) - 180.0
             self._var[key] = (1.0 - k) * p
 
         self._last_obs_ts = float(obs.ts_s)

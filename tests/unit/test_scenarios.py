@@ -191,6 +191,37 @@ def test_inject_sensor_drift_legacy_alias(engine: Engine) -> None:
     assert outcome["result"]["north_mps"] == 0.1
 
 
+def test_steps_sorted_preserves_declaration_order_for_same_at_min() -> None:
+    scenario = load_scenario(
+        {
+            "steps": [
+                {"at_min": 5, "action": "inject_thermal",
+                 "args": {"ambient_delta_c": 1.0}},
+                {"at_min": 5, "action": "state_transition",
+                 "args": {"trigger": "degrade"}},
+                {"at_min": 5, "action": "inject_biometrics",
+                 "args": {"core_temp_c_delta": 0.5}},
+            ],
+        }
+    )
+    ordered = scenario.steps_sorted()
+    assert [s.action for s in ordered] == [
+        "inject_thermal",
+        "state_transition",
+        "inject_biometrics",
+    ]
+
+
+def test_state_transition_denied_marked_not_applied(engine: Engine) -> None:
+    outcome = apply_injection(
+        engine,
+        "state_transition",
+        {"trigger": "no_such_trigger"},
+    )
+    assert outcome["applied"] is False
+    assert outcome["error"]
+
+
 def test_inline_yaml_round_trip(tmp_path: Path, engine: Engine) -> None:
     yaml_text = dedent(
         """
