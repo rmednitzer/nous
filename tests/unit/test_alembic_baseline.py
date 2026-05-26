@@ -72,3 +72,21 @@ def test_baseline_downgrade_drops_tables(alembic_cfg: Config, tmp_path: Path) ->
     tables = set(insp.get_table_names())
     assert "state_transitions" not in tables
     assert "audit_entries" not in tables
+
+
+def test_baseline_idempotent_against_init_db(
+    alembic_cfg: Config, tmp_path: Path
+) -> None:
+    """init_db creates the same schema; upgrade head must not 'table exists' on top."""
+    from alembic.command import upgrade
+
+    from nous.db import init_db
+
+    db_url = f"sqlite:///{tmp_path / 'state.db'}"
+    init_db(db_url)
+    upgrade(alembic_cfg, "head")
+
+    engine = create_engine(db_url)
+    insp = inspect(engine)
+    tables = set(insp.get_table_names())
+    assert {"state_transitions", "audit_entries", "alembic_version"}.issubset(tables)

@@ -81,11 +81,15 @@ def _cmd_scenario(args: argparse.Namespace) -> int:
     from .scenarios import load_scenario_file, run_scenario
 
     scenario = load_scenario_file(args.path)
+    cfg = get_settings()
+    if scenario.profile and scenario.profile != cfg.profile:
+        cfg = cfg.model_copy(update={"profile": scenario.profile})
     engine = Engine(
+        settings=cfg,
         scenario={
             "meta": scenario.meta,
             "steps": [step.model_dump() for step in scenario.steps],
-        }
+        },
     )
     engine.start()
     report = run_scenario(engine, scenario)

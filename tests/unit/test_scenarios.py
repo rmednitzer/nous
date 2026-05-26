@@ -141,6 +141,56 @@ def test_runner_returns_snapshot(engine: Engine) -> None:
     assert snapshot["tick"] >= 2
 
 
+def test_runner_uses_relative_tick_budget(engine: Engine) -> None:
+    """Runner must not short-circuit when the engine has already advanced."""
+    for _ in range(100):
+        engine.tick()
+    pre_run_tick = engine.state.tick
+    scenario = load_scenario({"tick_budget": 4, "steps": []})
+    report = run_scenario(engine, scenario)
+    assert report["ticks_run"] == 4
+    assert engine.state.tick == pre_run_tick + 4
+
+
+def test_runner_fires_zero_minute_step_immediately(engine: Engine) -> None:
+    scenario = load_scenario(
+        {
+            "tick_budget": 2,
+            "steps": [
+                {"at_min": 0, "action": "inject_biometrics",
+                 "args": {"core_temp_c_delta": 1.0}},
+            ],
+        }
+    )
+    pre_run_tick = engine.state.tick
+    report = run_scenario(engine, scenario)
+    fired = report["records"][0]
+    assert fired["applied"] is True
+    assert fired["tick"] == pre_run_tick
+
+
+def test_inject_sensor_drift_accepts_mps_args(engine: Engine) -> None:
+    outcome = apply_injection(
+        engine,
+        "inject_sensor_drift",
+        {"source": "position", "north_mps": 0.5, "east_mps": -0.2},
+    )
+    assert outcome["applied"] is True
+    assert outcome["result"]["north_mps"] == 0.5
+    assert outcome["result"]["east_mps"] == -0.2
+
+
+def test_inject_sensor_drift_legacy_alias(engine: Engine) -> None:
+    """Legacy ``lat_bias_m`` alias still routes to set_imu_drift."""
+    outcome = apply_injection(
+        engine,
+        "inject_sensor_drift",
+        {"source": "position", "lat_bias_m": 0.1},
+    )
+    assert outcome["applied"] is True
+    assert outcome["result"]["north_mps"] == 0.1
+
+
 def test_inline_yaml_round_trip(tmp_path: Path, engine: Engine) -> None:
     yaml_text = dedent(
         """

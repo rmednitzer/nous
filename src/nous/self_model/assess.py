@@ -46,6 +46,7 @@ __all__ = ["Assessment", "assess"]
 
 
 _Z_90 = 1.645
+_ENDURANCE_NET_CHARGE_CAP_MIN = 24 * 60.0
 
 
 class Assessment(BaseModel):
@@ -150,8 +151,17 @@ def _endurance_capability(engine: Engine) -> Capability:
 
 
 def _endurance_min(battery_wh: float, soc_pct: float, net_w: float) -> float:
+    """Return endurance in minutes.
+
+    When ``net_w <= 0`` the battery is being net-charged and the
+    endurance is unbounded; we return a 24h cap (``_ENDURANCE_NET_CHARGE_CAP_MIN``)
+    as a JSON-safe sentinel for "more than a day's worth of headroom".
+    The caller is expected to read ``confidence=0`` for the
+    net-charging branch and treat the figure as a hint rather than a
+    hard bound.
+    """
     if net_w <= 0.0:
-        return battery_wh * (soc_pct / 100.0)
+        return _ENDURANCE_NET_CHARGE_CAP_MIN
     remaining_wh = battery_wh * (max(0.0, soc_pct) / 100.0)
     return (remaining_wh / net_w) * 60.0
 

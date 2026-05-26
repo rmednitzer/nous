@@ -762,14 +762,25 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         scenario's tick budget, so a long scenario blocks the tool
         call -- a future enhancement (BL-014) can switch to background
         execution if the controller needs to interleave reads.
+
+        If the scenario names a profile that does not match the
+        currently-mounted one, the engine hot-reloads to the requested
+        profile (BL-039) before running so the report's physics matches
+        the declared scenario environment.
         """
 
         async def _work() -> str:
             from .scenarios import load_scenario_file, run_scenario
 
             scenario = load_scenario_file(path)
-            report = run_scenario(app.engine, scenario)
-            return json.dumps(dict(report))
+            reloaded_from = ""
+            if scenario.profile and scenario.profile != app.engine.settings.profile:
+                reloaded_from = app.engine.settings.profile
+                app.engine.reload_profile(name=scenario.profile)
+            report = dict(run_scenario(app.engine, scenario))
+            if reloaded_from:
+                report["profile_reloaded_from"] = reloaded_from
+            return json.dumps(report)
 
         return await _wrap("scenario_load", {"path": path}, ctx, _work)
 

@@ -21,7 +21,11 @@ Supported actions:
 * ``inject_comms_loss`` -- raise the loss percentage on a specific
   link (``link_id``, ``loss_pct``); a value of 100 cuts the link.
 * ``inject_sensor_drift`` -- nudge a sensor source. Today supports
-  ``source: position`` with ``lat_bias_m`` and ``lon_bias_m``.
+  ``source: position`` with ``north_mps`` and ``east_mps`` (IMU drift
+  velocities applied when GNSS fix is lost). Legacy ``lat_bias_m`` /
+  ``lon_bias_m`` aliases are accepted but interpreted as m/s drift,
+  not metres of position bias, so scenario authors should prefer the
+  ``*_mps`` names for clarity.
 * ``inject_position`` -- teleport ground truth (``lat``, ``lon``,
   optional ``alt_m``).
 * ``inject_velocity`` -- set the dead-reckoning velocity vector
@@ -183,12 +187,10 @@ def _inject_sensor_drift(engine: Engine, args: Mapping[str, Any]) -> InjectionRe
     if source != "position":
         raise ValueError(f"unsupported sensor source {source!r}")
     pos = engine.position
-    lat_bias_m = float(args.get("lat_bias_m", 0.0))
-    lon_bias_m = float(args.get("lon_bias_m", 0.0))
-    north_mps = lat_bias_m
-    east_mps = lon_bias_m
+    north_mps = float(args.get("north_mps", args.get("lat_bias_m", 0.0)))
+    east_mps = float(args.get("east_mps", args.get("lon_bias_m", 0.0)))
     pos.set_imu_drift(north_mps=north_mps, east_mps=east_mps)
-    return {"source": source, "lat_bias_m": lat_bias_m, "lon_bias_m": lon_bias_m}
+    return {"source": source, "north_mps": north_mps, "east_mps": east_mps}
 
 
 def _inject_position(engine: Engine, args: Mapping[str, Any]) -> InjectionResult:

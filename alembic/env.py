@@ -1,13 +1,21 @@
 """Alembic environment for nous.
 
-The simulator uses async SQLite + WAL via SQLAlchemy. This env builds
-the engine lazily from ``NOUS_DB_URL`` (or the default
-``$NOUS_HOME/state.db``) and runs migrations in offline or online mode.
+URL resolution order:
+
+1. ``alembic -x url=sqlite:///...`` (``context.get_x_argument``).
+2. ``NOUS_DB_URL`` environment variable.
+3. ``sqlalchemy.url`` from ``alembic.ini``.
+
+The third source is the developer-local default; production deployments
+should set either of the first two so the migration hits the deployment
+DB rather than the local sandbox.
 """
 
 from __future__ import annotations
 
+import os
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
@@ -19,6 +27,24 @@ from nous import db  # noqa: F401
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
+
+
+def _resolve_url() -> str | None:
+    x_args = dict(
+        arg.split("=", 1) for arg in context.get_x_argument() if "=" in arg
+    )
+    url = x_args.get("url") or os.environ.get("NOUS_DB_URL")
+    if url:
+        return url
+    return config.get_main_option("sqlalchemy.url")
+
+
+_resolved_url = _resolve_url()
+if _resolved_url:
+    config.set_main_option("sqlalchemy.url", _resolved_url)
+    if _resolved_url.startswith("sqlite:///"):
+        sqlite_path = Path(_resolved_url[len("sqlite:///"):])
+        sqlite_path.parent.mkdir(parents=True, exist_ok=True)
 
 target_metadata = SQLModel.metadata
 

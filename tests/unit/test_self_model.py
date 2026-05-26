@@ -94,6 +94,26 @@ def test_viability_keyword_sniffs_endurance(engine: Engine) -> None:
     assert "endurance" in v.reason or v.feasible
 
 
+def test_viability_fails_closed_when_required_capability_missing() -> None:
+    from nous.self_model.assess import Assessment
+    from nous.self_model.viability import viability
+
+    bare = Assessment(question="empty")
+    v = viability(bare, "demand", requirements={"endurance_min": 5.0})
+    assert v.feasible is False
+    assert "unavailable" in v.reason
+
+
+def test_endurance_caps_when_net_charging(engine: Engine) -> None:
+    engine.power.set_load_w(0.0)
+    engine.apu.set_solar_w(50.0)
+    for _ in range(5):
+        engine.tick()
+    a = assess("charging?", engine=engine)
+    assert a.endurance is not None
+    assert a.endurance.point <= 24 * 60.0 + 1.0
+
+
 def test_engine_tick_refreshes_last_capabilities(engine: Engine) -> None:
     caps = engine.state.last_capabilities
     assert "endurance_min" in caps

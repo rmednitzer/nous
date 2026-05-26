@@ -87,6 +87,16 @@ def run_scenario(engine: Engine, scenario: Scenario) -> ScenarioReport:
     issue the ``ready`` trigger after start if the FSM is sitting in
     BOOT so the canonical scenarios (which start with a mission /
     relay / monitoring / c2 trigger) admit cleanly.
+
+    Tick accounting is relative to this run: ``tick_budget`` is the
+    number of ticks the runner will advance, measured from the
+    engine's current tick. ``ticks_run`` on the report is the same
+    delta -- a long-lived engine that has already advanced past
+    ``tick_budget`` does not short-circuit the run.
+
+    Zero-minute steps fire before the first ``engine.tick()`` so a
+    scenario whose first step is ``at_min: 0`` sees the injection
+    applied at the run's t=0 boundary rather than one tick late.
     """
     engine.start()
     from ..state.machine import Mode
@@ -99,9 +109,9 @@ def run_scenario(engine: Engine, scenario: Scenario) -> ScenarioReport:
     records: list[ScenarioStepRecord] = []
 
     start_ts = engine.state.ts_s
-    for _ in range(scenario.tick_budget):
-        engine.tick()
-        elapsed_min = (engine.state.ts_s - start_ts) / 60.0
+    start_tick = engine.state.tick
+
+    def _fire_due(elapsed_min: float) -> None:
         while pending and pending[0][1].at_min <= elapsed_min:
             idx, step = pending.pop(0)
             outcome = apply_injection(engine, step.action, step.args)
@@ -118,7 +128,14 @@ def run_scenario(engine: Engine, scenario: Scenario) -> ScenarioReport:
                     args=dict(step.args),
                 )
             )
-        if not pending and engine.state.tick >= scenario.tick_budget:
+
+    _fire_due(0.0)
+
+    for ticks_run_idx, _ in enumerate(range(scenario.tick_budget), start=1):
+        engine.tick()
+        elapsed_min = (engine.state.ts_s - start_ts) / 60.0
+        _fire_due(elapsed_min)
+        if not pending and ticks_run_idx >= scenario.tick_budget:
             break
 
     for idx, step in pending:
@@ -137,7 +154,7 @@ def run_scenario(engine: Engine, scenario: Scenario) -> ScenarioReport:
 
     return ScenarioReport(
         scenario=scenario,
-        ticks_run=engine.state.tick,
+        ticks_run=engine.state.tick - start_tick,
         records=records,
         snapshot=engine.snapshot(),
     )

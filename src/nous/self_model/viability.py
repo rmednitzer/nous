@@ -62,32 +62,41 @@ def viability(
     failures: list[str] = []
     confidences: list[float] = []
 
-    if "endurance_min" in req and assessment.endurance is not None:
+    if "endurance_min" in req:
         need = float(req["endurance_min"])
         cap = assessment.endurance
-        confidences.append(cap.confidence)
-        if cap.p5 < need:
-            failures.append(
-                f"endurance p5 {cap.p5:.1f} min < required {need:.1f} min"
-            )
+        if cap is None:
+            failures.append("endurance capability unavailable; cannot verify")
+        else:
+            confidences.append(cap.confidence)
+            if cap.p5 < need:
+                failures.append(
+                    f"endurance p5 {cap.p5:.1f} min < required {need:.1f} min"
+                )
 
-    if "thermal_headroom_c" in req and assessment.thermal_headroom is not None:
+    if "thermal_headroom_c" in req:
         need = float(req["thermal_headroom_c"])
         cap = assessment.thermal_headroom
-        confidences.append(cap.confidence)
-        if cap.p5 < need:
-            failures.append(
-                f"thermal headroom p5 {cap.p5:.1f}C < required {need:.1f}C"
-            )
+        if cap is None:
+            failures.append("thermal headroom capability unavailable; cannot verify")
+        else:
+            confidences.append(cap.confidence)
+            if cap.p5 < need:
+                failures.append(
+                    f"thermal headroom p5 {cap.p5:.1f}C < required {need:.1f}C"
+                )
 
-    if "inference_tok_per_s" in req and assessment.inference_capacity is not None:
+    if "inference_tok_per_s" in req:
         need = float(req["inference_tok_per_s"])
         cap = assessment.inference_capacity
-        confidences.append(cap.confidence)
-        if cap.p5 < need:
-            failures.append(
-                f"inference p5 {cap.p5:.1f} tok/s < required {need:.1f} tok/s"
-            )
+        if cap is None:
+            failures.append("inference capacity capability unavailable; cannot verify")
+        else:
+            confidences.append(cap.confidence)
+            if cap.p5 < need:
+                failures.append(
+                    f"inference p5 {cap.p5:.1f} tok/s < required {need:.1f} tok/s"
+                )
 
     confidence = min(confidences) if confidences else 0.0
 
