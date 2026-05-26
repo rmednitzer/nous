@@ -9,6 +9,7 @@ build.
 
 | Tool | Tier | Summary |
 |------|------|---------|
+| `anthropic_cap_status` | T0 | Surface the Anthropic daily call cap (BL-021). |
 | `apu_status` | T0 | Auxiliary-power-unit state (solar, fuel cell, vehicle, USB-C PD). |
 | `biometrics_status` | T0 | Operator biometrics: heart rate, core temp, hydration, cognitive load. |
 | `comms_state` | T0 | Comms-stack summary (per ADR-0006). |
@@ -18,6 +19,8 @@ build.
 | `device_info` | T0 | Report nous version, profile, transport, policy mode, audit path. |
 | `inference_local` | T1 | Local-path inference. |
 | `inference_status` | T0 | Inference subsystem totals: calls, tokens, joules, last latency. |
+| `interop_decode` | T1 | Decode a hex-encoded payload via the named adapter (BL-041 / T1). |
+| `interop_encode` | T1 | Encode ``data`` via the named interop adapter (BL-041 / T1). |
 | `interop_formats` | T0 | List the interop adapters the server knows about. |
 | `position_status` | T0 | Position subsystem: lat/lon/alt ground truth, fix state, drift. |
 | `power_status` | T0 | Battery state-of-charge, draw, projected endurance. |
@@ -41,6 +44,16 @@ hashed; the audit record never contains the body itself. See
 
 Per-tool JSON Schema for the input shape. Generated from the FastMCP
 tool registry.
+
+### `anthropic_cap_status`
+
+```json
+{
+  "properties": {},
+  "title": "anthropic_cap_statusArguments",
+  "type": "object"
+}
+```
 
 ### `apu_status`
 
@@ -141,6 +154,60 @@ tool registry.
 {
   "properties": {},
   "title": "inference_statusArguments",
+  "type": "object"
+}
+```
+
+### `interop_decode`
+
+```json
+{
+  "properties": {
+    "adapter": {
+      "title": "Adapter",
+      "type": "string"
+    },
+    "payload_hex": {
+      "title": "Payload Hex",
+      "type": "string"
+    }
+  },
+  "required": [
+    "adapter",
+    "payload_hex"
+  ],
+  "title": "interop_decodeArguments",
+  "type": "object"
+}
+```
+
+### `interop_encode`
+
+```json
+{
+  "properties": {
+    "adapter": {
+      "title": "Adapter",
+      "type": "string"
+    },
+    "data": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Data"
+    }
+  },
+  "required": [
+    "adapter"
+  ],
+  "title": "interop_encodeArguments",
   "type": "object"
 }
 ```

@@ -151,3 +151,20 @@ def test_mqtt_decode_rejects_oversized() -> None:
     a = MqttAdapter(max_payload_len=32)
     decoded = a.decode(b"x" * 1024)
     assert "exceeds max_payload_len" in decoded.get("error", "")
+
+
+def test_registry_exposes_every_shipped_adapter() -> None:
+    from nous.interop import REGISTRY, build_adapter
+
+    expected = {"cot", "sensorthings", "misb_klv", "nmea0183", "stanag_4774", "mqtt"}
+    assert expected.issubset(set(REGISTRY))
+    for name in expected:
+        impl = build_adapter(name)
+        assert impl.name == name
+
+
+def test_build_adapter_rejects_unknown_name() -> None:
+    from nous.interop import build_adapter
+
+    with pytest.raises(KeyError, match="unknown interop adapter"):
+        build_adapter("does-not-exist")
