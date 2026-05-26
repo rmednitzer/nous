@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 
+import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
@@ -91,8 +92,8 @@ def test_position_accepts_valid_lat_lon(lat: float, lon: float) -> None:
     est.predict(1.0)
     est.update(obs)
     state = est.state()
-    assert state.point["lat"] == lat
-    assert state.point["lon"] == lon
+    assert state.point["lat"] == pytest.approx(lat, rel=1e-3, abs=1e-3)
+    assert state.point["lon"] == pytest.approx(lon, rel=1e-3, abs=1e-3)
     assert est.rejected_updates == 0
 
 

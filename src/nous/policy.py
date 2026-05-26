@@ -96,6 +96,7 @@ _STATEFUL_TOOLS = frozenset(
     {
         "scenario_load",
         "scenario_inject",
+        "profile_reload",
         "comms_send",
         "comms_publish",
         "inference_cloud",

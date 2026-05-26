@@ -101,7 +101,7 @@ re-audit).
 | `src/nous/estimators/compute.py` | in-progress | 1-D Kalman per channel over (load_pct, draw_w); covariance shrinks under observation. Full multi-state EKF is BL-031a. |
 | `src/nous/estimators/storage.py` | in-progress | 1-D Kalman per channel over (used_gib, wear_pct); slow process variance matches the physical reality of NAND wear. |
 | `src/nous/estimators/comms.py` | in-progress | Per-link belief tracker (BL-012); aggregate Estimate over (connected_links, total_links). Full transition particle filter (BL-030) deferred. |
-| `src/nous/estimators/position.py` | in-progress | v0.1 pass-through with NaN/Inf/range validation (BL-010 plumbing); full constant-velocity EKF lands with BL-026. |
+| `src/nous/estimators/position.py` | in-progress | Constant-velocity EKF over `(lat, lon, alt, v_*)` (BL-026). Velocity tracked as predict-only; full IMU observation channel lands with the situational-awareness fusion track (BL-061). |
 | `src/nous/estimators/sensors.py` | in-progress | Multi-channel Kalman over (temp_c, humidity_pct, baro_kpa); validates against physical bounds, rejects without poisoning the central estimate. |
 | `src/nous/estimators/biometrics.py` | in-progress | Multi-channel Kalman over biometric channels with physiological-bounds validation; `hydration_pct` added as a fourth tracked channel in BL-011. |
 | `src/nous/self_model/*` | in-progress | `assess` / `explain` / `viability` (BL-018) read live estimator state and emit calibrated capability claims with Gaussian quantile bands. `BL-035` will replace the Gaussian approximation with the calibrated quantile mapping. |

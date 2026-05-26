@@ -151,6 +151,80 @@ class Engine:
         self.state.ts_s = 0.0
         self.state.tick = 0
 
+    def reload_profile(self, name: str | None = None) -> dict[str, Any]:
+        """Hot-reload the hardware profile from disk (BL-039).
+
+        Re-reads ``profiles/<name>.yaml`` and rebuilds every subsystem
+        and estimator against the new curves. FSM mode, tick counter,
+        and simulated wall-clock are preserved so a controller can edit
+        a panel rating or battery capacity without restarting the
+        server.
+
+        Returns a small summary mapping the controller can audit:
+        ``{"profile": ..., "rebuilt_subsystems": N, "previous": ...}``.
+        Raises ``FileNotFoundError`` or ``ValueError`` on a missing or
+        malformed YAML (the engine keeps the previous profile loaded).
+        """
+        new_name = (name or self.settings.profile).strip() or self.settings.profile
+        new_profile = _load_profile(new_name)
+        previous_name = self.settings.profile
+
+        if name and name != self.settings.profile:
+            self.settings = self.settings.model_copy(update={"profile": new_name})
+        self.profile = new_profile
+
+        self.power = PowerSubsystem(self.profile)
+        self.apu = ApuSubsystem(self.profile)
+        self.thermal = ThermalSubsystem(self.profile)
+        self.compute = ComputeSubsystem(self.profile)
+        self.inference = InferenceSubsystem(self.profile, compute=self.compute)
+        self.storage = StorageSubsystem(self.profile)
+        self.comms = CommsSubsystem(self.profile)
+        self.position = PositionSubsystem(self.profile)
+        self.sensors = SensorsSubsystem(self.profile)
+        self.biometrics = BiometricsSubsystem(self.profile)
+
+        self.power_est = PowerEstimator(
+            initial_soc=self.power.soc_pct,
+            initial_voltage=self.power.voltage_v,
+        )
+        self.apu_est = ApuEstimator()
+        self.thermal_est = ThermalKalman(
+            initial_junction_c=self.thermal.junction_c,
+            initial_enclosure_c=self.thermal.enclosure_c,
+        )
+        self.compute_est = ComputeKalman(
+            initial_load_pct=self.compute.load_pct,
+            initial_draw_w=self.compute.draw_w,
+        )
+        self.storage_est = StorageKalman(
+            initial_used_gib=self.storage.used_gib,
+            initial_wear_pct=self.storage.wear_pct,
+        )
+        self.comms_est = CommsParticleFilter()
+        self.comms_est.update(self.comms.sensor_obs())
+        self.position_est = PositionEKF()
+        self.position_est.update(self.position.sensor_obs())
+        self.sensors_est = EnvironmentalKalman()
+        self.sensors_est.update(self.sensors.sensor_obs())
+        self.biometrics_est = BiometricsKalman()
+        self.biometrics_est.update(self.biometrics.sensor_obs())
+
+        self.state.comms_state, self.state.comms_state_reason = (
+            self.comms.derive_state()
+        )
+        self.state.operator_state, self.state.operator_state_reason = (
+            derive_operator(self.biometrics_est.state())
+        )
+
+        return {
+            "profile": self.settings.profile,
+            "previous": previous_name,
+            "rebuilt_subsystems": 10,
+            "tick": self.state.tick,
+            "mode": self.state.mode.value,
+        }
+
     def stop(self) -> None:
         """Cooperative shutdown. Subsystems are not torn down here.
 

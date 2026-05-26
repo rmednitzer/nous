@@ -736,6 +736,24 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         return await _wrap("interop_formats", {}, ctx, _work)
 
     @mcp.tool()
+    async def profile_reload(
+        name: str = "", ctx: Context | None = None
+    ) -> str:
+        """Hot-reload the hardware profile from disk.
+
+        ``name`` defaults to the currently-active profile; pass a
+        different name to switch profiles entirely. Subsystems and
+        estimators are rebuilt; FSM mode and tick counter are
+        preserved. Returns a summary the controller can audit.
+        """
+
+        async def _work() -> str:
+            summary = app.engine.reload_profile(name=name or None)
+            return json.dumps(summary)
+
+        return await _wrap("profile_reload", {"name": name}, ctx, _work)
+
+    @mcp.tool()
     async def scenario_load(path: str, ctx: Context | None = None) -> str:
         """Load and run a scenario YAML against the engine.
 
