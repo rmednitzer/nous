@@ -18,7 +18,9 @@ def fake_profiles_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         def __init__(self, base: Path) -> None:
             self.parents = [None, None, base]
 
-    monkeypatch.setattr(engine.Path, "resolve", lambda _self: FakeResolvedPath(tmp_path))
+    monkeypatch.setattr(
+        "nous.engine.Path.resolve", lambda _self: FakeResolvedPath(tmp_path)
+    )
     return profiles_dir
 
 

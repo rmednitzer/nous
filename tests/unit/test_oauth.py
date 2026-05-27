@@ -39,6 +39,7 @@ def provider(tmp_path: Path) -> FileOAuthProvider:
 def test_build_auth_settings_uses_issuer() -> None:
     s = build_auth_settings("https://nous.example.org")
     assert str(s.issuer_url).rstrip("/") == "https://nous.example.org"
+    assert s.required_scopes is not None
     assert "mcp:tools" in s.required_scopes
     assert s.client_registration_options is not None
     assert s.client_registration_options.enabled is True
@@ -88,16 +89,18 @@ def test_revoke_clears_access_and_refresh(provider: FileOAuthProvider) -> None:
 
 def test_refresh_rotates_token(provider: FileOAuthProvider) -> None:
     token = provider._issue("c-1", ["mcp:tools"])
-    refresh = asyncio.run(provider.load_refresh_token(_client(), token.refresh_token))
+    assert token.refresh_token is not None
+    original_refresh = token.refresh_token
+    refresh = asyncio.run(provider.load_refresh_token(_client(), original_refresh))
     assert refresh is not None
     new_token = asyncio.run(
         provider.exchange_refresh_token(_client(), refresh, ["mcp:tools"])
     )
     assert new_token.access_token != token.access_token
-    assert new_token.refresh_token != token.refresh_token
+    assert new_token.refresh_token != original_refresh
     # The old refresh token must not work twice.
     assert (
-        asyncio.run(provider.load_refresh_token(_client(), token.refresh_token))
+        asyncio.run(provider.load_refresh_token(_client(), original_refresh))
         is None
     )
 

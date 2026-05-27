@@ -18,9 +18,11 @@ from nous.state.machine import Mode
 def test_engine_restartable_after_stop(engine: Engine) -> None:
     assert engine.state.mode is Mode.BOOT or engine.state.mode is Mode.IDLE
     engine.stop()
-    assert engine.fsm.current is Mode.SHUTDOWN
+    after_stop = engine.fsm.current
+    assert after_stop is Mode.SHUTDOWN
     engine.start()
-    assert engine.fsm.current is Mode.BOOT
+    after_restart = engine.fsm.current
+    assert after_restart is Mode.BOOT
     # And one more tick must not raise.
     engine.tick()
 

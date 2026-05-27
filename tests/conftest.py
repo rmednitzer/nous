@@ -13,7 +13,7 @@ from nous.engine import Engine
 
 
 @pytest.fixture
-def tmp_nous_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def tmp_nous_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     """Point ``NOUS_HOME`` at a fresh tmp directory and clear the cache."""
     monkeypatch.setenv("NOUS_HOME", str(tmp_path))
     monkeypatch.setenv("NOUS_AUDIT_PATH", str(tmp_path / "audit.jsonl"))

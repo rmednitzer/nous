@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 import pytest
 
 from nous.server import build_server
@@ -40,9 +42,9 @@ async def test_device_info_returns_json(tmp_nous_home: object) -> None:
     assert "nous" in text
 
 
-def _collect_text(result: object) -> str:
+def _collect_text(result: Iterable[object]) -> str:
     text = ""
-    for item in result:  # type: ignore[union-attr]
+    for item in result:
         if isinstance(item, tuple) and len(item) == 2:
             text += str(item[1])
         elif hasattr(item, "text"):
