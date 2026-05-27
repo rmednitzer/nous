@@ -177,8 +177,15 @@ def test_summary_surfaces_degraded_reason_after_failure(
 ) -> None:
     """A degraded state surfaces in the summary just like in
     ``device_info``, with the same reason string. The ``writes_total``
-    counter does NOT increment on a swallowed-exception path so the
-    silent-drop window is observable."""
+    counter does NOT increment when fsync fails so the silent-drop
+    window is observable.
+
+    PR #60 review pin: the assertion that ``writes_total`` stays at
+    zero (and ``last_write_ts_s`` stays ``None``) is the contract
+    the durability gate in ``AuditLogger.write`` upholds. Without
+    the explicit assertion a regression that re-bumps the counter
+    on a fsync-failed write would slip past the test.
+    """
     logger = AuditLogger(tmp_path / "audit.jsonl")
 
     def _fail_fsync(fd: int) -> None:
@@ -191,6 +198,12 @@ def test_summary_surfaces_degraded_reason_after_failure(
     assert summary["degraded"] is True
     assert "simulated fsync failure" in summary["degraded_reason"]
     assert summary["fsync_failures"] >= 1
+    # Durable-write contract: a fsync-failed write must not advance
+    # the activity counters; otherwise a controller watching
+    # ``writes_total`` against the tick cadence would see a
+    # phantom success.
+    assert summary["writes_total"] == 0
+    assert summary["last_write_ts_s"] is None
 
 
 def test_summary_reports_also_stderr_when_attached(tmp_path: Path) -> None:

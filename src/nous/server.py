@@ -214,16 +214,24 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         Surfaces the full audit-handler picture: file path, degraded
         flag and reason, cumulative ``fsync_failures``, cumulative
         ``writes_total``, ``last_write_ts_s`` (unix timestamp of the
-        most recent successful write; ``None`` if no writes yet),
-        and the ``also_stderr`` echo flag. A controller comparing
+        most recent durable write; ``None`` if no writes yet), and
+        the ``also_stderr`` echo flag. A controller comparing
         ``writes_total`` against the tick cadence can detect a
         silently-dropping handler that ``device_info.audit.degraded``
         would not catch (the handler accepted the write but the
-        ``WatchedFileHandler`` rotated the inode out from under it).
+        underlying fsync failed; the counter contract gates the
+        increment on durability per PR #60 review).
 
         Closes the registration gap in ``policy.py`` (``audit_summary``
         was classified T0 but never wired). Tier T0 (read-only): the
-        method consults handler state without mutating it.
+        ``AuditLogger.summary()`` method itself does not mutate
+        handler state. The surrounding ``_wrap`` audited-runner
+        call still writes one audit record (as every tool call
+        does, per ADR 0001); the snapshot returned here is captured
+        before that wrap record lands, so the response shows the
+        pre-call state. Successive ``audit_summary`` calls therefore
+        increase ``writes_total`` by one per call in the live
+        audit log, even though each response is "one behind."
         """
 
         async def _work() -> str:

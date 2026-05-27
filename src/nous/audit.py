@@ -290,18 +290,23 @@ class AuditLogger:
         must never break a tool call -- but the failure is tallied on
         ``self.fsync_failures`` and surfaced through ``device_info``.
 
-        ``writes_total`` and ``last_write_ts_s`` are updated only when
-        the underlying handler accepts the record (degraded or not);
-        the swallowed-exception paths leave the counters untouched so
-        ``audit_summary`` can distinguish "the controller is quiet"
-        from "the handler is silently dropping."
+        ``writes_total`` and ``last_write_ts_s`` advance only when the
+        write was *durable*: the handler accepted the record AND
+        ``_sync_fsync_failure_state`` saw no new fsync failures.
+        Address PR #60 review (Copilot + Codex): the prior code
+        bumped the counters after the sync, which meant a
+        fsync-failed write advertised as successful activity even
+        though the audit layer had just classified it as
+        potentially lost. The contract now: counter advance implies
+        durable record.
         """
         try:
             self._log.info(record.model_dump_json())
-            self._sync_fsync_failure_state()
-            self.writes_total += 1
-            with contextlib.suppress(Exception):
-                self.last_write_ts_s = time.time()
+            new_failures = self._sync_fsync_failure_state()
+            if new_failures == 0:
+                self.writes_total += 1
+                with contextlib.suppress(Exception):
+                    self.last_write_ts_s = time.time()
         except OSError as exc:
             self.fsync_failures += 1
             self.degraded = True
@@ -349,7 +354,15 @@ class AuditLogger:
             "also_stderr": self._also_stderr,
         }
 
-    def _sync_fsync_failure_state(self) -> None:
+    def _sync_fsync_failure_state(self) -> int:
+        """Sync handler-side fsync failures into the logger state.
+
+        Returns the number of new failures observed since the last
+        call (0 when the underlying handlers reported no new failures).
+        ``write()`` uses this delta to gate the durable-write
+        counters: a non-zero delta means the most recent emit
+        failed its fsync and the counters must NOT advance.
+        """
         fsync_handlers = [
             handler
             for handler in self._log.handlers
@@ -358,7 +371,7 @@ class AuditLogger:
         total_handler_failures = sum(handler.fsync_failures for handler in fsync_handlers)
         delta = total_handler_failures - self._seen_handler_fsync_failures
         if delta <= 0:
-            return
+            return 0
         self.fsync_failures += delta
         self._seen_handler_fsync_failures = total_handler_failures
         self.degraded = True
@@ -366,6 +379,7 @@ class AuditLogger:
             if handler.last_fsync_error:
                 self.degraded_reason = handler.last_fsync_error
                 break
+        return delta
 
     def flush(self) -> None:
         """Force every handler to flush + fsync (called from systemd ExecStopPost)."""
