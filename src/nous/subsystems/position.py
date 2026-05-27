@@ -32,6 +32,8 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
+import numpy as np
+
 from ..types import Observation
 
 __all__ = ["PositionSubsystem"]
@@ -52,8 +54,14 @@ class PositionSubsystem:
 
     name: str = "position"
 
-    def __init__(self, profile: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        profile: Mapping[str, Any],
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         self.profile = profile
+        self._rng = rng  # ADR 0019 follow-up: engine RNG seam
         cfg = dict((profile.get("sensors") or {}).get("position") or {})
         self._lat_sigma = float(cfg.get("lat_sigma", _DEFAULT_LAT_SIGMA))
         self._lon_sigma = float(cfg.get("lon_sigma", _DEFAULT_LON_SIGMA))

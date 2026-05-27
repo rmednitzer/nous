@@ -30,6 +30,8 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+
 from ..state.comms_state import CommsState, derive
 from ..types import LinkEstimate, Observation
 
@@ -78,8 +80,14 @@ class CommsSubsystem:
 
     name: str = "comms"
 
-    def __init__(self, profile: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        profile: Mapping[str, Any],
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         self.profile = profile
+        self._rng = rng  # ADR 0019 follow-up: engine RNG seam
         comms_cfg = profile.get("comms") or {}
         raw_links = comms_cfg.get("links") or []
         self._links: dict[str, Link] = {}

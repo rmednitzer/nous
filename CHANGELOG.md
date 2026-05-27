@@ -6,6 +6,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (ADR 0019 follow-ups)
+
+- Every subsystem constructor now accepts an optional keyword-only
+  ``rng: np.random.Generator | None`` so future noise sampling can
+  draw from the engine's deterministic seam without reaching for
+  the ``numpy.random`` global. ``Engine`` threads ``self.rng``
+  into all ten subsystems at construction. The kwarg defaults to
+  ``None`` so existing test fixtures that build subsystems
+  directly continue to work without modification.
+- ``scripts/policy_checks.sh`` adds a third rule: ``np.random.X``
+  and ``numpy.random.X`` calls in ``src/nous/`` fail the policy
+  job unless ``X`` is ``Generator`` (type) or ``default_rng``
+  (constructor for the fallback in modules that accept an optional
+  ``rng`` kwarg). Tests, scripts, and examples are exempt. ``make
+  policy`` enforces the ban in CI.
+- ``src/nous/tick.py`` reads ``engine.clock.monotonic()`` instead
+  of ``anyio.current_time()`` for the per-tick budget timer. Under
+  the default ``MonotonicClock`` this is value-identical to the
+  prior behaviour; under a ``VirtualClock`` the engine clock does
+  not advance during ``engine.tick()`` so the budget stays at
+  ``dt`` and the loop's real-time sleep semantics via
+  ``anyio.move_on_after`` are unchanged.
+
 ### Added (AUDIT-2026-05-23 N2 follow-up B: opportunistic auto-resync)
 
 - ``AuditLogger.write()`` runs an opportunistic auto-resync against

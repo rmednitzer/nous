@@ -29,6 +29,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import numpy as np
+
 from ..types import Observation
 
 __all__ = ["SensorsSubsystem"]
@@ -49,7 +51,13 @@ class SensorsSubsystem:
 
     name: str = "sensors"
 
-    def __init__(self, profile: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        profile: Mapping[str, Any],
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> None:
+        self._rng = rng  # ADR 0019 follow-up: engine RNG seam
         self.profile = profile
         cfg = dict((profile.get("sensors") or {}).get("environmental") or {})
         thermal_cfg = profile.get("thermal") or {}

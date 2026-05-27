@@ -19,6 +19,8 @@ from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any
 
+import numpy as np
+
 from ..types import Observation
 
 __all__ = ["PowerFlag", "PowerSubsystem"]
@@ -67,8 +69,19 @@ class PowerSubsystem:
 
     name: str = "power"
 
-    def __init__(self, profile: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        profile: Mapping[str, Any],
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         self.profile = profile
+        # ADR 0019 follow-up: every subsystem now accepts the engine's
+        # ``rng`` so future noise-sampling work can draw from a
+        # deterministic seam without reaching for the ``numpy.random``
+        # global. Today's subsystems do not sample; the kwarg is
+        # stored for the next contributor.
+        self._rng = rng
         cfg = dict(profile.get("power") or {})
         self._battery_wh = float(cfg.get("battery_wh", _DEFAULT_BATTERY_WH))
         self._voltage_nominal = float(

@@ -34,6 +34,8 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
+import numpy as np
+
 from ..types import Observation
 
 __all__ = ["ThermalSubsystem"]
@@ -84,8 +86,14 @@ class ThermalSubsystem:
 
     name: str = "thermal"
 
-    def __init__(self, profile: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        profile: Mapping[str, Any],
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         self.profile = profile
+        self._rng = rng  # ADR 0019 follow-up: engine RNG seam
         cfg = dict(profile.get("thermal") or {})
         self._ambient_default_c = float(
             cfg.get("ambient_c_default", _DEFAULT_AMBIENT_C)

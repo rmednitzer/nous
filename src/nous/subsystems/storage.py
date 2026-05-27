@@ -29,6 +29,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import numpy as np
+
 from ..types import Observation
 
 __all__ = ["StorageSubsystem"]
@@ -52,8 +54,14 @@ class StorageSubsystem:
 
     name: str = "storage"
 
-    def __init__(self, profile: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        profile: Mapping[str, Any],
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         self.profile = profile
+        self._rng = rng  # ADR 0019 follow-up: engine RNG seam
         cfg = dict(profile.get("storage") or {})
         self._capacity_gib = max(
             0.0, float(cfg.get("capacity_gib", _DEFAULT_CAPACITY_GIB))

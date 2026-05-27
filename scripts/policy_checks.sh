@@ -91,6 +91,21 @@ if [ "${#private_repo_patterns[@]}" -gt 0 ]; then
         --exclude-dir=node_modules --exclude-dir=.pytest_cache .
 fi
 
+# --- Rule: no global numpy.random calls in src/nous -------------------
+# ADR 0019 follow-up: the engine threads a single
+# ``numpy.random.Generator`` through every subsystem and estimator.
+# Reaching for ``np.random.rand``, ``np.random.choice`` (etc.) bypasses
+# the seam and reintroduces process-global state that ADR 0019 was
+# written to eliminate. Only ``np.random.Generator`` (the type) and
+# ``np.random.default_rng(...)`` (the constructor used for the
+# fallback in modules that accept an optional ``rng`` kwarg) are
+# allowed. The rule applies to ``src/nous`` only; tests, scripts, and
+# examples are free to use the global directly.
+note "checking for global numpy.random calls in src/nous"
+run_grep "global numpy.random call found above. Use Engine(seed=...).rng or accept an rng kwarg per ADR 0019." \
+    -rPn '\b(np|numpy)\.random\.(?!Generator\b|default_rng\b)\w+' \
+    --include='*.py' src/nous
+
 if [ "${fail}" -eq 0 ]; then
     note "OK: all policy checks passed"
 fi

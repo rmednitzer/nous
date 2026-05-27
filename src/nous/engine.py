@@ -101,16 +101,21 @@ class Engine:
         self.rng: np.random.Generator = np.random.default_rng(seed)
         self.clock: Clock = clock or MonotonicClock()
 
-        self.power = PowerSubsystem(self.profile)
-        self.apu = ApuSubsystem(self.profile)
-        self.thermal = ThermalSubsystem(self.profile)
-        self.compute = ComputeSubsystem(self.profile)
-        self.inference = InferenceSubsystem(self.profile, compute=self.compute)
-        self.storage = StorageSubsystem(self.profile)
-        self.comms = CommsSubsystem(self.profile)
-        self.position = PositionSubsystem(self.profile)
-        self.sensors = SensorsSubsystem(self.profile)
-        self.biometrics = BiometricsSubsystem(self.profile)
+        # ADR 0019 follow-up: thread the engine RNG into every
+        # subsystem at construction so future noise sampling can draw
+        # from a deterministic seam.
+        self.power = PowerSubsystem(self.profile, rng=self.rng)
+        self.apu = ApuSubsystem(self.profile, rng=self.rng)
+        self.thermal = ThermalSubsystem(self.profile, rng=self.rng)
+        self.compute = ComputeSubsystem(self.profile, rng=self.rng)
+        self.inference = InferenceSubsystem(
+            self.profile, compute=self.compute, rng=self.rng
+        )
+        self.storage = StorageSubsystem(self.profile, rng=self.rng)
+        self.comms = CommsSubsystem(self.profile, rng=self.rng)
+        self.position = PositionSubsystem(self.profile, rng=self.rng)
+        self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
+        self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
@@ -187,16 +192,21 @@ class Engine:
             self.settings = self.settings.model_copy(update={"profile": new_name})
         self.profile = new_profile
 
-        self.power = PowerSubsystem(self.profile)
-        self.apu = ApuSubsystem(self.profile)
-        self.thermal = ThermalSubsystem(self.profile)
-        self.compute = ComputeSubsystem(self.profile)
-        self.inference = InferenceSubsystem(self.profile, compute=self.compute)
-        self.storage = StorageSubsystem(self.profile)
-        self.comms = CommsSubsystem(self.profile)
-        self.position = PositionSubsystem(self.profile)
-        self.sensors = SensorsSubsystem(self.profile)
-        self.biometrics = BiometricsSubsystem(self.profile)
+        # ADR 0019 follow-up: thread the engine RNG into every
+        # subsystem at construction so future noise sampling can draw
+        # from a deterministic seam.
+        self.power = PowerSubsystem(self.profile, rng=self.rng)
+        self.apu = ApuSubsystem(self.profile, rng=self.rng)
+        self.thermal = ThermalSubsystem(self.profile, rng=self.rng)
+        self.compute = ComputeSubsystem(self.profile, rng=self.rng)
+        self.inference = InferenceSubsystem(
+            self.profile, compute=self.compute, rng=self.rng
+        )
+        self.storage = StorageSubsystem(self.profile, rng=self.rng)
+        self.comms = CommsSubsystem(self.profile, rng=self.rng)
+        self.position = PositionSubsystem(self.profile, rng=self.rng)
+        self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
+        self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
 
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,

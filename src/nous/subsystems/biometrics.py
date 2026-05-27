@@ -28,6 +28,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import numpy as np
+
 from ..types import Observation
 
 __all__ = ["BiometricsSubsystem"]
@@ -52,8 +54,14 @@ class BiometricsSubsystem:
 
     name: str = "biometrics"
 
-    def __init__(self, profile: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        profile: Mapping[str, Any],
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         self.profile = profile
+        self._rng = rng  # ADR 0019 follow-up: engine RNG seam
         cfg = dict((profile.get("sensors") or {}).get("biometrics") or {})
         self._hr_sigma = float(
             cfg.get("heart_rate_bpm_sigma", _DEFAULT_HEART_RATE_SIGMA)
