@@ -98,7 +98,7 @@ class MisbKlvAdapter:
                 return {"error": "misb_klv: truncated TLV"}
             items[key] = value
             i += length
-        return {"items": {k: v.hex() for k, v in items.items()}}
+        return {"items": {k: _decode_value(k, v) for k, v in items.items()}}
 
     @staticmethod
     def _tlv(key: int, value: bytes) -> bytes:
@@ -126,3 +126,25 @@ def _read_ber_length(buf: bytes) -> tuple[int, int]:
     if num == 0 or num > len(buf) - 1:
         raise ValueError("malformed BER length")
     return int.from_bytes(buf[1 : 1 + num], "big"), 1 + num
+
+
+def _decode_value(key: int, value: bytes) -> Any:
+    """Decode a single TLV value back to a Python-native type.
+
+    Closes AUDIT-2026-05-24 N7 (decoder emits hex strings). The
+    encoder writes ``str(v).encode("utf-8")`` for every value other
+    than the timestamp key, so the symmetric decoder is UTF-8.
+    Values that are not valid UTF-8 fall back to a hex string so
+    a controller can still see them (and the lossy round-trip is
+    documented in ``docs/conformance/stanag-4609-misb-klv.md``).
+    Key 2 (``Unix Time Stamp``) is the one binary surface the
+    encoder writes: 8 raw bytes, microseconds since Unix epoch
+    per MISB ST 0601; the decoder returns it as an ``int`` so a
+    consumer does not have to remember the encoding rule.
+    """
+    if key == _KEY_TIMESTAMP and len(value) == 8:
+        return int.from_bytes(value, "big", signed=False)
+    try:
+        return value.decode("utf-8")
+    except UnicodeDecodeError:
+        return value.hex()

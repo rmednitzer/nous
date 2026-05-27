@@ -209,11 +209,25 @@ def build_server(settings: Settings | None = None) -> FastMCP:
 
     @mcp.tool()
     async def state_get(ctx: Context | None = None) -> str:
-        """Current FSM mode."""
+        """Current FSM mode plus the labels a controller queries together.
+
+        Closes AUDIT-2026-05-24 N3 (minimal payload). The shape stays
+        narrow on purpose (FSM-adjacent fields only); a controller that
+        needs subsystem-level detail uses ``device_health`` instead.
+        """
 
         async def _work() -> str:
+            state = app.engine.state
             return json.dumps(
-                {"mode": app.engine.state.mode.value, "tick": app.engine.state.tick}
+                {
+                    "mode": state.mode.value,
+                    "tick": state.tick,
+                    "ts_s": state.ts_s,
+                    "operator_state": state.operator_state.value,
+                    "operator_state_reason": state.operator_state_reason,
+                    "comms_state": state.comms_state.value,
+                    "comms_state_reason": state.comms_state_reason,
+                }
             )
 
         return await _wrap("state_get", {}, ctx, _work)

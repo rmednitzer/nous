@@ -37,12 +37,16 @@ def test_aging_out_all_links_transitions_to_denied(engine: Engine) -> None:
 
 def test_tx_on_link_keeps_it_alive(engine: Engine) -> None:
     link_id = engine.comms.link_ids[0]
-    max_age = engine.comms.link(link_id).max_age_s
+    link = engine.comms.link(link_id)
+    assert link is not None
+    max_age = link.max_age_s
     ticks = int((max_age - 1.0) / engine.dt_s)
     for _ in range(ticks):
         engine.comms.tx(link_id, 1024)
         engine.tick()
-    assert engine.comms.link(link_id).is_live() is True
+    link_after = engine.comms.link(link_id)
+    assert link_after is not None
+    assert link_after.is_live() is True
 
 
 def test_scenario_forced_disconnect_propagates_to_engine_state(engine: Engine) -> None:

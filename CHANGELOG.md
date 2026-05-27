@@ -6,6 +6,69 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (audit carry-forward closures, 2026-05-27 second pass)
+
+- AUDIT-2026-05-20 H2: ``[tool.mypy] files`` now includes
+  ``tests`` alongside ``src/nous``; ``src/nous/py.typed`` is the
+  PEP 561 marker that makes the project's own modules visible to
+  mypy from the test tree. Seventeen real findings fixed inline
+  (fixture return-type, ``Link | None`` narrowing, ``str | None``
+  refresh-token narrowing in tests, ``Mode`` identity check). A
+  per-module override relaxes ``disallow_untyped_decorators`` and
+  ``disallow_any_generics`` for ``tests.*`` only, matching the
+  existing carve-out for ``nous.server``.
+- AUDIT-2026-05-24 N3: ``state_get`` MCP tool returns ``mode``,
+  ``tick``, ``ts_s``, ``operator_state`` plus reason,
+  ``comms_state`` plus reason. Subsystem detail stays on
+  ``device_health``.
+- AUDIT-2026-05-24 N4: ``tests/integration/test_snapshot_mcp_parity.py``
+  asserts ``device_health`` payload keys equal ``engine.snapshot()``
+  keys, and ``state_get`` keys are a subset; a refactor that
+  drifts the two views apart fails here.
+- AUDIT-2026-05-24 N7: ``misb_klv.py`` decoder returns UTF-8
+  strings (with hex fallback for non-UTF-8 bytes); timestamp key
+  returns an ``int``. Round trip is now symmetric for the
+  str-encoded values the encoder writes. Regression-pinned as
+  ``TestN7MisbKlvDecodeReturnsSymmetricTypes``.
+- AUDIT-2026-05-27 N16: ``docs/contributor-runbook.md`` §4.X
+  "Local cache hygiene" documents the ``.hypothesis/`` examples
+  database (reversible to clear; a new failing example without a
+  code change is a real test gap).
+- AUDIT-2026-05-27 N17: ``docs/security/bandit-suppressions.md``
+  catalogues every ``# nosec`` annotation in ``src/nous/`` with
+  its rationale and the regression test or conformance document
+  that backs it. ``SECURITY.md`` cross-links the catalog.
+
+### Added
+
+- ADR 0019 implementation (first increment of AUDIT-2026-05-27
+  N8). ``src/nous/clocks.py`` carries the ``Clock`` Protocol,
+  ``MonotonicClock`` (default), and ``VirtualClock`` (test
+  clock, advances under caller control). ``Engine`` grows
+  ``seed`` and ``clock`` keyword-only kwargs; the engine's
+  single ``numpy.random.Generator`` flows into
+  ``CommsParticleFilter`` so same-seed engines produce identical
+  comms-filter trajectories. Four new tests in
+  ``tests/unit/test_engine_determinism.py``.
+- ADR 0020 implementation (second increment of N8).
+  ``tests/unit/test_subsystem_invariants.py`` covers compute
+  draw monotonicity in load, power SoC monotone non-increasing
+  under discharge, thermal convergence to ambient at zero load,
+  comms link-age monotonicity, and tx-resets-age. Hypothesis
+  drives the parametrisation; the deterministic seed seam from
+  ADR 0019 makes shrinking sensible.
+
+### Documented
+
+- Delta audit at HEAD ``563175a`` published as
+  [`docs/audit-2026-05-27b.md`](docs/audit-2026-05-27b.md). Closes
+  six 2026-05-27 carry-forwards plus the foundation increments
+  for ADR 0019 and ADR 0020. Carry-forward open items: N2
+  (live VM action), ADR 0021 (per-subsystem tool modules), ADR
+  0022 (runtime safety enforcer), additional ADR 0020
+  invariants. One new observation: N18 (``CommsParticleFilter``
+  retains its legacy ``seed`` kwarg for test ergonomics).
+
 ### Fixed
 
 - AUDIT-2026-05-20 C2: ``src/nous/audit.py`` ``redact()`` now recurses

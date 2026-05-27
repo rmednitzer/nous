@@ -34,8 +34,9 @@ def _profile(*links: Mapping[str, Any]) -> Mapping[str, Any]:
 def test_parses_links_from_profile() -> None:
     c = CommsSubsystem(_profile())
     assert c.link_ids == ["lte", "lora"]
-    assert c.link("lte") is not None
-    assert c.link("lte").bandwidth_bps == pytest.approx(20_000_000)
+    lte = c.link("lte")
+    assert lte is not None
+    assert lte.bandwidth_bps == pytest.approx(20_000_000)
 
 
 def test_links_start_connected_with_nominal_envelope() -> None:
@@ -82,21 +83,26 @@ def test_forced_disconnect_persists_through_tx() -> None:
     c.set_link_state("lte", connected=False)
     accepted = c.tx("lte", 1000)
     assert accepted == 0
-    assert c.link("lte").is_live() is False
+    lte = c.link("lte")
+    assert lte is not None
+    assert lte.is_live() is False
 
 
 def test_clear_link_override_releases_forced_state() -> None:
     c = CommsSubsystem(_profile())
     c.set_link_state("lte", connected=False)
     c.clear_link_override("lte")
-    assert c.link("lte").forced_state is None
-    assert c.link("lte").is_live() is True
+    lte = c.link("lte")
+    assert lte is not None
+    assert lte.forced_state is None
+    assert lte.is_live() is True
 
 
 def test_set_link_state_rssi_and_loss_clamp() -> None:
     c = CommsSubsystem(_profile())
     c.set_link_state("lte", rssi_dbm=-90.0, loss_pct=250.0, throughput_bps=-5.0)
     lte = c.link("lte")
+    assert lte is not None
     assert lte.rssi_dbm == pytest.approx(-90.0)
     assert lte.loss_pct == pytest.approx(100.0)
     assert lte.throughput_bps == pytest.approx(0.0)

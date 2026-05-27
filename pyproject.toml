@@ -103,7 +103,12 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
 disallow_untyped_defs = true
-files = ["src/nous"]
+# Closes AUDIT-2026-05-20 H2: the test tree is type-checked too,
+# so a regression in a fixture or in an in-test helper surfaces
+# under ``make typecheck`` instead of silently drifting. The
+# ``src/nous/py.typed`` marker tells mypy the project is fully
+# typed so cross-module imports from the tests resolve.
+files = ["src/nous", "tests"]
 
 [[tool.mypy.overrides]]
 module = [
@@ -118,6 +123,15 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["nous.server"]
+disallow_untyped_decorators = false
+disallow_any_generics = false
+
+[[tool.mypy.overrides]]
+# Tests routinely call MCP SDK helpers whose decorators erase
+# parameter types and pass partial coroutines through; the strict
+# settings on the src/ tree do not all apply gracefully to the
+# test fixtures.
+module = ["tests.*"]
 disallow_untyped_decorators = false
 disallow_any_generics = false
 
