@@ -6,8 +6,96 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- AUDIT-2026-05-20 C2: ``src/nous/audit.py`` ``redact()`` now recurses
+  through nested mappings and list values. The redaction allowlist
+  applies at every depth; oversize strings are truncated at every
+  depth too. Regression-pinned as
+  ``tests/regression/test_audit_findings.py::TestC2RedactionRecurses``.
+- AUDIT-2026-05-20 M1: ``src/nous/runner.py`` stamps ``exit_code=1``
+  on the denial-path audit record so per-tier denial counts are
+  machine-queryable without parsing the body string. The success
+  path keeps ``exit_code=None`` (no abnormal exit) so a JSONL
+  consumer can split denials and worker errors apart from normal
+  returns. Regression-pinned as
+  ``TestM1RunnerDenialStampsExitCode``.
+- AUDIT-2026-05-20 H1: dedicated spine tests for the audited
+  runner (``tests/unit/test_runner.py``, 11 cases) and the FSM
+  transition table (``tests/unit/test_state_machine.py``, 8 cases
+  plus 40 parametrised entries plus 1 Hypothesis property). The
+  third spine module (``anthropic_client.py``) was already covered
+  under PR #38 follow-up.
+- AUDIT-2026-05-20 H6: ``FileOAuthProvider`` carries an
+  ``asyncio.Lock`` arbitrating every load+modify+save sequence on
+  the three JSON stores. ``_Store.save`` chmods the file to
+  ``0o600`` and fsyncs the parent directory after the atomic
+  rename. Regression-pinned as
+  ``TestH6OAuthFileStoreLockedAndConfidential``.
+- AUDIT-2026-05-20 H7: refresh-token records carry an ``issue_id``
+  naming their family; rotation propagates the id; the consumed
+  record is marked ``consumed=True`` so reuse stays detectable. On
+  reuse, ``load_refresh_token`` and ``exchange_refresh_token`` fire
+  family revocation per OAuth 2.1 BCP §4.13. Regression-pinned as
+  ``TestH7RefreshTokenReuseRevokesFamily``.
+- AUDIT-2026-05-20 H8: ``deploy/auto-update.sh`` writes
+  ``/var/log/nous/auto-update.last_ok`` on success and
+  ``last_failed`` on a post-restart sanity failure; subsequent
+  ticks refuse to re-deploy a SHA listed in ``last_failed``,
+  breaking the every-five-minutes retry loop. New companion
+  script ``deploy/auto-update-rollback.sh`` reads ``last_ok`` and
+  resets the working tree to the previous known-good commit.
+  ``SECURITY.md`` kill-switch panel updated.
+- AUDIT-2026-05-20 H9: every uncited inference numeric in
+  ``profiles/*.yaml`` now carries an inline ``PLACEHOLDER`` comment
+  naming BL-043 (real local model under TensorRT-LLM or
+  llama.cpp).
+- AUDIT-2026-05-24 N5 / N10 / N11: ``_INSTRUCTIONS`` in
+  ``src/nous/server.py`` enumerates the full 26-tool surface
+  grouped by purpose with tier badges. The stale "lands in L1"
+  sentence is gone.
+- AUDIT-2026-05-24 M10 closure pin: BL-006 wired
+  ``ProfileModel.model_validate`` into ``engine._load_profile``;
+  this release adds the regression-suite class
+  ``TestM10ProfileLoaderValidatesAtLoadTime`` per ADR 0023.
+- ``tests/unit/test_policy_fuzz.py`` skip lists were hardcoded and
+  out of sync with ``policy.py``'s tool sets (the missing
+  ``anthropic_cap_status`` was caught by Hypothesis during the H1
+  spine-test work). Both fuzz cases now derive their skip lists
+  from ``_READ_ONLY_TOOLS`` / ``_REVERSIBLE_TOOLS`` /
+  ``_STATEFUL_TOOLS`` so future T0 / T1 / T2 additions do not
+  require a test edit.
+
+### Added
+
+- ``docs/conformance/mqtt.md``, ``docs/conformance/sensors.md``,
+  ``docs/conformance/biometrics.md``: three new conformance
+  postures closing AUDIT-2026-05-20 L9 and AUDIT-2026-05-24 N9.
+  The tree is now eleven postures: cot-tak, stanag-4609-misb-klv,
+  ogc-sensorthings, nmea-0183, stanag-4774-4778, mosa, sosa,
+  stanag-4677-dsss, mqtt, sensors, biometrics.
+- ``uv.lock`` is now committed (was ``.gitignored``).
+  Reproducibility no longer depends on Dependabot freshness alone.
+- ``.github/workflows/*.yml`` SHA-pin every Action ``uses:`` line
+  with the semver in a trailing comment for Dependabot tracking.
+  The setup-uv major-tag drift caught during this engagement
+  (``@v7`` lagged ``v7.6.0`` by several releases) is the exact
+  attack surface SHA pinning closes.
+- New CI job ``supply-chain`` in ``ci.yml`` runs ``pip-audit
+  --strict`` (CVE / advisory) and ``bandit -r src/nous`` (SAST).
+  Docs workflow emits a CycloneDX-JSON SBOM
+  (``cyclonedx-py environment``) on every build and uploads it as
+  a 90-day ``sbom-cyclonedx`` artefact.
+
 ### Documented
 
+- Delta audit at HEAD ``4a6b394`` published as
+  [`docs/audit-2026-05-27.md`](docs/audit-2026-05-27.md). Closes
+  eleven open findings from the 2026-05-24 baseline plus three new
+  supply-chain wins surfaced during the Phase 0 inventory of the
+  engagement. Carry-forward open items: H2 (mypy strict for tests),
+  N3 / N4 / N7 (polish), N2 (live-VM action), N8 (ADR 0019-0022
+  implementation programme).
 - Full code-index audit at revision `fb8356f` published as
   [`docs/audit-2026-05-24.md`](docs/audit-2026-05-24.md). Delta
   against the 2026-05-23 audit (including its §10 re-audit): the
