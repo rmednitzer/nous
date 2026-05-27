@@ -171,7 +171,11 @@ class TestC4MisbKlvRefusesOverflow:
         payload = adapter.encode({"ts_s": _now(), "5": "x" * 500})
         decoded = adapter.decode(payload)
         assert "error" not in decoded
-        assert decoded["items"][5] == ("x" * 500).encode().hex()
+        # AUDIT-2026-05-24 N7: decoder returns UTF-8 strings (with
+        # hex fallback for non-UTF-8 bytes); the legacy hex-on-every-
+        # value pattern is gone. Round trip is symmetric for the
+        # str-encoded values the encoder writes.
+        assert decoded["items"][5] == "x" * 500
 
 
 class TestC5StubEstimatorsActuallyFilter:
@@ -537,3 +541,49 @@ class TestM10ProfileLoaderValidatesAtLoadTime:
 
         with pytest.raises(FileNotFoundError, match="profile YAML not found"):
             _load_profile("regression-profile-does-not-exist")
+
+
+class TestN7MisbKlvDecodeReturnsSymmetricTypes:
+    """N7: MISB KLV decoder must return UTF-8 strings (with hex fallback).
+
+    Original defect (``AUDIT.md`` N7, 2026-05-24): the decoder
+    returned ``{k: v.hex() for k, v in items.items()}``, so every
+    value came back as a hex string regardless of how the encoder
+    serialised it. The encoder writes ``str(v).encode("utf-8")``
+    for every non-timestamp key; the round trip was therefore
+    lossy by design (encoder writes ``b"foo"``, decoder yields
+    ``"666f6f"``).
+
+    Fix: the decoder calls ``_decode_value`` per item. The
+    timestamp key (2) returns an ``int`` (microseconds since
+    Unix epoch per MISB ST 0601). Every other key attempts
+    UTF-8 decode and falls back to hex if the bytes are not
+    valid UTF-8. Round trip is symmetric for the str-encoded
+    values the encoder writes; binary-key edge cases stay
+    inspectable as hex.
+    """
+
+    def test_round_trip_returns_utf8_string(self) -> None:
+        adapter = MisbKlvAdapter(max_value_len=4096)
+        payload = adapter.encode({"ts_s": _now(), "5": "hello"})
+        decoded = adapter.decode(payload)
+        assert decoded["items"][5] == "hello"
+
+    def test_timestamp_key_returns_microseconds_int(self) -> None:
+        adapter = MisbKlvAdapter()
+        ts = _now()
+        payload = adapter.encode({"ts_s": ts, "3": "ok"})
+        decoded = adapter.decode(payload)
+        # Key 2 is the timestamp; the encoder writes microseconds
+        # since Unix epoch as 8 raw bytes big-endian.
+        assert isinstance(decoded["items"][2], int)
+        assert decoded["items"][2] == int(ts * 1_000_000)
+
+    def test_non_utf8_bytes_fall_back_to_hex(self) -> None:
+        from nous.interop.misb_klv import _decode_value
+
+        # Construct a value that is not valid UTF-8 (a lone
+        # continuation byte).
+        bad = b"\xc3\x28"
+        result = _decode_value(5, bad)
+        assert result == bad.hex()
