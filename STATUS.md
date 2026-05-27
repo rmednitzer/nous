@@ -7,13 +7,20 @@ yet?" questions.
 
 The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`.
 
-Last reviewed: 2026-05-27 (delta audit at HEAD `4a6b394`, post the
-``claude/lucid-feynman-7bhyI`` stack: eleven open findings from the
-2026-05-24 baseline closed (C2, M1, M10 pin, H1 spine tests, H6,
-H7, H8, H9, L9, N5 / N10 / N11, N9), three new supply-chain wins
-(N12 commit ``uv.lock``, N13 SHA-pin GitHub Actions, N14 add
-``pip-audit`` + ``bandit`` + CycloneDX SBOM in CI). See
-[`docs/audit-2026-05-27.md`](docs/audit-2026-05-27.md).
+Last reviewed: 2026-05-27 second pass (delta audit at HEAD
+``563175a``, post the ``claude/audit-carryforwards-2026-05-27``
+stack: six 2026-05-27 carry-forwards closed (H2 mypy strict for
+tests, N3 ``state_get`` enrichment, N4 snapshot parity test, N7
+MISB decoder symmetry, N16 hypothesis-db hygiene doc, N17 bandit
+suppressions catalog), plus first implementation increments for
+the N8 ADR programme (ADR 0019 seed plus clock seams, ADR 0020
+subsystem-physics invariants). ADR 0021 (per-subsystem tool
+modules) and ADR 0022 (runtime safety enforcer) remain
+unimplemented; each is its own multi-PR programme. Live-VM
+action (N2) unchanged. See
+[`docs/audit-2026-05-27b.md`](docs/audit-2026-05-27b.md) for
+the delta and [`docs/audit-2026-05-27.md`](docs/audit-2026-05-27.md)
+for the prior baseline.
 
 Deployment-side status note: the L1 subsystem rollout has been on
 `origin/main` since PR #38, so the auto-update timer lands the
