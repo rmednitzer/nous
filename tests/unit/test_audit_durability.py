@@ -134,6 +134,83 @@ def test_resync_when_cause_still_present_remains_degraded(tmp_path: Path) -> Non
     assert prior_reason  # original reason was non-empty too
 
 
+# --- AUDIT-2026-05-23 N2 follow-up: audit_summary surface ---
+
+
+def test_summary_reports_healthy_handler_state(tmp_path: Path) -> None:
+    """A freshly-constructed logger surfaces the full state with no
+    writes yet: degraded False, writes_total 0, last_write_ts None."""
+    path = tmp_path / "audit.jsonl"
+    logger = AuditLogger(path)
+
+    summary = logger.summary()
+    assert summary["path"] == str(path)
+    assert summary["degraded"] is False
+    assert summary["degraded_reason"] == ""
+    assert summary["fsync_failures"] == 0
+    assert summary["writes_total"] == 0
+    assert summary["last_write_ts_s"] is None
+    assert summary["also_stderr"] is False
+
+
+def test_summary_increments_writes_total_on_each_write(tmp_path: Path) -> None:
+    """Every successful ``write()`` bumps ``writes_total`` and
+    refreshes ``last_write_ts_s``. The counter is the silent-drop
+    signal a controller watches against the tick cadence."""
+    logger = AuditLogger(tmp_path / "audit.jsonl")
+    assert logger.summary()["writes_total"] == 0
+
+    logger.write(AuditRecord.from_output(tool="t", tier=0, args={}, output="x"))
+    s1 = logger.summary()
+    assert s1["writes_total"] == 1
+    assert s1["last_write_ts_s"] is not None
+
+    logger.write(AuditRecord.from_output(tool="t", tier=0, args={}, output="y"))
+    s2 = logger.summary()
+    assert s2["writes_total"] == 2
+    assert s2["last_write_ts_s"] is not None
+    assert s2["last_write_ts_s"] >= s1["last_write_ts_s"]
+
+
+def test_summary_surfaces_degraded_reason_after_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A degraded state surfaces in the summary just like in
+    ``device_info``, with the same reason string. The ``writes_total``
+    counter does NOT increment when fsync fails so the silent-drop
+    window is observable.
+
+    PR #60 review pin: the assertion that ``writes_total`` stays at
+    zero (and ``last_write_ts_s`` stays ``None``) is the contract
+    the durability gate in ``AuditLogger.write`` upholds. Without
+    the explicit assertion a regression that re-bumps the counter
+    on a fsync-failed write would slip past the test.
+    """
+    logger = AuditLogger(tmp_path / "audit.jsonl")
+
+    def _fail_fsync(fd: int) -> None:
+        raise OSError("simulated fsync failure")
+
+    monkeypatch.setattr("nous.audit.os.fsync", _fail_fsync)
+    logger.write(AuditRecord.from_output(tool="t", tier=0, args={}, output="x"))
+
+    summary = logger.summary()
+    assert summary["degraded"] is True
+    assert "simulated fsync failure" in summary["degraded_reason"]
+    assert summary["fsync_failures"] >= 1
+    # Durable-write contract: a fsync-failed write must not advance
+    # the activity counters; otherwise a controller watching
+    # ``writes_total`` against the tick cadence would see a
+    # phantom success.
+    assert summary["writes_total"] == 0
+    assert summary["last_write_ts_s"] is None
+
+
+def test_summary_reports_also_stderr_when_attached(tmp_path: Path) -> None:
+    logger = AuditLogger(tmp_path / "audit.jsonl", also_stderr=True)
+    assert logger.summary()["also_stderr"] is True
+
+
 def test_resync_preserves_cumulative_fsync_failure_count(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

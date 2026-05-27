@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (AUDIT-2026-05-23 N2 follow-up: audit_summary tool)
+
+- ``AuditLogger`` now tracks ``writes_total`` (cumulative successful
+  writes) and ``last_write_ts_s`` (unix timestamp of the most
+  recent successful write; ``None`` until the first write). The
+  counters update on the success path only; the swallowed-exception
+  paths leave them untouched so a flat ``writes_total`` against
+  active tick cadence is the silent-drop signal.
+- New ``AuditLogger.summary()`` returns the full T0 view:
+  ``path``, ``degraded``, ``degraded_reason``, ``fsync_failures``,
+  ``writes_total``, ``last_write_ts_s``, ``also_stderr``.
+- New MCP tool ``audit_summary`` (T0) wires
+  ``app.audit.summary()`` through the audited runner. The tool
+  was already classified ``Tier.READ_ONLY`` in ``policy.py`` but
+  never registered in ``server.py``; this commit closes the
+  registration gap. ``_INSTRUCTIONS`` advertises the tool in
+  the existing "Device telemetry (T0)" line. A controller
+  comparing ``audit_summary.writes_total`` against the tick
+  cadence can detect a silently-dropping handler that
+  ``device_info.audit.degraded`` (which only flips on a write
+  exception) would not catch.
+
 ### Fixed (AUDIT-2026-05-23 N2 in-process recovery)
 
 - ``AuditLogger`` carries a new ``resync()`` method that re-runs
