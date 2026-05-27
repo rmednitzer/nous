@@ -50,22 +50,38 @@ def _sha256_hex(text: str) -> str:
 
 
 def redact(args: Mapping[str, Any]) -> dict[str, Any]:
-    """Return a copy of ``args`` with sensitive keys masked.
+    """Return a copy of ``args`` with sensitive keys masked at every depth.
 
     Values for any key matching the redaction pattern are replaced with the
-    placeholder. Surviving string values are truncated to a fixed budget so
-    a misbehaving caller cannot fill the log with one giant argument.
+    placeholder. The walk recurses into nested mappings and list items so
+    a caller cannot smuggle a secret past the allowlist by burying it
+    inside ``{"context": {"headers": {"Authorization": ...}}}``. Surviving
+    string values are truncated to a fixed budget at every depth so a
+    misbehaving caller cannot fill the log with one giant argument.
+
+    Closes AUDIT-2026-05-20 C2.
     """
+    return _redact_mapping(args)
+
+
+def _redact_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for key, value in args.items():
+    for key, inner in value.items():
         if _REDACT_KEYS.search(key):
             out[key] = _REDACT_PLACEHOLDER
-            continue
-        if isinstance(value, str) and len(value) > _MAX_ARG_LEN:
-            out[key] = value[:_MAX_ARG_LEN] + f"...<truncated {len(value)}>"
         else:
-            out[key] = value
+            out[key] = _redact_value(inner)
     return out
+
+
+def _redact_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return _redact_mapping(value)
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    if isinstance(value, str) and len(value) > _MAX_ARG_LEN:
+        return value[:_MAX_ARG_LEN] + f"...<truncated {len(value)}>"
+    return value
 
 
 class AuditRecord(BaseModel):

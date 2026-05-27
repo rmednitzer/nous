@@ -53,6 +53,9 @@ async def run(
 
     if not decision.allowed:
         body = f"[DENIED tier {int(decision.tier)} ({decision.tier.name}): {decision.reason}]"
+        # Stamp ``exit_code=1`` on the denial record so an operator can
+        # count denials per tier per day without parsing the body string.
+        # Closes AUDIT-2026-05-20 M1.
         audit.write(
             AuditRecord.from_output(
                 tool=tool,
@@ -62,6 +65,7 @@ async def run(
                 denied=True,
                 decision_reason=decision.reason,
                 policy_mode=policy_mode.value,
+                exit_code=1,
                 request_id=request_id,
                 client_id=client_id,
             )

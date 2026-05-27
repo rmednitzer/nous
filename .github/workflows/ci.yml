@@ -20,15 +20,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v7.6.0
         with:
           enable-cache: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: "3.12"
 
@@ -44,7 +44,50 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: make policy
         run: make policy
+
+  supply-chain:
+    name: pip-audit + bandit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v7.6.0
+        with:
+          enable-cache: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies
+        run: uv sync --all-extras
+
+      - name: Export project requirements from uv.lock
+        run: |
+          # Address PR #57 review (Codex + Copilot): ``uv tool run``
+          # would audit pip-audit's isolated tool venv, not the
+          # project. Export the resolved lockfile to a requirements
+          # file and audit that. ``NO_COLOR=1`` keeps ANSI escapes
+          # out of the stdout capture; we strip the editable
+          # ``-e .`` line (the project itself) because the
+          # vulnerability databases do not carry an entry for
+          # ``nous``.
+          NO_COLOR=1 uv export --format requirements-txt --no-hashes 2>/dev/null \
+            | grep -v '^-e ' > project-requirements.txt
+          wc -l project-requirements.txt
+
+      - name: pip-audit
+        run: |
+          uv tool run --from pip-audit pip-audit --strict \
+            --disable-pip --no-deps -r project-requirements.txt
+
+      - name: bandit
+        run: uv tool run --from bandit bandit -r src/nous

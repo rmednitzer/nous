@@ -71,6 +71,13 @@ compute:
     - { load_pct: 75,  draw_w: 50 }
     - { load_pct: 100, draw_w: 60 }
   inference_local:
+    # PLACEHOLDER until BL-043 (real local model under TensorRT-LLM or
+    # llama.cpp on Jetson AGX Orin). The two figures below are
+    # order-of-magnitude estimates consistent with published Jetson
+    # AGX Orin INT8 inference benchmarks (NVIDIA Jetson Performance
+    # data, llama.cpp Jetson benchmarks). They drive the latency /
+    # energy figures the inference subsystem reports today but are
+    # not measured. ``docs/bom.md`` carries the cross-reference.
     tok_per_s_p50: 200
     energy_j_per_tok: 0.12
 

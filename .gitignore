@@ -45,6 +45,3 @@ nous_home/
 
 # Docs build
 /site/
-
-# uv
-uv.lock

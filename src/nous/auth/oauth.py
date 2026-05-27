@@ -11,13 +11,29 @@ Optional single-client lockdown closes Dynamic Client Registration after
 the first client is registered, so claude.ai claims the integration once
 and no later registration can squat on the issuer.
 
+Concurrency and durability (closes AUDIT-2026-05-20 H6): every public
+RMW sequence runs under ``self._async_lock``. Each file write tightens
+the mode bits to ``0o600`` before the atomic swap and ``fsync``s the
+parent directory after the rename so the swap reaches stable storage.
+
+Refresh-token family revocation (closes AUDIT-2026-05-20 H7): every
+issued token carries an ``issue_id`` that names its family. A rotation
+mints a new pair with the same ``issue_id`` and marks the consumed
+refresh record as ``consumed=True`` (it is not popped, so reuse stays
+detectable). A subsequent ``load_refresh_token`` or
+``exchange_refresh_token`` against the consumed token revokes every
+record in the family (access plus refresh), per OAuth 2.1 BCP §4.13.
+
 Errors here must surface as auth failures, never as a crashed transport;
 all I/O is defensive.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
+import os
 import secrets
 import time
 from pathlib import Path
@@ -49,8 +65,19 @@ def _now() -> int:
     return int(time.time())
 
 
+def _new_issue_id() -> str:
+    return secrets.token_urlsafe(24)
+
+
 class _Store:
-    """Tiny JSON file store. Each call reads or writes the whole file."""
+    """Tiny JSON file store. Each call reads or writes the whole file.
+
+    ``save()`` writes through a ``.tmp`` sibling, tightens the mode to
+    ``0o600`` before the atomic rename, then ``fsync``s the parent
+    directory so the rename hits stable storage. Concurrency is
+    arbitrated by the owning :class:`FileOAuthProvider`'s
+    ``asyncio.Lock``; ``_Store`` itself is single-writer per call.
+    """
 
     def __init__(self, path: Path) -> None:
         self._path = path
@@ -64,9 +91,35 @@ class _Store:
         return data if isinstance(data, dict) else {}
 
     def save(self, data: dict[str, Any]) -> None:
+        # Address PR #57 review (Copilot + Codex): create the temp
+        # file with ``0o600`` from the start (no mode race), write
+        # and ``fsync`` the temp fd before rename (no torn-file
+        # window), then ``fsync`` the parent directory so the
+        # rename hits stable storage. ``Path.write_text`` would
+        # have created the file with the umask-default mode and
+        # would not have fsynced before the swap.
         tmp = self._path.with_suffix(self._path.suffix + ".tmp")
-        tmp.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+        payload = json.dumps(data, indent=2, default=str).encode("utf-8")
+        fd = os.open(
+            str(tmp), os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600
+        )
+        try:
+            os.write(fd, payload)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
         tmp.replace(self._path)
+        # Belt-and-braces: chmod after rename in case the filesystem
+        # promoted the inode's mode bits during the swap.
+        with contextlib.suppress(OSError):
+            self._path.chmod(0o600)
+        # Fsync the parent directory so the rename is durable.
+        with contextlib.suppress(OSError):
+            dir_fd = os.open(str(self._path.parent), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
 
 
 class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-arg]
@@ -89,10 +142,17 @@ class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-
         self._access_ttl = access_ttl
         self._refresh_ttl = refresh_ttl
         self._code_ttl = code_ttl
+        # One provider-level lock arbitrates every load+modify+save
+        # sequence. ``asyncio.Lock`` is single-process; the deployment
+        # is single-process under uvicorn / gunicorn-with-one-worker
+        # per ADR-0008 (superseded by 0016). Multi-process deployments
+        # would need a file lock (see BL-045 multi-tenant L3).
+        self._async_lock = asyncio.Lock()
 
     # --- clients ---
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
-        data = self._clients.load().get(client_id)
+        async with self._async_lock:
+            data = self._clients.load().get(client_id)
         if not data:
             return None
         try:
@@ -104,37 +164,39 @@ class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-
         cid = client_info.client_id or ""
         if not cid:
             raise ValueError("client_id is required")
-        clients = self._clients.load()
         record = json.loads(client_info.model_dump_json())
-        if self._single_client and clients and cid not in clients:
-            # Single-client mode: at most one active client. Re-DCR replaces
-            # the prior client atomically (the new credentials win), keeping
-            # the invariant without breaking clients that retry DCR on each
-            # connection attempt.
-            clients = {cid: record}
-        else:
-            clients[cid] = record
-        self._clients.save(clients)
+        async with self._async_lock:
+            clients = self._clients.load()
+            if self._single_client and clients and cid not in clients:
+                # Single-client mode: at most one active client. Re-DCR
+                # replaces the prior client atomically (the new
+                # credentials win), keeping the invariant without
+                # breaking clients that retry DCR on each connection.
+                clients = {cid: record}
+            else:
+                clients[cid] = record
+            self._clients.save(clients)
 
     # --- authorization codes ---
     async def authorize(
         self, client: OAuthClientInformationFull, params: AuthorizationParams
     ) -> str:
         code = secrets.token_urlsafe(48)
-        codes = self._codes.load()
-        codes[code] = {
-            "code": code,
-            "client_id": client.client_id or "",
-            "scopes": list(getattr(params, "scopes", None) or _SCOPES),
-            "expires_at": _now() + self._code_ttl,
-            "code_challenge": getattr(params, "code_challenge", ""),
-            "redirect_uri": str(params.redirect_uri),
-            "redirect_uri_provided_explicitly": bool(
-                getattr(params, "redirect_uri_provided_explicitly", True)
-            ),
-            "resource": getattr(params, "resource", None),
-        }
-        self._codes.save(codes)
+        async with self._async_lock:
+            codes = self._codes.load()
+            codes[code] = {
+                "code": code,
+                "client_id": client.client_id or "",
+                "scopes": list(getattr(params, "scopes", None) or _SCOPES),
+                "expires_at": _now() + self._code_ttl,
+                "code_challenge": getattr(params, "code_challenge", ""),
+                "redirect_uri": str(params.redirect_uri),
+                "redirect_uri_provided_explicitly": bool(
+                    getattr(params, "redirect_uri_provided_explicitly", True)
+                ),
+                "resource": getattr(params, "resource", None),
+            }
+            self._codes.save(codes)
         return construct_redirect_uri(
             str(params.redirect_uri),
             code=code,
@@ -160,89 +222,168 @@ class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-
     async def load_authorization_code(
         self, client: OAuthClientInformationFull, authorization_code: str
     ) -> AuthorizationCode | None:
-        codes = self._codes.load()
-        rec = codes.get(authorization_code)
-        if not rec or rec.get("client_id") != (client.client_id or ""):
-            return None
-        if int(rec.get("expires_at", 0)) < _now():
-            codes.pop(authorization_code, None)
-            self._codes.save(codes)
-            return None
-        return self._build_auth_code(rec)
+        async with self._async_lock:
+            codes = self._codes.load()
+            rec = codes.get(authorization_code)
+            if not rec or rec.get("client_id") != (client.client_id or ""):
+                return None
+            if int(rec.get("expires_at", 0)) < _now():
+                codes.pop(authorization_code, None)
+                self._codes.save(codes)
+                return None
+            return self._build_auth_code(rec)
 
     async def exchange_authorization_code(
         self,
         client: OAuthClientInformationFull,
         authorization_code: AuthorizationCode,
     ) -> OAuthToken:
-        codes = self._codes.load()
-        codes.pop(authorization_code.code, None)
-        self._codes.save(codes)
-        scopes = list(authorization_code.scopes or _SCOPES)
-        return self._issue(client.client_id or "", scopes)
+        async with self._async_lock:
+            codes = self._codes.load()
+            codes.pop(authorization_code.code, None)
+            self._codes.save(codes)
+            scopes = list(authorization_code.scopes or _SCOPES)
+            return self._issue(client.client_id or "", scopes)
 
     # --- tokens ---
-    def _issue(self, client_id: str, scopes: list[str]) -> OAuthToken:
+    def _issue(
+        self,
+        client_id: str,
+        scopes: list[str],
+        *,
+        parent_issue_id: str | None = None,
+    ) -> OAuthToken:
+        """Mint a new (access, refresh) pair. **Caller must hold the lock.**
+
+        ``parent_issue_id`` propagates a family identifier across
+        rotations: a refresh-token exchange passes the consumed
+        record's ``issue_id`` so the new pair belongs to the same
+        family. First-issue pairs (authorization-code exchange, direct
+        ``_issue`` for tests) seed a fresh id.
+        """
         access = secrets.token_urlsafe(48)
         refresh = secrets.token_urlsafe(48)
+        issue_id = parent_issue_id or _new_issue_id()
         tokens = self._tokens.load()
+        # Address PR #57 review (Codex): opportunistically sweep
+        # expired entries so the token store stays bounded under
+        # frequent rotation.
+        self._prune_expired(tokens)
         tokens[access] = {
             "token": access,
             "client_id": client_id,
             "scopes": scopes,
             "expires_at": _now() + self._access_ttl,
+            "issue_id": issue_id,
         }
         tokens[_REFRESH_PREFIX + refresh] = {
             "token": refresh,
             "client_id": client_id,
             "scopes": scopes,
             "expires_at": _now() + self._refresh_ttl,
+            "issue_id": issue_id,
         }
         self._tokens.save(tokens)
         return OAuthToken(
             access_token=access,
-            token_type="Bearer",
+            token_type="Bearer",  # nosec B106 - OAuth token type literal, not a credential
             expires_in=self._access_ttl,
             refresh_token=refresh,
             scope=" ".join(scopes),
         )
 
+    @staticmethod
+    def _revoke_family(tokens: dict[str, Any], issue_id: str) -> None:
+        """Drop every active token sharing ``issue_id``. Mutates in place.
+
+        Consumed refresh records (``consumed=True``) are also dropped
+        so the registry does not grow unboundedly after a revocation.
+        """
+        if not issue_id:
+            return
+        for key in list(tokens.keys()):
+            entry = tokens.get(key)
+            if isinstance(entry, dict) and entry.get("issue_id") == issue_id:
+                tokens.pop(key, None)
+
+    @staticmethod
+    def _prune_expired(tokens: dict[str, Any]) -> None:
+        """Drop every token whose ``expires_at`` is in the past.
+
+        Address PR #57 review (Codex): without this sweep, a
+        long-running deployment that rotates refresh tokens
+        regularly accumulates one consumed refresh record per
+        rotation (the load path was returning ``None`` on expiry
+        without popping). Called opportunistically inside RMW
+        sequences so the registry stays bounded.
+        """
+        now = _now()
+        for key in list(tokens.keys()):
+            entry = tokens.get(key)
+            if not isinstance(entry, dict):
+                continue
+            expires = entry.get("expires_at", 0)
+            try:
+                expires_int = int(expires)
+            except (TypeError, ValueError):
+                continue
+            if 0 < expires_int < now:
+                tokens.pop(key, None)
+
     async def load_access_token(self, token: str) -> AccessToken | None:
-        tokens = self._tokens.load()
-        rec = tokens.get(token)
-        if not rec:
-            return None
-        if int(rec.get("expires_at", 0)) < _now():
-            tokens.pop(token, None)
-            self._tokens.save(tokens)
-            return None
-        try:
-            return AccessToken(
-                token=rec["token"],
-                client_id=rec["client_id"],
-                scopes=rec["scopes"],
-                expires_at=int(rec["expires_at"]),
-            )
-        except Exception:  # noqa: BLE001
-            return None
+        async with self._async_lock:
+            tokens = self._tokens.load()
+            rec = tokens.get(token)
+            if not rec:
+                return None
+            if int(rec.get("expires_at", 0)) < _now():
+                tokens.pop(token, None)
+                self._tokens.save(tokens)
+                return None
+            try:
+                return AccessToken(
+                    token=rec["token"],
+                    client_id=rec["client_id"],
+                    scopes=rec["scopes"],
+                    expires_at=int(rec["expires_at"]),
+                )
+            except Exception:  # noqa: BLE001
+                return None
 
     async def load_refresh_token(
         self, client: OAuthClientInformationFull, refresh_token: str
     ) -> RefreshToken | None:
-        rec = self._tokens.load().get(_REFRESH_PREFIX + refresh_token)
-        if not rec or rec.get("client_id") != (client.client_id or ""):
-            return None
-        if int(rec.get("expires_at", 0)) < _now():
-            return None
-        try:
-            return RefreshToken(
-                token=rec["token"],
-                client_id=rec["client_id"],
-                scopes=rec["scopes"],
-                expires_at=int(rec["expires_at"]),
-            )
-        except Exception:  # noqa: BLE001
-            return None
+        async with self._async_lock:
+            tokens = self._tokens.load()
+            key = _REFRESH_PREFIX + refresh_token
+            rec = tokens.get(key)
+            if not rec or rec.get("client_id") != (client.client_id or ""):
+                return None
+            if int(rec.get("expires_at", 0)) < _now():
+                # Pop the expired record so a consumed-but-expired
+                # token does not linger forever. Address PR #57
+                # review (Codex): the prior branch returned without
+                # popping, leaving the registry to grow.
+                tokens.pop(key, None)
+                self._tokens.save(tokens)
+                return None
+            if rec.get("consumed"):
+                # OAuth 2.1 BCP §4.13: a refresh token presented after
+                # it was rotated is a reuse signal. Revoke the entire
+                # family (every active access plus refresh sharing
+                # ``issue_id``) and refuse the load.
+                self._revoke_family(tokens, rec.get("issue_id", ""))
+                self._tokens.save(tokens)
+                return None
+            try:
+                return RefreshToken(
+                    token=rec["token"],
+                    client_id=rec["client_id"],
+                    scopes=rec["scopes"],
+                    expires_at=int(rec["expires_at"]),
+                )
+            except Exception:  # noqa: BLE001
+                return None
 
     async def exchange_refresh_token(
         self,
@@ -250,18 +391,52 @@ class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-
         refresh_token: RefreshToken,
         scopes: list[str],
     ) -> OAuthToken:
-        tokens = self._tokens.load()
-        tokens.pop(_REFRESH_PREFIX + refresh_token.token, None)
-        self._tokens.save(tokens)
-        effective = list(scopes or refresh_token.scopes or _SCOPES)
-        return self._issue(client.client_id or "", effective)
+        async with self._async_lock:
+            tokens = self._tokens.load()
+            key = _REFRESH_PREFIX + refresh_token.token
+            rec = tokens.get(key)
+            if rec is None:
+                # Orphan token: nothing to consume.
+                raise ValueError("refresh token unknown")
+            if rec.get("consumed"):
+                # Reuse: revoke the whole family. The caller surfaces
+                # the failure as ``invalid_grant`` to the client.
+                self._revoke_family(tokens, rec.get("issue_id", ""))
+                self._tokens.save(tokens)
+                raise ValueError("refresh token reuse detected; family revoked")
+            # Seed an ``issue_id`` on legacy records (pre-upgrade
+            # tokens written before H7 landed) so reuse detection
+            # protects the family on the very first rotation.
+            # Address PR #57 review (Codex): without this, the
+            # rotated pair gets a fresh family id while the
+            # consumed legacy record stays family-less, so
+            # ``_revoke_family(tokens, "")`` becomes a no-op on
+            # replay and the new pair is never revoked.
+            if not rec.get("issue_id"):
+                rec["issue_id"] = _new_issue_id()
+            # Mark consumed (not popped) so a second presentation
+            # remains detectable. The record cleans up at expiry
+            # via the load path's pop branch (or sooner via
+            # ``_prune_expired`` in the next ``_issue``).
+            rec["consumed"] = True
+            rec["consumed_at"] = _now()
+            tokens[key] = rec
+            self._tokens.save(tokens)
+            parent_issue = rec.get("issue_id") or None
+            effective = list(scopes or refresh_token.scopes or _SCOPES)
+            return self._issue(
+                client.client_id or "",
+                effective,
+                parent_issue_id=parent_issue,
+            )
 
     async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
-        tokens = self._tokens.load()
-        raw = getattr(token, "token", "")
-        tokens.pop(raw, None)
-        tokens.pop(_REFRESH_PREFIX + raw, None)
-        self._tokens.save(tokens)
+        async with self._async_lock:
+            tokens = self._tokens.load()
+            raw = getattr(token, "token", "")
+            tokens.pop(raw, None)
+            tokens.pop(_REFRESH_PREFIX + raw, None)
+            self._tokens.save(tokens)
 
 
 def build_auth_settings(issuer: str) -> AuthSettings:

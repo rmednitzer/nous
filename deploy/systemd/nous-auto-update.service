@@ -13,5 +13,16 @@ ExecStart=/opt/nous/deploy/auto-update.sh
 TimeoutStartSec=10m
 StandardOutput=journal
 StandardError=journal
+# AUDIT-2026-05-20 H8: explicit no-restart + clean exit status.
+# Restart=no is the default for Type=oneshot but stating it inline
+# documents the intent: a failed update does NOT loop within the
+# unit; the timer fires the next tick, and auto-update.sh checks
+# /var/log/nous/auto-update.last_failed to skip a commit that
+# already broke. The pair (Restart=no + last_failed skip) replaces
+# the implicit every-five-minutes retry behaviour with explicit
+# refusal until an operator intervenes via
+# deploy/auto-update-rollback.sh.
+Restart=no
+SuccessExitStatus=0
 # Auto-update touches /opt/nous, /etc/nous, /var/log/nous, /etc/systemd,
 # and restarts the unit; runs as root by necessity.

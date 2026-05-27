@@ -7,9 +7,13 @@ yet?" questions.
 
 The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`.
 
-Last reviewed: 2026-05-24 (code-index audit at HEAD `fb8356f`, post
-PR #44 borrowed regression suite + tick finiteness guard + ADRs 0019
-through 0022).
+Last reviewed: 2026-05-27 (delta audit at HEAD `4a6b394`, post the
+``claude/lucid-feynman-7bhyI`` stack: eleven open findings from the
+2026-05-24 baseline closed (C2, M1, M10 pin, H1 spine tests, H6,
+H7, H8, H9, L9, N5 / N10 / N11, N9), three new supply-chain wins
+(N12 commit ``uv.lock``, N13 SHA-pin GitHub Actions, N14 add
+``pip-audit`` + ``bandit`` + CycloneDX SBOM in CI). See
+[`docs/audit-2026-05-27.md`](docs/audit-2026-05-27.md).
 
 Deployment-side status note: the L1 subsystem rollout has been on
 `origin/main` since PR #38, so the auto-update timer lands the
