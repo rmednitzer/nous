@@ -208,6 +208,30 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         return await _wrap("device_health", {}, ctx, _work)
 
     @mcp.tool()
+    async def audit_summary(ctx: Context | None = None) -> str:
+        """Read-only view of the audit handler's state.
+
+        Surfaces the full audit-handler picture: file path, degraded
+        flag and reason, cumulative ``fsync_failures``, cumulative
+        ``writes_total``, ``last_write_ts_s`` (unix timestamp of the
+        most recent successful write; ``None`` if no writes yet),
+        and the ``also_stderr`` echo flag. A controller comparing
+        ``writes_total`` against the tick cadence can detect a
+        silently-dropping handler that ``device_info.audit.degraded``
+        would not catch (the handler accepted the write but the
+        ``WatchedFileHandler`` rotated the inode out from under it).
+
+        Closes the registration gap in ``policy.py`` (``audit_summary``
+        was classified T0 but never wired). Tier T0 (read-only): the
+        method consults handler state without mutating it.
+        """
+
+        async def _work() -> str:
+            return json.dumps(app.audit.summary(), indent=2)
+
+        return await _wrap("audit_summary", {}, ctx, _work)
+
+    @mcp.tool()
     async def audit_resync(ctx: Context | None = None) -> str:
         """Re-open the audit sink in place (closes AUDIT-2026-05-23 N2).
 
@@ -952,7 +976,7 @@ tool call is tier-classified and audited; output bodies are SHA-256 hashed,
 never written to disk. The audit log path is reported by `device_info`.
 
 Device telemetry (T0):
-  device_info / device_health / state_get / state_history
+  device_info / device_health / state_get / state_history / audit_summary
 
 Subsystem reads (T0):
   power_status / apu_status / thermal_status / compute_status / storage_status
