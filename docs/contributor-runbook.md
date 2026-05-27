@@ -279,6 +279,39 @@ manual checks were run, and what `git revert` would have to undo. The
 PR descriptions in the `claude/repo-audit-best-practices-fHVFy` and
 subsequent branches are worked examples.
 
+### 4.X Local cache hygiene
+
+The Hypothesis property tests share an examples database under
+`.hypothesis/` (`examples/`, `constants/`, `unicode_data/`). The
+database accumulates failing examples across runs, which is what
+lets a previously-flaky test surface deterministically on the next
+invocation. Two consequences worth knowing:
+
+The first is the directory grows quietly. A contributor with a
+hard-to-reproduce flake (a property test fails locally but passes
+in CI, or vice versa) can clear the database to rule out a stale
+shrink: `rm -rf .hypothesis/`. The directory is git-ignored;
+clearing it is reversible (Hypothesis re-seeds on the next run)
+and does not lose code.
+
+The second is that a new failing example can appear without any
+code change to the property test itself. The
+`tests/unit/test_policy_fuzz.py` drift caught in the 2026-05-27
+engagement is the canonical example: the test had a hardcoded
+skip list that missed a tool name; Hypothesis happened to
+generate that name during the run and the test failed even
+though no code in the property test or in `policy.py` had
+changed. Fix the test (derive the skip list from the policy
+module's tool sets), do not delete the database to make the
+symptom go away.
+
+The other caches (`.ruff_cache`, `.mypy_cache`, `.pytest_cache`)
+are cleared by `make clean`. The audit log lands at
+`${NOUS_AUDIT_PATH:-$NOUS_HOME/audit.jsonl}` by default; on a
+development workstation that resolves to a path under
+`tests/.nous_home/` via the `tmp_nous_home` fixture, never
+under `/var/log/nous/`.
+
 ## 5. Extend run
 
 An extend run adds new functionality. The canonical recipes live in

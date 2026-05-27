@@ -67,6 +67,15 @@ file gives true append-only semantics; the `logrotate.conf` template in
 A daily hash chain over the audit log is *optional* and shipped as a
 follow-up (`[BL-031]`); the v0.1 scaffold does not gate behaviour on it.
 
+### SAST suppression catalog
+
+Every inline `# nosec` annotation in `src/nous/` is enumerated in
+[`docs/security/bandit-suppressions.md`](docs/security/bandit-suppressions.md)
+with its rationale and the test or document that backs the
+disposition. The `supply-chain` CI job (`bandit -r src/nous`)
+enforces zero unsuppressed findings; a new suppression must land
+in the source tree and the catalog in the same PR.
+
 ### Secret redaction
 
 `src/nous/audit.py` redacts a fixed set of keys before logging:
