@@ -92,16 +92,37 @@ serving the affected MCP endpoint until the sink is restored. The
 for triage lives in `skills/nous-troubleshooting.md`.
 
 The live VM auto-update loop (`nous-auto-update.timer`) tracks
-`origin/main` every five minutes. Two kill switches:
+`origin/main` every five minutes. Three kill switches and one
+rollback path:
 
 ```sh
 systemctl disable --now nous-auto-update.timer   # stop the auto-update loop
 systemctl stop nous.service                      # stop the MCP server itself
+echo "$(date -u +%FT%TZ) $(git -C /opt/nous rev-parse origin/main) prev=manual" \
+    >> /var/log/nous/auto-update.last_failed    # block the next tick from
+                                                 # re-attempting the current
+                                                 # origin/main commit
+bash /opt/nous/deploy/auto-update-rollback.sh    # roll back to the previous
+                                                 # known-good commit
 ```
+
+The auto-update script records every successful deploy to
+`/var/log/nous/auto-update.last_ok` (one line per success, with the
+previous-good SHA in a `prev=` field) and every failed
+post-restart sanity check to `/var/log/nous/auto-update.last_failed`.
+The next tick refuses to redeploy any SHA that appears in
+`last_failed`, breaking the every-five-minutes retry loop on a
+broken commit. `deploy/auto-update-rollback.sh` reads the most
+recent `last_ok` line, resets the working tree to the `prev=` SHA,
+re-runs `install.sh`, and restarts `nous.service`; on success it
+clears `last_failed` so a corrected `main` can deploy on the next
+tick.
 
 The audit log is the authoritative incident artefact; preserve
 `/var/log/nous/audit.jsonl` (and any rotated tail) before any
-remediation that touches `/opt/nous` or the systemd units.
+remediation that touches `/opt/nous` or the systemd units. The
+auto-update markers under `/var/log/nous/` are the deployment audit
+trail; keep them under the same retention as `audit.jsonl`.
 
 ## Prompt-injection posture for `inference_cloud`
 
