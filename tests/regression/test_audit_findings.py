@@ -587,3 +587,41 @@ class TestN7MisbKlvDecodeReturnsSymmetricTypes:
         bad = b"\xc3\x28"
         result = _decode_value(5, bad)
         assert result == bad.hex()
+
+
+class TestN2AuditSinkRecoversInProcess:
+    """N2: a degraded audit sink must recover without a process restart.
+
+    Original defect (``docs/audit-2026-05-23.md`` N2): the live
+    VM was observed in the ``audit.degraded=true`` state. The
+    ``AuditLogger`` only opened its sink once, in ``__init__``,
+    so an operator who remediated the underlying filesystem
+    issue (permissions, mount, ``ReadWritePaths=`` drift) had to
+    restart ``nous.service`` to clear the degraded flag. The
+    restart itself dropped any in-flight audit records.
+
+    Fix: ``AuditLogger.resync()`` re-runs the sink-opening
+    logic in place. The new ``audit_resync`` MCP tool (T2)
+    exposes the same path to a controller. ``fsync_failures``
+    stays cumulative so the operator can still see the loss
+    window. ``recovered`` distinguishes the "this call cleared
+    the degraded state" path from the "sink was already healthy"
+    no-op.
+    """
+
+    def test_resync_recovers_from_degraded(self, tmp_path: Path) -> None:
+        from nous.audit import AuditLogger
+
+        logger = AuditLogger(Path("/proc/0/audit.jsonl"))
+        assert logger.degraded
+
+        logger.path = str(tmp_path / "audit.jsonl")
+        result = logger.resync()
+        assert result["recovered"] is True
+        assert result["degraded"] is False
+
+    def test_audit_resync_tool_is_classified_stateful(self) -> None:
+        from nous.policy import Tier, classify
+
+        tier, _ = classify("audit_resync", {})
+        assert tier is Tier.STATEFUL

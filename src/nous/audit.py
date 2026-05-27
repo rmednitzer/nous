@@ -185,11 +185,29 @@ class AuditLogger:
         self.degraded_reason = ""
         self.fsync_failures = 0
         self._seen_handler_fsync_failures = 0
+        self._also_stderr = bool(also_stderr)
         self._log = logging.getLogger("nous.audit")
         self._log.setLevel(logging.INFO)
         self._log.propagate = False
         for handler in list(self._log.handlers):
             self._log.removeHandler(handler)
+        self._open_sink()
+
+    def _open_sink(self) -> None:
+        """Attach a fresh handler stack for the current ``self.path``.
+
+        Splits the sink-opening logic out of ``__init__`` so
+        :meth:`resync` can re-run it without re-allocating the
+        logger or the in-process counters. ``__init__`` calls this
+        once at construction; ``resync`` calls it again whenever an
+        operator wants to clear a degraded state without restarting
+        the process.
+        """
+        for handler in list(self._log.handlers):
+            self._log.removeHandler(handler)
+            with contextlib.suppress(Exception):
+                handler.close()
+        self._seen_handler_fsync_failures = 0
 
         sink: logging.Handler
         try:
@@ -204,6 +222,8 @@ class AuditLogger:
             with contextlib.suppress(OSError):
                 target.chmod(0o600)
             sink = _FsyncingFileHandler(str(target), encoding="utf-8")
+            self.degraded = False
+            self.degraded_reason = ""
         except OSError as exc:
             self.degraded = True
             self.degraded_reason = str(exc)
@@ -211,10 +231,45 @@ class AuditLogger:
         sink.setFormatter(logging.Formatter("%(message)s"))
         self._log.addHandler(sink)
 
-        if also_stderr and not self.degraded:
+        if self._also_stderr and not self.degraded:
             echo = logging.StreamHandler(sys.stderr)
             echo.setFormatter(logging.Formatter("AUDIT %(message)s"))
             self._log.addHandler(echo)
+
+    def resync(self) -> dict[str, Any]:
+        """Attempt to re-open the audit sink in place.
+
+        Closes AUDIT-2026-05-23 N2 (live audit sink stuck degraded
+        until process restart). An operator (or the ``audit_resync``
+        MCP tool) calls this after fixing the underlying filesystem
+        issue (permissions, mount, ``ReadWritePaths=`` drift). The
+        returned status mirrors the ``audit_summary`` shape:
+
+            {
+                "path": "/var/log/nous/audit.jsonl",
+                "degraded": false,
+                "degraded_reason": "",
+                "fsync_failures": 3,   # cumulative; not reset
+                "recovered": true,     # true when this call cleared
+                                       # a previously-degraded state
+            }
+
+        ``fsync_failures`` is the cumulative counter and is not
+        reset, so an operator can still see how many writes were
+        lost during the degraded window. ``recovered`` distinguishes
+        "this call fixed the sink" from "the sink was already
+        healthy and no-op-ed."
+        """
+        was_degraded = bool(self.degraded)
+        self._open_sink()
+        recovered = was_degraded and not self.degraded
+        return {
+            "path": self.path,
+            "degraded": self.degraded,
+            "degraded_reason": self.degraded_reason,
+            "fsync_failures": self.fsync_failures,
+            "recovered": recovered,
+        }
 
     def write(self, record: AuditRecord) -> None:
         """Append one audit line. Best-effort; swallows its own errors.

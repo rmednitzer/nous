@@ -100,6 +100,17 @@ serving the affected MCP endpoint until the sink is restored. The
 2026-05-23 audit (N2) caught this state on the live VM; the runbook
 for triage lives in `skills/nous-troubleshooting.md`.
 
+The in-process recovery path is the `audit_resync` MCP tool (T2,
+stateful). After an operator remediates the underlying cause
+(permissions, mount, `ReadWritePaths=` drift, the audit file moved
+out from under the handler), `audit_resync` re-opens the sink in
+place; on success `audit.degraded` clears without a service
+restart. `fsync_failures` is the cumulative counter and is *not*
+reset, so the operator can still see how many writes the degraded
+window lost. The `recovered` field in the tool's response
+distinguishes "this call cleared a previously-degraded state" from
+"the sink was already healthy and the call was a no-op."
+
 The live VM auto-update loop (`nous-auto-update.timer`) tracks
 `origin/main` every five minutes. Three kill switches and one
 rollback path:
