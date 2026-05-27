@@ -41,6 +41,14 @@ _REDACT_KEYS = re.compile(
 _REDACT_PLACEHOLDER = "<REDACTED>"
 _MAX_ARG_LEN = 4096
 
+# AUDIT-2026-05-23 N2 follow-up B: auto-resync schedule. Initial 5
+# seconds gives an operator who is actively diagnosing a small
+# window to call ``audit_resync`` themselves or kill the service
+# before the auto-retry fires; the 300-second cap keeps a
+# long-running degraded state from hammering the filesystem.
+_INITIAL_AUTO_RESYNC_BACKOFF_S = 5.0
+_MAX_AUTO_RESYNC_BACKOFF_S = 300.0
+
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
@@ -188,13 +196,25 @@ class AuditLogger:
         # AUDIT-2026-05-23 N2 follow-up: track cumulative writes and the
         # most recent successful write timestamp so ``audit_summary`` can
         # surface activity to the controller without parsing the JSONL
-        # tail. ``writes_total`` counts every successful ``write()``
-        # call (including those that landed on stderr during a degraded
-        # window); a controller watching this counter can detect
-        # "everything is quiet" vs "the audit handler is silently
-        # dropping" by comparing the cadence against the tick rate.
+        # tail. ``writes_total`` advances only on durable writes (gated
+        # on the ``_sync_fsync_failure_state`` delta); a controller
+        # watching this counter against the tick cadence can detect
+        # "everything is quiet" vs "the handler is silently dropping."
         self.writes_total = 0
         self.last_write_ts_s: float | None = None
+        # AUDIT-2026-05-23 N2 follow-up B: opportunistic auto-resync
+        # with exponential backoff. When the sink is degraded and a
+        # ``write()`` lands, the handler attempts an in-process
+        # re-open subject to the backoff schedule. Recovery resets
+        # the backoff to ``_INITIAL_AUTO_RESYNC_BACKOFF_S``; failure
+        # doubles the wait up to ``_MAX_AUTO_RESYNC_BACKOFF_S``. The
+        # cadence is monotonic-clock-based so wall-time jitter does
+        # not change the schedule. Operators see the next-attempt
+        # countdown via ``audit_summary.auto_resync_due_in_s``.
+        self.auto_resync_attempts = 0
+        self.last_auto_resync_ts_s: float | None = None
+        self._auto_resync_backoff_s = _INITIAL_AUTO_RESYNC_BACKOFF_S
+        self._next_auto_resync_at_monotonic_s: float | None = None
         self._seen_handler_fsync_failures = 0
         self._also_stderr = bool(also_stderr)
         self._log = logging.getLogger("nous.audit")
@@ -270,10 +290,17 @@ class AuditLogger:
         lost during the degraded window. ``recovered`` distinguishes
         "this call fixed the sink" from "the sink was already
         healthy and no-op-ed."
+
+        A successful resync also clears the auto-resync backoff
+        state (the next degradation starts at
+        ``_INITIAL_AUTO_RESYNC_BACKOFF_S`` again, not the doubled
+        cap).
         """
         was_degraded = bool(self.degraded)
         self._open_sink()
         recovered = was_degraded and not self.degraded
+        if not self.degraded:
+            self._reset_auto_resync_state()
         return {
             "path": self.path,
             "degraded": self.degraded,
@@ -281,6 +308,59 @@ class AuditLogger:
             "fsync_failures": self.fsync_failures,
             "recovered": recovered,
         }
+
+    def _reset_auto_resync_state(self) -> None:
+        """Restore the auto-resync backoff schedule to the initial state."""
+        self._auto_resync_backoff_s = _INITIAL_AUTO_RESYNC_BACKOFF_S
+        self._next_auto_resync_at_monotonic_s = None
+
+    def _maybe_auto_resync(self) -> None:
+        """Opportunistically re-open a degraded sink on the backoff schedule.
+
+        Called from :meth:`write` before each emit. The check is
+        cheap when healthy (one ``self.degraded`` test) and
+        ``time.monotonic`` is the only system call when degraded
+        but not yet due. The contract:
+
+        - Healthy: reset backoff state, return.
+        - Degraded but not yet scheduled: schedule the first
+          attempt for ``_INITIAL_AUTO_RESYNC_BACKOFF_S`` from now.
+        - Degraded and scheduled, not due: return.
+        - Degraded and due: ``_open_sink()``. On recovery, reset
+          backoff; on continued failure, double the wait up to
+          ``_MAX_AUTO_RESYNC_BACKOFF_S`` and schedule the next
+          attempt.
+
+        The auto-resync tally and last-attempt timestamp surface
+        through ``summary()`` so an operator who is actively
+        diagnosing can see when the next retry will fire.
+        """
+        if not self.degraded:
+            self._reset_auto_resync_state()
+            return
+        now_monotonic = time.monotonic()
+        if self._next_auto_resync_at_monotonic_s is None:
+            self._auto_resync_backoff_s = _INITIAL_AUTO_RESYNC_BACKOFF_S
+            self._next_auto_resync_at_monotonic_s = (
+                now_monotonic + self._auto_resync_backoff_s
+            )
+            return
+        if now_monotonic < self._next_auto_resync_at_monotonic_s:
+            return
+        self.auto_resync_attempts += 1
+        with contextlib.suppress(Exception):
+            self.last_auto_resync_ts_s = time.time()
+        self._open_sink()
+        if self.degraded:
+            self._auto_resync_backoff_s = min(
+                self._auto_resync_backoff_s * 2.0,
+                _MAX_AUTO_RESYNC_BACKOFF_S,
+            )
+            self._next_auto_resync_at_monotonic_s = (
+                now_monotonic + self._auto_resync_backoff_s
+            )
+        else:
+            self._reset_auto_resync_state()
 
     def write(self, record: AuditRecord) -> None:
         """Append one audit line. Best-effort; swallows its own errors.
@@ -293,13 +373,12 @@ class AuditLogger:
         ``writes_total`` and ``last_write_ts_s`` advance only when the
         write was *durable*: the handler accepted the record AND
         ``_sync_fsync_failure_state`` saw no new fsync failures.
-        Address PR #60 review (Copilot + Codex): the prior code
-        bumped the counters after the sync, which meant a
-        fsync-failed write advertised as successful activity even
-        though the audit layer had just classified it as
-        potentially lost. The contract now: counter advance implies
-        durable record.
+
+        Before the write, ``_maybe_auto_resync`` runs to give a
+        degraded sink a chance to recover so the incoming record
+        lands durably (AUDIT-2026-05-23 N2 follow-up B).
         """
+        self._maybe_auto_resync()
         try:
             self._log.info(record.model_dump_json())
             new_failures = self._sync_fsync_failure_state()
@@ -328,22 +407,36 @@ class AuditLogger:
         having to read the JSONL tail or correlate ``device_info``
         with ``device_health``. Fields:
 
-            path                 -- the audit file path (same as
-                                    ``device_info.audit.path``)
-            degraded             -- True when the handler last failed
-                                    to write / fsync
-            degraded_reason      -- last failure reason; "" when healthy
-            fsync_failures       -- cumulative; not reset on recovery
-            writes_total         -- cumulative successful writes; a
-                                    flat line plus tick activity is
-                                    the silent-drop signal
-            last_write_ts_s      -- unix timestamp of the most recent
-                                    successful write; None when no
-                                    writes yet
-            also_stderr          -- True when a stderr echo handler
-                                    is attached alongside the file
-                                    sink (set at construction)
+            path                  -- the audit file path (same as
+                                     ``device_info.audit.path``)
+            degraded              -- True when the handler last failed
+                                     to write / fsync
+            degraded_reason       -- last failure reason; "" when healthy
+            fsync_failures        -- cumulative; not reset on recovery
+            writes_total          -- cumulative durable writes; a flat
+                                     line plus tick activity is the
+                                     silent-drop signal
+            last_write_ts_s       -- unix timestamp of the most recent
+                                     durable write; None when no
+                                     writes yet
+            also_stderr           -- True when a stderr echo handler
+                                     is attached alongside the file
+                                     sink (set at construction)
+            auto_resync_attempts  -- cumulative count of automatic
+                                     in-process re-opens triggered by
+                                     a degraded write (PR #61 N2 B)
+            last_auto_resync_ts_s -- unix timestamp of the most recent
+                                     auto-resync attempt; None if no
+                                     attempt has fired
+            auto_resync_due_in_s  -- seconds until the next scheduled
+                                     auto-resync attempt; None when
+                                     the sink is healthy or has not
+                                     yet failed a write since startup
         """
+        next_at = self._next_auto_resync_at_monotonic_s
+        due_in: float | None = (
+            None if next_at is None else max(0.0, next_at - time.monotonic())
+        )
         return {
             "path": self.path,
             "degraded": self.degraded,
@@ -352,6 +445,9 @@ class AuditLogger:
             "writes_total": self.writes_total,
             "last_write_ts_s": self.last_write_ts_s,
             "also_stderr": self._also_stderr,
+            "auto_resync_attempts": self.auto_resync_attempts,
+            "last_auto_resync_ts_s": self.last_auto_resync_ts_s,
+            "auto_resync_due_in_s": due_in,
         }
 
     def _sync_fsync_failure_state(self) -> int:

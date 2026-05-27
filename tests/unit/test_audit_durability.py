@@ -211,6 +211,130 @@ def test_summary_reports_also_stderr_when_attached(tmp_path: Path) -> None:
     assert logger.summary()["also_stderr"] is True
 
 
+# --- AUDIT-2026-05-23 N2 follow-up B: opportunistic auto-resync ---
+
+
+def test_summary_auto_resync_fields_present_on_healthy_sink(tmp_path: Path) -> None:
+    """Healthy sink: no attempts, no schedule, no last timestamp."""
+    logger = AuditLogger(tmp_path / "audit.jsonl")
+    summary = logger.summary()
+    assert summary["auto_resync_attempts"] == 0
+    assert summary["last_auto_resync_ts_s"] is None
+    assert summary["auto_resync_due_in_s"] is None
+
+
+def test_first_degraded_write_schedules_auto_resync(
+    tmp_path: Path,
+) -> None:
+    """A write that lands on a degraded sink schedules the first
+    auto-resync attempt for ``_INITIAL_AUTO_RESYNC_BACKOFF_S`` from
+    now. The attempt itself does NOT fire on the same call: the
+    operator gets the initial-backoff grace window."""
+    logger = AuditLogger(Path("/proc/0/audit.jsonl"))
+    assert logger.degraded
+
+    logger.write(AuditRecord.from_output(tool="t", tier=0, args={}, output="x"))
+
+    summary = logger.summary()
+    assert summary["auto_resync_attempts"] == 0
+    assert summary["auto_resync_due_in_s"] is not None
+    assert 0.0 <= summary["auto_resync_due_in_s"] <= 5.0
+
+
+def test_auto_resync_recovers_when_due_and_cause_fixed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the scheduled time arrives and the underlying cause is
+    fixed, the next ``write()`` triggers an auto-resync that clears
+    the degraded state. ``auto_resync_attempts`` increments."""
+    logger = AuditLogger(Path("/proc/0/audit.jsonl"))
+    assert logger.degraded
+
+    # Seed the schedule by triggering the "first degraded write" path.
+    logger.write(AuditRecord.from_output(tool="t", tier=0, args={}, output="x"))
+    assert logger.auto_resync_attempts == 0
+
+    # Operator fixes the cause: point at a writable path.
+    logger.path = str(tmp_path / "audit.jsonl")
+
+    # Fast-forward the monotonic clock past the schedule.
+    fake_monotonic_start = 1_000_000.0
+    fake_now = fake_monotonic_start + 10_000.0  # well past 5s backoff
+    monkeypatch.setattr("nous.audit.time.monotonic", lambda: fake_now)
+    logger._next_auto_resync_at_monotonic_s = fake_monotonic_start + 1.0
+
+    logger.write(AuditRecord.from_output(tool="t", tier=0, args={}, output="y"))
+
+    assert logger.degraded is False
+    assert logger.auto_resync_attempts == 1
+    assert logger.last_auto_resync_ts_s is not None
+    assert logger.summary()["auto_resync_due_in_s"] is None
+
+
+def test_auto_resync_backoff_doubles_on_continued_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A retry against a still-failing cause doubles the backoff
+    up to the 300-second cap so a long-running degraded state does
+    not hammer the filesystem."""
+    logger = AuditLogger(Path("/proc/0/audit.jsonl"))
+    fake_now = 1_000_000.0
+    monkeypatch.setattr("nous.audit.time.monotonic", lambda: fake_now)
+
+    # First degraded write seeds the schedule at now + 5s.
+    logger.write(AuditRecord.from_output(tool="t", tier=0, args={}, output="x"))
+    initial_due_in = logger.summary()["auto_resync_due_in_s"]
+    assert initial_due_in is not None
+    assert 4.99 <= initial_due_in <= 5.01
+
+    # Advance past the schedule. The next write triggers a resync
+    # that fails (path is still unreachable), so the backoff
+    # doubles to 10s.
+    fake_now = 1_000_010.0
+    monkeypatch.setattr("nous.audit.time.monotonic", lambda: fake_now)
+    logger.write(AuditRecord.from_output(tool="t", tier=0, args={}, output="y"))
+    assert logger.degraded is True
+    assert logger.auto_resync_attempts == 1
+    next_due = logger.summary()["auto_resync_due_in_s"]
+    assert next_due is not None
+    assert 9.99 <= next_due <= 10.01
+
+
+def test_manual_resync_resets_auto_resync_backoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A successful manual ``resync()`` clears the backoff state.
+    The next degradation starts fresh at the initial backoff, not
+    at the doubled cap from the previous degraded window."""
+    from nous.audit import _INITIAL_AUTO_RESYNC_BACKOFF_S
+
+    logger = AuditLogger(Path("/proc/0/audit.jsonl"))
+    fake_now = 1_000_000.0
+    monkeypatch.setattr("nous.audit.time.monotonic", lambda: fake_now)
+
+    # Drive the backoff up by failing several auto-resyncs.
+    logger.write(AuditRecord.from_output(tool="t", tier=0, args={}, output="x"))
+    for offset in (10.0, 20.0, 40.0):
+        fake_now = 1_000_000.0 + offset
+        monkeypatch.setattr("nous.audit.time.monotonic", lambda: fake_now)
+        logger.write(AuditRecord.from_output(tool="t", tier=0, args={}, output="x"))
+    # Backoff has doubled; some attempts have fired.
+    assert logger.auto_resync_attempts >= 2
+
+    # Operator fixes the cause and runs the manual tool.
+    logger.path = str(tmp_path / "audit.jsonl")
+    result = logger.resync()
+    assert result["recovered"] is True
+
+    # No pending schedule; the next degradation will start at the
+    # initial backoff again.
+    summary = logger.summary()
+    assert summary["auto_resync_due_in_s"] is None
+    # Internal: the backoff is back to the initial value (used as
+    # the seed for the next degraded window).
+    assert logger._auto_resync_backoff_s == _INITIAL_AUTO_RESYNC_BACKOFF_S
+
+
 def test_resync_preserves_cumulative_fsync_failure_count(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

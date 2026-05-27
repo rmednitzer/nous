@@ -51,10 +51,20 @@ Treat this as an incident, not a warning. Triage:
    can still see how many writes the degraded window lost. If the
    call returns `degraded: true` and `recovered: false`, the
    underlying cause is still present; re-check steps 1 through 3.
-5. As a last resort, stop the service (`systemctl stop nous.service`)
+5. If you wait, the handler will retry on its own. The
+   opportunistic auto-resync runs on every `write()` against a
+   degraded sink with a 5-second initial backoff that doubles up
+   to a 300-second cap. `audit_summary.auto_resync_due_in_s`
+   shows the time until the next attempt. Auto-resync fires only
+   when a tool call lands (every audit-write goes through the
+   `write()` path); pausing tool calls keeps the timing under
+   your control. A successful manual `audit_resync` resets the
+   backoff to its initial value.
+6. As a last resort, stop the service (`systemctl stop nous.service`)
    until the sink is restored. The 2026-05-23 audit (N2) caught the
-   live VM in this state; the `audit_resync` tool (closes N2) is
-   the in-process recovery path that replaces the restart.
+   live VM in this state; the `audit_resync` tool and the auto-
+   resync schedule (closes N2) are the in-process recovery paths
+   that replace the restart.
 
 ## The live VM is serving an older tool surface
 
