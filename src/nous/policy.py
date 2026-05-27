@@ -105,6 +105,12 @@ _STATEFUL_TOOLS = frozenset(
         "self_model_publish",
         "state_transition",
         "request_transition",
+        # AUDIT-2026-05-23 N2: re-opens the audit sink in place after
+        # an operator remediates the underlying cause. Stateful
+        # (mutates the in-process audit handler) but idempotent
+        # (re-running the tool when the cause is unfixed leaves the
+        # sink degraded with the same reason). Additive per ADR 0007.
+        "audit_resync",
     }
 )
 

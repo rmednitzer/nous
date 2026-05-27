@@ -6,6 +6,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (AUDIT-2026-05-23 N2 in-process recovery)
+
+- ``AuditLogger`` carries a new ``resync()`` method that re-runs
+  the sink-opening logic in place. ``_open_sink()`` was extracted
+  from ``__init__`` so the same path serves both construction
+  and recovery. An operator who fixes the underlying filesystem
+  cause (permissions, mount, ``ReadWritePaths=`` drift, the
+  audit file moved out from under the handler) no longer has to
+  restart ``nous.service`` to clear ``audit.degraded``;
+  ``resync()`` returns a status dict that distinguishes
+  "recovered" from "no-op" via a ``recovered: bool`` field, and
+  the cumulative ``fsync_failures`` counter is *not* reset so
+  the operator can still see the loss window.
+- New MCP tool ``audit_resync`` (T2) exposes the recovery path
+  to a controller. Classified in ``policy._STATEFUL_TOOLS``
+  (additive per ADR 0007) so guarded mode refuses it without an
+  explicit allow; ``audit_resync`` lands in the
+  ``_INSTRUCTIONS`` block under a new "Operational recovery"
+  category. ``SECURITY.md`` and ``skills/nous-troubleshooting.md``
+  document the triage flow: fix the cause, call the tool, verify
+  ``device_info.audit.degraded`` is ``false``. Regression-pinned
+  as ``TestN2AuditSinkRecoversInProcess``.
+
 ### Fixed (audit carry-forward closures, 2026-05-27 second pass)
 
 - AUDIT-2026-05-20 H2: ``[tool.mypy] files`` now includes

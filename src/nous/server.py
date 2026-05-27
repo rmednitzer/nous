@@ -208,6 +208,27 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         return await _wrap("device_health", {}, ctx, _work)
 
     @mcp.tool()
+    async def audit_resync(ctx: Context | None = None) -> str:
+        """Re-open the audit sink in place (closes AUDIT-2026-05-23 N2).
+
+        Use after an operator has remediated the underlying cause of a
+        degraded audit sink (typically: filesystem permissions or
+        mount, ``ReadWritePaths=`` drift on the systemd unit, the
+        audit file being moved out from under the handler). The tool
+        attempts to re-open ``device_info.audit.path``; on success the
+        ``audit.degraded`` flag clears without a service restart.
+
+        Tier T2 (stateful): mutates the in-process audit handler.
+        ``fsync_failures`` is the cumulative counter and is not
+        reset, so the operator can still see the loss window.
+        """
+
+        async def _work() -> str:
+            return json.dumps(app.audit.resync(), indent=2)
+
+        return await _wrap("audit_resync", {}, ctx, _work)
+
+    @mcp.tool()
     async def state_get(ctx: Context | None = None) -> str:
         """Current FSM mode plus the labels a controller queries together.
 
@@ -949,6 +970,9 @@ Local inference and cloud cap (T0/T1):
 
 Scenarios and configuration (T2):
   scenario_load / scenario_inject / profile_reload
+
+Operational recovery (T2):
+  audit_resync
 
 See `docs/tool-reference.md` for parameter shapes and tier classification,
 and `docs/backlog.md` for the BL-NNN line-item tracker.

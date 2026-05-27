@@ -44,9 +44,17 @@ Treat this as an incident, not a warning. Triage:
 3. Tail `journalctl -u nous.service` for the failure reason; the
    audit handler writes `audit fsync failed: ...` to stderr on each
    failed flush.
-4. Stop the service (`systemctl stop nous.service`) until the sink is
-   restored. The 2026-05-23 audit (N2) caught the live VM in this
-   state.
+4. After the underlying cause is fixed, call the `audit_resync`
+   MCP tool (T2). The handler re-opens in place; on success
+   `device_info.audit.degraded` flips back to `false` without a
+   service restart. `fsync_failures` is cumulative so an operator
+   can still see how many writes the degraded window lost. If the
+   call returns `degraded: true` and `recovered: false`, the
+   underlying cause is still present; re-check steps 1 through 3.
+5. As a last resort, stop the service (`systemctl stop nous.service`)
+   until the sink is restored. The 2026-05-23 audit (N2) caught the
+   live VM in this state; the `audit_resync` tool (closes N2) is
+   the in-process recovery path that replaces the restart.
 
 ## The live VM is serving an older tool surface
 
