@@ -19,9 +19,12 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
+from mcp.shared.auth import OAuthClientInformationFull
+from pydantic import AnyHttpUrl
 
 from nous.anthropic_client import CallCap
 from nous.audit import redact
+from nous.auth.oauth import FileOAuthProvider
 from nous.estimators.biometrics import BiometricsKalman
 from nous.estimators.compute import ComputeKalman
 from nous.estimators.sensors import EnvironmentalKalman
@@ -30,6 +33,27 @@ from nous.estimators.thermal import ThermalKalman
 from nous.interop.cot import CotAdapter
 from nous.interop.misb_klv import MisbKlvAdapter
 from nous.types import Observation
+
+
+def _oauth_client(client_id: str = "c-1") -> OAuthClientInformationFull:
+    return OAuthClientInformationFull(
+        client_id=client_id,
+        client_secret="s",
+        redirect_uris=[AnyHttpUrl("https://example.com/cb")],
+        grant_types=["authorization_code", "refresh_token"],
+        response_types=["code"],
+        scope="mcp:tools",
+    )
+
+
+def _build_provider(tmp_path: Path) -> FileOAuthProvider:
+    return FileOAuthProvider(
+        tmp_path / "auth",
+        single_client=True,
+        access_ttl=3600,
+        refresh_ttl=86_400,
+        code_ttl=60,
+    )
 
 
 def _now() -> float:
@@ -273,6 +297,107 @@ class TestH3CotEventCarriesRequiredAttributes:
         malicious = b"<!DOCTYPE event SYSTEM 'http://evil'><event/>"
         decoded = adapter.decode(malicious)
         assert "error" in decoded
+
+
+class TestH6OAuthFileStoreLockedAndConfidential:
+    """H6: OAuth file store needs an async lock plus ``chmod 0600`` plus
+    parent-dir fsync.
+
+    Original defect (``AUDIT.md`` H6, 2026-05-20): ``_Store.save``
+    wrote atomically (tmp + replace) but did not fsync the parent
+    directory and did not enforce the file mode. Concurrent FastMCP
+    requests could interleave ``_Store.load() ... _Store.save()``
+    because no lock arbitrated the read-modify-write cycle of token
+    / client / code state. Under single-client lockdown the risk
+    was bounded; under multi-tenant L3 it becomes a real race.
+
+    Fix: ``FileOAuthProvider`` carries an ``asyncio.Lock``; every
+    public RMW method wraps its sequence under it. ``_Store.save``
+    chmods the file to ``0o600`` before and after the rename and
+    fsyncs the parent directory so the rename hits stable storage.
+    """
+
+    def test_state_files_end_at_mode_0600(self, tmp_path: Path) -> None:
+        import asyncio
+
+        provider = _build_provider(tmp_path)
+        asyncio.run(provider.register_client(_oauth_client()))
+        provider._issue("c-1", ["mcp:tools"])
+
+        for name in ("clients.json", "tokens.json"):
+            path = tmp_path / "auth" / name
+            assert path.exists(), name
+            mode = path.stat().st_mode & 0o777
+            assert mode == 0o600, f"{name} mode {oct(mode)} != 0o600"
+
+    def test_provider_carries_an_async_lock(self, tmp_path: Path) -> None:
+        import asyncio
+
+        provider = _build_provider(tmp_path)
+        assert isinstance(provider._async_lock, asyncio.Lock)
+
+
+class TestH7RefreshTokenReuseRevokesFamily:
+    """H7: refresh-token reuse must revoke the entire family.
+
+    Original defect (``AUDIT.md`` H7, 2026-05-20):
+    ``exchange_refresh_token`` deleted the consumed refresh token and
+    issued a fresh pair but left any parallel refresh tokens issued
+    earlier in the chain alive. If an attacker captured a refresh
+    token and the rightful client then used it, the attacker's
+    parallel chain continued to mint access tokens silently.
+
+    Fix: every refresh-token record carries an ``issue_id`` naming
+    its family. Rotation propagates the id; the consumed record is
+    marked ``consumed=True`` instead of popped so reuse stays
+    detectable. ``load_refresh_token`` and ``exchange_refresh_token``
+    fire family revocation on a consumed-token presentation, per
+    OAuth 2.1 BCP §4.13.
+    """
+
+    def test_rotated_pair_inherits_family_id(self, tmp_path: Path) -> None:
+        import asyncio
+
+        provider = _build_provider(tmp_path)
+        pair_1 = provider._issue("c-1", ["mcp:tools"])
+        refresh_1 = asyncio.run(
+            provider.load_refresh_token(_oauth_client(), pair_1.refresh_token or "")
+        )
+        assert refresh_1 is not None
+        pair_2 = asyncio.run(
+            provider.exchange_refresh_token(_oauth_client(), refresh_1, ["mcp:tools"])
+        )
+        tokens = provider._tokens.load()
+        original = tokens["refresh:" + (pair_1.refresh_token or "")]["issue_id"]
+        rotated = tokens["refresh:" + (pair_2.refresh_token or "")]["issue_id"]
+        assert original == rotated
+
+    def test_reuse_revokes_rotated_access_token(self, tmp_path: Path) -> None:
+        import asyncio
+
+        provider = _build_provider(tmp_path)
+        pair_1 = provider._issue("c-1", ["mcp:tools"])
+        refresh_1 = asyncio.run(
+            provider.load_refresh_token(_oauth_client(), pair_1.refresh_token or "")
+        )
+        assert refresh_1 is not None
+        pair_2 = asyncio.run(
+            provider.exchange_refresh_token(_oauth_client(), refresh_1, ["mcp:tools"])
+        )
+        assert (
+            asyncio.run(provider.load_access_token(pair_2.access_token)) is not None
+        )
+
+        # Replay the consumed refresh; family revocation fires.
+        assert (
+            asyncio.run(
+                provider.load_refresh_token(
+                    _oauth_client(), pair_1.refresh_token or ""
+                )
+            )
+            is None
+        )
+        assert asyncio.run(provider.load_access_token(pair_2.access_token)) is None
 
 
 class TestM1RunnerDenialStampsExitCode:
