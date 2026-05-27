@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (AUDIT-2026-05-23 N2 follow-up B: opportunistic auto-resync)
+
+- ``AuditLogger.write()`` runs an opportunistic auto-resync against
+  a degraded sink before each emit, on an exponential backoff
+  schedule (5-second initial, doubling to a 300-second cap). The
+  retry triggers only when a tool call lands (every audit-write
+  routes through ``write()``), so an operator who pauses tool
+  calls during active diagnosis keeps full control of the
+  timing. A successful manual ``audit_resync`` resets the
+  backoff to its initial value.
+- ``audit_summary`` MCP tool now exposes ``auto_resync_attempts``,
+  ``last_auto_resync_ts_s`` (wall clock; ``None`` until the first
+  attempt), and ``auto_resync_due_in_s`` (seconds-from-now to
+  the next scheduled attempt; ``None`` when healthy). An
+  operator diagnosing the degraded state can see the upcoming
+  retry window.
+- ``SECURITY.md`` "Audit-degraded posture and kill switches"
+  documents the auto-resync schedule. ``skills/nous-troubleshooting.md``
+  gains a new step 5 explaining the wait-and-let-it-retry path
+  alongside the manual ``audit_resync`` call.
+
 ### Added (AUDIT-2026-05-23 N2 follow-up: audit_summary tool)
 
 - ``AuditLogger`` now tracks ``writes_total`` (cumulative successful

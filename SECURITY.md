@@ -111,6 +111,17 @@ window lost. The `recovered` field in the tool's response
 distinguishes "this call cleared a previously-degraded state" from
 "the sink was already healthy and the call was a no-op."
 
+The audit handler also runs an opportunistic auto-resync on every
+`write()` against a degraded sink: 5-second initial backoff,
+doubling up to a 300-second cap on continued failure. The schedule
+surfaces through `audit_summary.auto_resync_due_in_s` so an
+operator who is actively diagnosing can see when the next retry
+will fire. A successful manual `audit_resync` resets the backoff
+to its initial value. Auto-resync fires only when a tool call
+lands (every audit-write goes through the `write()` path); an
+operator who pauses diagnosis by not making tool calls keeps
+complete control of the timing.
+
 The live VM auto-update loop (`nous-auto-update.timer`) tracks
 `origin/main` every five minutes. Three kill switches and one
 rollback path:
