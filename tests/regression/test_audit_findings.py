@@ -21,6 +21,7 @@ from xml.etree import ElementTree
 import pytest
 
 from nous.anthropic_client import CallCap
+from nous.audit import redact
 from nous.estimators.biometrics import BiometricsKalman
 from nous.estimators.compute import ComputeKalman
 from nous.estimators.sensors import EnvironmentalKalman
@@ -70,6 +71,50 @@ class TestC1AnthropicCapFsyncsInsideLock:
         second = CallCap(tmp_path / "count", cap=10)
         count, _ = second.increment()
         assert count == 2
+
+
+class TestC2RedactionRecurses:
+    """C2: argument redaction must walk nested mappings and lists.
+
+    Original defect (``AUDIT.md`` C2, 2026-05-20): ``redact()`` walked
+    only the top-level keys of the argument mapping. A caller that
+    passed ``{"context": {"headers": {"Authorization": "Bearer ..."}}}``
+    wrote the secret to the audit log verbatim, because the regex only
+    inspected the outermost key. The MCP tool surface accepted only
+    flat scalars at the time, so the blast radius was bounded, but any
+    tool that accepted structured payloads (BL-014 scenario loader,
+    BL-041 interop encoders) would have leaked.
+
+    Fix: ``redact()`` now recurses through nested mappings and list
+    items; the redaction allowlist applies at every depth. Oversize
+    strings are truncated at every depth too, so a buried megabyte
+    cannot inflate the audit line.
+    """
+
+    def test_nested_mapping_keys_are_redacted(self) -> None:
+        out = redact(
+            {"context": {"headers": {"Authorization": "Bearer xyz"}}}
+        )
+        assert out["context"]["headers"]["Authorization"] == "<REDACTED>"
+
+    def test_list_of_mappings_is_redacted(self) -> None:
+        out = redact(
+            {"items": [{"password": "p1"}, {"command": "ls"}]}
+        )
+        assert out["items"][0]["password"] == "<REDACTED>"
+        assert out["items"][1]["command"] == "ls"
+
+    def test_top_level_still_redacted(self) -> None:
+        out = redact({"token": "abc", "command": "ls"})
+        assert out["token"] == "<REDACTED>"
+        assert out["command"] == "ls"
+
+    def test_oversize_nested_string_is_truncated(self) -> None:
+        large = "x" * 5000
+        out = redact({"nested": {"payload": large}})
+        truncated = out["nested"]["payload"]
+        assert truncated.startswith("x" * 4096)
+        assert "<truncated 5000>" in truncated
 
 
 class TestC4MisbKlvRefusesOverflow:
@@ -230,6 +275,81 @@ class TestH3CotEventCarriesRequiredAttributes:
         assert "error" in decoded
 
 
+class TestM1RunnerDenialStampsExitCode:
+    """M1: runner denial record must carry ``exit_code`` for machine queries.
+
+    Original defect (``AUDIT.md`` M1, 2026-05-20): the denial branch of
+    ``runner.run`` wrote ``denied=True`` and ``decision_reason=...`` but
+    left ``exit_code=None``. Counting denials per tier per day required
+    parsing the body string ``[DENIED tier N (NAME): reason]`` rather
+    than filtering on a typed field, which is brittle and costly at log
+    volume.
+
+    Fix: ``runner.run`` now passes ``exit_code=1`` on the denial path.
+    The success path keeps ``exit_code=None`` (no abnormal exit), so a
+    JSONL consumer can split on ``exit_code is not None`` to bucket
+    denials and worker errors apart from normal returns.
+    """
+
+    def test_denial_record_carries_exit_code_one(self, tmp_path: Path) -> None:
+        import asyncio
+
+        from nous.audit import AuditLogger
+        from nous.policy import PolicyMode
+        from nous.runner import run
+
+        audit_path = tmp_path / "audit.jsonl"
+        audit = AuditLogger(audit_path)
+
+        async def _work() -> str:
+            return "should-not-run"
+
+        body = asyncio.run(
+            run(
+                tool="state_transition",
+                args={"to": "mission"},
+                work=_work,
+                audit=audit,
+                policy_mode=PolicyMode.READONLY,
+            )
+        )
+        audit.flush()
+
+        assert body.startswith("[DENIED")
+        lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
+        record = json.loads(lines[-1])
+        assert record["denied"] is True
+        assert record["exit_code"] == 1
+
+    def test_success_record_leaves_exit_code_unset(self, tmp_path: Path) -> None:
+        import asyncio
+
+        from nous.audit import AuditLogger
+        from nous.policy import PolicyMode
+        from nous.runner import run
+
+        audit_path = tmp_path / "audit.jsonl"
+        audit = AuditLogger(audit_path)
+
+        async def _work() -> str:
+            return "ok"
+
+        asyncio.run(
+            run(
+                tool="device_info",
+                args={},
+                work=_work,
+                audit=audit,
+                policy_mode=PolicyMode.READONLY,
+            )
+        )
+        audit.flush()
+
+        record = json.loads(audit_path.read_text(encoding="utf-8").strip().splitlines()[-1])
+        assert record.get("denied", False) is False
+        assert record.get("exit_code") is None
+
+
 class TestM8EngineTickIsUnitTestable:
     """M8: ``engine.tick()`` must be reachable from a unit test.
 
@@ -260,3 +380,35 @@ class TestM8EngineTickIsUnitTestable:
             assert ctx.dt_s > 0.0
         finally:
             engine.stop()
+
+
+class TestM10ProfileLoaderValidatesAtLoadTime:
+    """M10: profile YAML must be schema-validated when the engine loads it.
+
+    Original defect (``AUDIT.md`` M10, 2026-05-20): ``engine._load_profile``
+    fell back to ``{"name": name, "source": "default-fallback"}`` whenever
+    the YAML was missing, malformed, or did not deserialise to a mapping.
+    ``scripts/gen_schemas.py`` output was not consumed at load time, so a
+    typo in a profile key silently degraded to the default and an operator
+    only noticed when a subsystem behaved out of spec. BL-006 closed this
+    by wiring ``ProfileModel.model_validate(data)`` into the loader and
+    raising ``ValueError`` on any schema mismatch.
+
+    Fix: every load path now fails fast. The behaviour is fully covered
+    by ``tests/unit/test_engine_profile_loading.py``; this class pins
+    the closure inside the regression suite per ADR 0023.
+    """
+
+    def test_profile_model_rejects_missing_name(self) -> None:
+        from pydantic import ValidationError
+
+        from nous.engine import ProfileModel
+
+        with pytest.raises(ValidationError):
+            ProfileModel.model_validate({"power": {"battery_wh": 100}})
+
+    def test_loader_raises_on_missing_file(self) -> None:
+        from nous.engine import _load_profile
+
+        with pytest.raises(FileNotFoundError, match="profile YAML not found"):
+            _load_profile("regression-profile-does-not-exist")
