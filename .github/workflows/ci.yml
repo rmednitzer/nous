@@ -70,8 +70,24 @@ jobs:
       - name: Sync dependencies
         run: uv sync --all-extras
 
+      - name: Export project requirements from uv.lock
+        run: |
+          # Address PR #57 review (Codex + Copilot): ``uv tool run``
+          # would audit pip-audit's isolated tool venv, not the
+          # project. Export the resolved lockfile to a requirements
+          # file and audit that. ``NO_COLOR=1`` keeps ANSI escapes
+          # out of the stdout capture; we strip the editable
+          # ``-e .`` line (the project itself) because the
+          # vulnerability databases do not carry an entry for
+          # ``nous``.
+          NO_COLOR=1 uv export --format requirements-txt --no-hashes 2>/dev/null \
+            | grep -v '^-e ' > project-requirements.txt
+          wc -l project-requirements.txt
+
       - name: pip-audit
-        run: uv tool run --from pip-audit pip-audit --strict
+        run: |
+          uv tool run --from pip-audit pip-audit --strict \
+            --disable-pip --no-deps -r project-requirements.txt
 
       - name: bandit
         run: uv tool run --from bandit bandit -r src/nous

@@ -248,3 +248,129 @@ def test_exchange_reuse_also_revokes_family(provider: FileOAuthProvider) -> None
 
     # Rotated pair is revoked.
     assert asyncio.run(provider.load_access_token(pair_2.access_token)) is None
+
+
+# --- PR #57 review follow-ups ---
+
+
+def test_legacy_refresh_token_gets_issue_id_on_rotation(
+    provider: FileOAuthProvider,
+) -> None:
+    """Pre-upgrade refresh records have no ``issue_id``; the first
+    rotation must seed one so subsequent reuse detection can revoke
+    the family. Without this seeding, ``_revoke_family(tokens, "")``
+    becomes a no-op on replay and the new pair survives."""
+    from mcp.server.auth.provider import RefreshToken as ProviderRefresh
+
+    # Seed a legacy refresh-token record by hand (no ``issue_id``).
+    legacy_token = "legacy-refresh-token-xyz"
+    provider._tokens.save(
+        {
+            "refresh:" + legacy_token: {
+                "token": legacy_token,
+                "client_id": "c-1",
+                "scopes": ["mcp:tools"],
+                "expires_at": 2 << 30,
+            }
+        }
+    )
+    refresh_obj = ProviderRefresh(
+        token=legacy_token,
+        client_id="c-1",
+        scopes=["mcp:tools"],
+        expires_at=2 << 30,
+    )
+
+    pair_2 = asyncio.run(
+        provider.exchange_refresh_token(_client(), refresh_obj, ["mcp:tools"])
+    )
+
+    tokens = provider._tokens.load()
+    legacy_record = tokens["refresh:" + legacy_token]
+    rotated_record = tokens["refresh:" + (pair_2.refresh_token or "")]
+
+    # The legacy record was seeded with an issue_id; the rotated
+    # pair inherits it.
+    assert legacy_record["issue_id"]
+    assert legacy_record["issue_id"] == rotated_record["issue_id"]
+
+    # Replaying the legacy token now fires family revocation.
+    reused = asyncio.run(
+        provider.load_refresh_token(_client(), legacy_token)
+    )
+    assert reused is None
+    assert asyncio.run(provider.load_access_token(pair_2.access_token)) is None
+
+
+def test_expired_refresh_record_is_pruned_on_load(provider: FileOAuthProvider) -> None:
+    """An expired refresh record must be popped from the store on
+    the next load. Otherwise the registry grows unboundedly because
+    the consumed-on-rotation records never expire-and-pop."""
+    expired_token = "expired-refresh-token"
+    provider._tokens.save(
+        {
+            "refresh:" + expired_token: {
+                "token": expired_token,
+                "client_id": "c-1",
+                "scopes": ["mcp:tools"],
+                "expires_at": 1,
+                "issue_id": "fam-old",
+            }
+        }
+    )
+
+    assert (
+        asyncio.run(provider.load_refresh_token(_client(), expired_token)) is None
+    )
+    assert "refresh:" + expired_token not in provider._tokens.load()
+
+
+def test_issue_sweeps_expired_entries(provider: FileOAuthProvider) -> None:
+    """``_issue`` runs ``_prune_expired`` before writing so a
+    long-running deployment does not accumulate expired entries.
+    Seed an expired record, then issue a fresh pair; the expired
+    record is gone."""
+    provider._tokens.save(
+        {
+            "refresh:stale": {
+                "token": "stale",
+                "client_id": "c-1",
+                "scopes": ["mcp:tools"],
+                "expires_at": 1,
+                "issue_id": "fam-old",
+            },
+            "fresh-access": {
+                "token": "fresh-access",
+                "client_id": "c-1",
+                "scopes": ["mcp:tools"],
+                "expires_at": 2 << 30,
+                "issue_id": "fam-new",
+            },
+        }
+    )
+
+    provider._issue("c-1", ["mcp:tools"])
+
+    tokens = provider._tokens.load()
+    assert "refresh:stale" not in tokens
+    # The unrelated fresh record stays.
+    assert "fresh-access" in tokens
+
+
+def test_state_files_created_with_mode_0600_from_start(tmp_path: Path) -> None:
+    """``_Store.save`` must open the temp file with ``0o600`` so
+    there is no window where a sibling process can read the secret.
+    The post-rename chmod is belt-and-braces, not the primary
+    enforcement."""
+    p = FileOAuthProvider(
+        tmp_path / "auth",
+        single_client=True,
+        access_ttl=3600,
+        refresh_ttl=86_400,
+        code_ttl=60,
+    )
+    asyncio.run(p.register_client(_client()))
+
+    clients = tmp_path / "auth" / "clients.json"
+    mode = clients.stat().st_mode & 0o777
+    assert mode == 0o600, f"clients.json mode {oct(mode)} != 0o600"

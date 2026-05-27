@@ -29,8 +29,25 @@ if [ ! -f "${LAST_OK_FILE}" ]; then
     exit 1
 fi
 
-# Last line, second token of "prev=<sha>" field.
-TARGET=$(awk 'END {for (i=1;i<=NF;i++) if ($i ~ /^prev=/) {split($i,a,"="); print a[2]}}' "${LAST_OK_FILE}")
+# Pick the rollback target. Address PR #57 review (Codex +
+# Copilot): the original parser read the ``prev=`` field of the
+# most recent ``last_ok`` line, which was wrong in the failed-
+# deploy case. Trace: A->B succeeds (last_ok: "T1 B prev=A"),
+# B->C succeeds (last_ok: "T2 C prev=B"), C->D fails (last_failed:
+# "T3 D prev=C"; HEAD at D). The intent of rollback is to return
+# to C (the last successfully-deployed SHA), not B. Two equivalent
+# sources for that SHA: the ``prev=`` field of the most recent
+# ``last_failed`` line, or the deployed-SHA field (column 2) of
+# the most recent ``last_ok`` line. We prefer ``last_failed`` when
+# it has entries (it names the broken deploy explicitly), falling
+# back to the last ``last_ok`` row otherwise.
+TARGET=""
+if [ -f "${LAST_FAILED_FILE}" ] && [ -s "${LAST_FAILED_FILE}" ]; then
+    TARGET=$(awk 'END {for (i=1;i<=NF;i++) if ($i ~ /^prev=/) {split($i,a,"="); print a[2]}}' "${LAST_FAILED_FILE}")
+fi
+if [ -z "${TARGET}" ]; then
+    TARGET=$(awk 'END {print $2}' "${LAST_OK_FILE}")
+fi
 if [ -z "${TARGET}" ]; then
     log "ERROR could not parse a rollback target out of ${LAST_OK_FILE}"
     exit 1

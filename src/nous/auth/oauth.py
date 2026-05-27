@@ -91,12 +91,23 @@ class _Store:
         return data if isinstance(data, dict) else {}
 
     def save(self, data: dict[str, Any]) -> None:
+        # Address PR #57 review (Copilot + Codex): create the temp
+        # file with ``0o600`` from the start (no mode race), write
+        # and ``fsync`` the temp fd before rename (no torn-file
+        # window), then ``fsync`` the parent directory so the
+        # rename hits stable storage. ``Path.write_text`` would
+        # have created the file with the umask-default mode and
+        # would not have fsynced before the swap.
         tmp = self._path.with_suffix(self._path.suffix + ".tmp")
-        tmp.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
-        # Tighten the mode before swap-in so a parallel read never sees
-        # the file world-readable. ``Path.replace`` is atomic on POSIX.
-        with contextlib.suppress(OSError):
-            tmp.chmod(0o600)
+        payload = json.dumps(data, indent=2, default=str).encode("utf-8")
+        fd = os.open(
+            str(tmp), os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600
+        )
+        try:
+            os.write(fd, payload)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
         tmp.replace(self._path)
         # Belt-and-braces: chmod after rename in case the filesystem
         # promoted the inode's mode bits during the swap.
@@ -254,6 +265,10 @@ class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-
         refresh = secrets.token_urlsafe(48)
         issue_id = parent_issue_id or _new_issue_id()
         tokens = self._tokens.load()
+        # Address PR #57 review (Codex): opportunistically sweep
+        # expired entries so the token store stays bounded under
+        # frequent rotation.
+        self._prune_expired(tokens)
         tokens[access] = {
             "token": access,
             "client_id": client_id,
@@ -291,6 +306,30 @@ class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-
             if isinstance(entry, dict) and entry.get("issue_id") == issue_id:
                 tokens.pop(key, None)
 
+    @staticmethod
+    def _prune_expired(tokens: dict[str, Any]) -> None:
+        """Drop every token whose ``expires_at`` is in the past.
+
+        Address PR #57 review (Codex): without this sweep, a
+        long-running deployment that rotates refresh tokens
+        regularly accumulates one consumed refresh record per
+        rotation (the load path was returning ``None`` on expiry
+        without popping). Called opportunistically inside RMW
+        sequences so the registry stays bounded.
+        """
+        now = _now()
+        for key in list(tokens.keys()):
+            entry = tokens.get(key)
+            if not isinstance(entry, dict):
+                continue
+            expires = entry.get("expires_at", 0)
+            try:
+                expires_int = int(expires)
+            except (TypeError, ValueError):
+                continue
+            if 0 < expires_int < now:
+                tokens.pop(key, None)
+
     async def load_access_token(self, token: str) -> AccessToken | None:
         async with self._async_lock:
             tokens = self._tokens.load()
@@ -316,10 +355,17 @@ class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-
     ) -> RefreshToken | None:
         async with self._async_lock:
             tokens = self._tokens.load()
-            rec = tokens.get(_REFRESH_PREFIX + refresh_token)
+            key = _REFRESH_PREFIX + refresh_token
+            rec = tokens.get(key)
             if not rec or rec.get("client_id") != (client.client_id or ""):
                 return None
             if int(rec.get("expires_at", 0)) < _now():
+                # Pop the expired record so a consumed-but-expired
+                # token does not linger forever. Address PR #57
+                # review (Codex): the prior branch returned without
+                # popping, leaving the registry to grow.
+                tokens.pop(key, None)
+                self._tokens.save(tokens)
                 return None
             if rec.get("consumed"):
                 # OAuth 2.1 BCP §4.13: a refresh token presented after
@@ -358,9 +404,20 @@ class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-
                 self._revoke_family(tokens, rec.get("issue_id", ""))
                 self._tokens.save(tokens)
                 raise ValueError("refresh token reuse detected; family revoked")
+            # Seed an ``issue_id`` on legacy records (pre-upgrade
+            # tokens written before H7 landed) so reuse detection
+            # protects the family on the very first rotation.
+            # Address PR #57 review (Codex): without this, the
+            # rotated pair gets a fresh family id while the
+            # consumed legacy record stays family-less, so
+            # ``_revoke_family(tokens, "")`` becomes a no-op on
+            # replay and the new pair is never revoked.
+            if not rec.get("issue_id"):
+                rec["issue_id"] = _new_issue_id()
             # Mark consumed (not popped) so a second presentation
-            # remains detectable. The record cleans up naturally at
-            # ``expires_at`` via the load path's expiry branch.
+            # remains detectable. The record cleans up at expiry
+            # via the load path's pop branch (or sooner via
+            # ``_prune_expired`` in the next ``_issue``).
             rec["consumed"] = True
             rec["consumed_at"] = _now()
             tokens[key] = rec

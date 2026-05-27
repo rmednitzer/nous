@@ -51,8 +51,21 @@ jobs:
 
       - name: Emit CycloneDX SBOM
         run: |
-          uv tool run --from cyclonedx-bom cyclonedx-py environment \
-            --of JSON --output-file sbom.cdx.json
+          # Address PR #57 review (Codex + Copilot): the
+          # ``cyclonedx-py environment`` subcommand would inventory
+          # the isolated ``uv tool`` venv, not the project. Export
+          # the resolved lockfile to a requirements file and feed
+          # it to the ``requirements`` subcommand so the SBOM
+          # describes the ``nous`` deployable. ``NO_COLOR=1`` keeps
+          # ANSI escapes out of the stdout capture; strip the
+          # editable ``-e .`` line (the project itself; no
+          # pinned version means CycloneDX would emit a noisy
+          # ``unknown`` component).
+          NO_COLOR=1 uv export --format requirements-txt --no-hashes 2>/dev/null \
+            | grep -v '^-e ' > sbom-requirements.txt
+          uv tool run --from cyclonedx-bom cyclonedx-py requirements \
+            --output-format JSON --output-file sbom.cdx.json \
+            sbom-requirements.txt
           ls -l sbom.cdx.json
 
       - name: Upload SBOM
