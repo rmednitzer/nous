@@ -28,6 +28,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+
 from ..types import Observation
 
 __all__ = ["InferenceResult", "InferenceSubsystem"]
@@ -77,8 +79,10 @@ class InferenceSubsystem:
         profile: Mapping[str, Any],
         *,
         compute: Any | None = None,
+        rng: np.random.Generator | None = None,
     ) -> None:
         self.profile = profile
+        self._rng = rng  # ADR 0019 follow-up: engine RNG seam
         compute_cfg = profile.get("compute") or {}
         cfg = dict(compute_cfg.get("inference_local") or {})
         self._tok_per_s_p50 = float(cfg.get("tok_per_s_p50", _DEFAULT_TOK_PER_S))

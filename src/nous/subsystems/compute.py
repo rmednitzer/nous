@@ -30,6 +30,8 @@ from collections.abc import Mapping, Sequence
 from itertools import pairwise
 from typing import Any
 
+import numpy as np
+
 from ..types import Observation
 
 __all__ = ["ComputeSubsystem"]
@@ -54,8 +56,14 @@ class ComputeSubsystem:
 
     name: str = "compute"
 
-    def __init__(self, profile: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        profile: Mapping[str, Any],
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         self.profile = profile
+        self._rng = rng  # ADR 0019 follow-up: engine RNG seam
         cfg = dict(profile.get("compute") or {})
         self._draw_w_idle = float(cfg.get("draw_w_idle", _DEFAULT_DRAW_W_IDLE))
         self._draw_w_load = float(cfg.get("draw_w_load", _DEFAULT_DRAW_W_LOAD))

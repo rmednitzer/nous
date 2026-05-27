@@ -19,15 +19,25 @@ async def tick_loop(engine: Engine, hz: float, stop: anyio.Event) -> None:
     cannot starve the event loop or refuse cancellation; without it a
     sustained overrun would block MCP request handling and graceful
     shutdown of the server.
+
+    The budget timer reads ``engine.clock.monotonic()`` per ADR 0019
+    (the engine owns the time source). Under the default
+    ``MonotonicClock`` this is value-identical to
+    ``anyio.current_time()`` on the asyncio backend; under a
+    ``VirtualClock`` driven from a test, the engine clock will not
+    advance during ``engine.tick()``, so ``elapsed`` is zero, the
+    budget is ``dt``, and ``anyio.move_on_after`` waits the full
+    inter-tick interval in real time. That keeps cancellation
+    semantics intact regardless of the injected clock.
     """
     if hz <= 0.0:
         raise ValueError("hz must be positive")
     dt = 1.0 / hz
     overruns = 0
     while not stop.is_set():
-        t0 = anyio.current_time()
+        t0 = engine.clock.monotonic()
         engine.tick()
-        elapsed = anyio.current_time() - t0
+        elapsed = engine.clock.monotonic() - t0
         budget = dt - elapsed
         if budget > 0:
             with anyio.move_on_after(budget):
