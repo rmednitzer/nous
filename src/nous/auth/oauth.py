@@ -271,7 +271,7 @@ class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-
         self._tokens.save(tokens)
         return OAuthToken(
             access_token=access,
-            token_type="Bearer",
+            token_type="Bearer",  # nosec B106 - OAuth token type literal, not a credential
             expires_in=self._access_ttl,
             refresh_token=refresh,
             scope=" ".join(scopes),

@@ -22,8 +22,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from xml.etree import ElementTree
-from xml.sax.saxutils import escape, quoteattr
+from xml.etree import ElementTree  # nosec B405 - XXE-safe via _safe_parse + DOCTYPE refusal
+from xml.sax.saxutils import escape, quoteattr  # nosec B406 - output escape, not input parser
 
 from .base import assert_fresh
 
@@ -106,7 +106,7 @@ class CotAdapter:
 
 def _safe_parse(payload: bytes) -> ElementTree.Element | None:
     """Parse CoT XML without resolving external entities (XXE-safe)."""
-    parser = ElementTree.XMLParser()
+    parser = ElementTree.XMLParser()  # nosec B314 - explicit DOCTYPE / ENTITY refusal below
     # ``ElementTree`` does not resolve external entities by default in
     # CPython, but we explicitly assert no doctype so a controller that
     # someday swaps in a different parser cannot regress quietly.
