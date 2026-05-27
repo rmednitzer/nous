@@ -916,12 +916,26 @@ Read the runbooks under `skills/` (nous-getting-started.md first). Every
 tool call is tier-classified and audited; output bodies are SHA-256 hashed,
 never written to disk. The audit log path is reported by `device_info`.
 
-Representative v0.1 tools:
+Device telemetry (T0):
   device_info / device_health / state_get / state_history
-  power_status / apu_status / thermal_status / compute_status / comms_state
-  self_model_assess / self_estimator_status
-  inference_local / interop_formats
 
-The full surface (per-subsystem reads, scenario control, interop encoders)
-lands in L1 (see `docs/backlog.md`).
+Subsystem reads (T0):
+  power_status / apu_status / thermal_status / compute_status / storage_status
+  comms_state / comms_status / position_status / sensors_status
+  biometrics_status / inference_status
+
+Self-model and estimators (T0):
+  self_model_assess / self_model_viability / self_estimator_status
+
+Interop (T0 schema + T1 codec):
+  interop_formats / interop_encode / interop_decode
+
+Local inference and cloud cap (T0/T1):
+  inference_local / anthropic_cap_status
+
+Scenarios and configuration (T2):
+  scenario_load / scenario_inject / profile_reload
+
+See `docs/tool-reference.md` for parameter shapes and tier classification,
+and `docs/backlog.md` for the BL-NNN line-item tracker.
 """

@@ -56,6 +56,11 @@ compute:
     - { load_pct: 50, draw_w: 15 }
     - { load_pct: 100, draw_w: 25 }
   inference_local:
+    # PLACEHOLDER until BL-043 (real local model under TensorRT-LLM or
+    # llama.cpp on Jetson Orin NX 16GB). Order-of-magnitude estimates
+    # consistent with published Jetson Orin NX INT8 benchmarks
+    # (~45-50% of the AGX Orin envelope). Not measured.
+    # ``docs/bom.md`` carries the cross-reference.
     tok_per_s_p50: 90
     energy_j_per_tok: 0.18
 

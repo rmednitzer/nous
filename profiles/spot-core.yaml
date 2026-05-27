@@ -56,6 +56,11 @@ compute:
     - { load_pct: 50, draw_w: 60 }
     - { load_pct: 100, draw_w: 90 }
   inference_local:
+    # PLACEHOLDER until BL-043 (real local model on the Spot CORE I/O
+    # x86-class compute payload). Order-of-magnitude estimate
+    # consistent with published llama.cpp x86 benchmarks at the Spot
+    # CORE envelope. Not measured. ``docs/bom.md`` carries the
+    # cross-reference.
     tok_per_s_p50: 150
     energy_j_per_tok: 0.30
 

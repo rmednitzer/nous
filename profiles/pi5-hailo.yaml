@@ -57,6 +57,12 @@ compute:
     - { load_pct: 50, draw_w: 7 }
     - { load_pct: 100, draw_w: 12 }
   inference_local:
+    # PLACEHOLDER until BL-043 (real local model on Raspberry Pi 5 +
+    # Hailo-8L). Order-of-magnitude estimate consistent with published
+    # Hailo-8L INT8 LLM throughput (Hailo Performance Brief). Energy
+    # per token derived from the combined Pi 5 plus Hailo-8L draw at
+    # the published throughput. Not measured. ``docs/bom.md`` carries
+    # the cross-reference.
     tok_per_s_p50: 25
     energy_j_per_tok: 0.40
 

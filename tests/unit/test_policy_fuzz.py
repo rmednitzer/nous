@@ -20,7 +20,14 @@ import string
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from nous.policy import PolicyMode, Tier, classify, decide
+from nous.policy import (
+    _READ_ONLY_TOOLS,
+    _REVERSIBLE_TOOLS,
+    PolicyMode,
+    Tier,
+    classify,
+    decide,
+)
 
 _tool_names = st.text(
     alphabet=string.ascii_lowercase + "_",
@@ -65,19 +72,11 @@ def test_deny_regex_blocks_everything(tool: str, deny: str) -> None:
 
 @given(tool=_tool_names)
 def test_unknown_tool_blocked_by_guarded_without_allow(tool: str) -> None:
-    if tool in {
-        "device_info", "device_health", "state_get", "state_history",
-        "power_status", "apu_status", "thermal_status", "comms_state",
-        "comms_status", "position_status", "biometrics_status",
-        "compute_status", "inference_status", "storage_status", "sensors_status",
-        "self_model_assess", "self_model_viability", "self_estimator_status",
-        "interop_formats", "scenario_status", "audit_summary",
-    }:
-        return
-    if tool in {
-        "scenario_pause", "scenario_resume", "scenario_reset", "tick_advance",
-        "inference_local", "interop_encode", "interop_decode",
-    }:
+    # Derive the skip list from policy.py directly so a new T0 or T1
+    # tool added there does not silently desync this test (the prior
+    # hand-curated lists missed ``anthropic_cap_status`` and would
+    # have missed every L2 tool addition going forward).
+    if tool in _READ_ONLY_TOOLS or tool in _REVERSIBLE_TOOLS:
         return
     tier, _ = classify(tool, {})
     decision = decide(tier, PolicyMode.GUARDED, probe=tool)
@@ -92,23 +91,16 @@ def test_args_irreversible_promotes_unclassified(
     tool: str, bogus_irreversible: bool
 ) -> None:
     # Reserved tools keep their explicit classification, regardless of args.
+    from nous.policy import _STATEFUL_TOOLS
+
     tier, reason = classify(tool, {"irreversible": bogus_irreversible})
     if bogus_irreversible and tier is not Tier.IRREVERSIBLE:
         # Only fires for explicitly classified non-irreversible tools.
-        assert tool in {
-            "device_info", "device_health", "state_get", "state_history",
-            "power_status", "apu_status", "thermal_status", "comms_state",
-            "comms_status", "position_status", "biometrics_status",
-            "compute_status", "inference_status", "storage_status", "sensors_status",
-            "self_model_assess", "self_estimator_status", "interop_formats",
-            "scenario_status", "audit_summary",
-            "scenario_pause", "scenario_resume", "scenario_reset", "tick_advance",
-            "inference_local", "interop_encode", "interop_decode",
-            "scenario_load", "scenario_inject", "profile_reload",
-            "comms_send", "comms_publish",
-            "inference_cloud", "inference_request", "self_model_publish",
-            "state_transition", "request_transition",
-        }
+        assert (
+            tool in _READ_ONLY_TOOLS
+            or tool in _REVERSIBLE_TOOLS
+            or tool in _STATEFUL_TOOLS
+        )
     assert isinstance(reason, str)
 
 
