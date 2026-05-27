@@ -16,9 +16,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from .clocks import Clock, MonotonicClock
 from .config import Settings, get_settings
 from .db import StateTransitionLog
 from .estimators.apu import ApuEstimator
@@ -77,6 +79,9 @@ class Engine:
         profile: Mapping[str, Any] | None = None,
         scenario: Mapping[str, Any] | None = None,
         transition_log: StateTransitionLog | None = None,
+        *,
+        seed: int | None = None,
+        clock: Clock | None = None,
     ) -> None:
         self.settings: Settings = settings or get_settings()
         self.profile: Mapping[str, Any] = profile or _load_profile(self.settings.profile)
@@ -86,6 +91,15 @@ class Engine:
         self.transition_log = transition_log or StateTransitionLog(None)
         self._started = False
         self._wall_start = 0.0
+        # ADR 0019 deterministic seed + clock seams. ``seed=None``
+        # falls back to OS entropy (current behaviour); ``clock=None``
+        # picks the real ``MonotonicClock``. A test that needs a
+        # reproducible trajectory passes ``seed=42`` and asserts
+        # against the deterministic output; a test that needs to
+        # drive the time line passes a ``VirtualClock(start_s=0.0)``.
+        self.seed = seed
+        self.rng: np.random.Generator = np.random.default_rng(seed)
+        self.clock: Clock = clock or MonotonicClock()
 
         self.power = PowerSubsystem(self.profile)
         self.apu = ApuSubsystem(self.profile)
@@ -114,7 +128,7 @@ class Engine:
             initial_used_gib=self.storage.used_gib,
             initial_wear_pct=self.storage.wear_pct,
         )
-        self.comms_est = CommsParticleFilter()
+        self.comms_est = CommsParticleFilter(rng=self.rng)
         self.comms_est.update(self.comms.sensor_obs())
         self.state.comms_state, self.state.comms_state_reason = (
             self.comms.derive_state()
@@ -201,7 +215,7 @@ class Engine:
             initial_used_gib=self.storage.used_gib,
             initial_wear_pct=self.storage.wear_pct,
         )
-        self.comms_est = CommsParticleFilter()
+        self.comms_est = CommsParticleFilter(rng=self.rng)
         self.comms_est.update(self.comms.sensor_obs())
         self.position_est = PositionEKF()
         self.position_est.update(self.position.sensor_obs())

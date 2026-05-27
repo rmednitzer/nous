@@ -169,10 +169,15 @@ class CommsParticleFilter:
         particles: int = _DEFAULT_PARTICLES,
         *,
         seed: int = 0,
+        rng: np.random.Generator | None = None,
     ) -> None:
         self._t = 0.0
         self._particles = max(2, int(particles))
-        self._rng = np.random.default_rng(int(seed))
+        # ADR 0019: prefer an explicit RNG injected by the engine so
+        # determinism is centralised through ``Engine(seed=...)``;
+        # fall back to ``seed`` for tests and standalone use that
+        # construct the filter directly.
+        self._rng = rng if rng is not None else np.random.default_rng(int(seed))
         self._links: dict[str, LinkBelief] = {}
         self._link_estimates: dict[str, LinkEstimate] = {}
 
