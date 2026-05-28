@@ -6,6 +6,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (server: engine ran per request under stateless HTTP)
+
+- The engine tick loop ran on the FastMCP server lifespan, which under
+  `stateless_http=True` executes once per request: the live server
+  rebooted the engine on every tool call (`reset -> boot -> one tick ->
+  shutdown`), pinning `device_health` at `tick: 1` / `mode: boot` and
+  churning the `state_transitions` table. The engine lifecycle is now
+  process-scoped (ADR 0024): `build_app()` exposes the engine and the
+  FastMCP without a server-lifespan tick loop, and `nous serve` attaches
+  `tick_lifespan` to the process ASGI lifespan (`attach_tick_lifespan`
+  for HTTP; a `tick_lifespan` wrap of `run_stdio_async` for stdio).
+  `stateless_http=True` is retained, so the claude.ai connector is
+  unchanged. Tracked as BL-064.
+
+### Fixed (deployment: install.sh self-install aborted every auto-update)
+
+- `deploy/install.sh` installed `deploy/auto-update.sh` onto itself when
+  `REPO_DIR=/opt/nous` (the production layout): source and destination
+  were the same file, so `install` exited non-zero ("are the same file")
+  and, under `set -e`, aborted the deploy after `git reset` had advanced
+  `HEAD` but before the service restart. This was the underlying cause of
+  the stale-build freeze on `nous-prod-01` (the service ran the initial
+  deploy's code while `HEAD` silently advanced). The step now chmods the
+  script in place when source and destination are the same file, and only
+  copies it for a non-`/opt/nous` `REPO_DIR`. Tracked as BL-063.
+
 ### Fixed (deployment: auto-update stale-build freeze)
 
 - `deploy/auto-update.sh` no longer leaves `HEAD` advanced past a failed
