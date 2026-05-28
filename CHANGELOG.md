@@ -19,7 +19,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it records the commit in `last_failed` only when a freshly-restarted
   build fails its health check, so a transient install or network failure
   is not blacklisted and the still-running previous service is left
-  untouched. Regression-pinned by `tests/integration/test_auto_update_rollback.py`.
+  untouched. The rollback resets `HEAD` before any fallible logging (and
+  `log` is best-effort), so a full disk that makes the audit log
+  unwritable cannot abort it. Regression-pinned by
+  `tests/integration/test_auto_update_rollback.py`.
   Tracked as BL-063; the live `nous-prod-01` resync and the AUDIT N2
   degraded audit sink it should clear remain the open server-side action.
 

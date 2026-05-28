@@ -39,7 +39,9 @@ LAST_OK_FILE="${LAST_OK_FILE:-${LOG_DIR}/auto-update.last_ok}"
 LAST_FAILED_FILE="${LAST_FAILED_FILE:-${LOG_DIR}/auto-update.last_failed}"
 
 stamp() { date -u +%FT%TZ; }
-log() { echo "[$(stamp)] $*" | tee -a "${LOG_FILE}"; }
+# Logging is best-effort: a full disk or a read-only audit mount must
+# never abort a deploy or, worse, a rollback (see rollback_on_failure).
+log() { echo "[$(stamp)] $*" | tee -a "${LOG_FILE}" 2>/dev/null || true; }
 
 cd "${REPO_DIR}"
 
@@ -88,20 +90,28 @@ NEW_SERVICE_STARTED=0
 rollback_on_failure() {
     local rc=$?
     [ "${DEPLOY_OK}" -eq 1 ] && return 0
-    mkdir -p "${LOG_DIR}"
-    log "ERROR deploy of ${REMOTE:0:12} failed (rc=${rc}); rolling back to ${LOCAL:0:12}"
-    if ! git reset --hard "${LOCAL}" >/dev/null 2>&1; then
+    # Restore HEAD before any fallible logging or mkdir. A failed install
+    # can fill the disk (or the audit mount can go read-only), making the
+    # log unwritable; were a log call to abort this trap under `set -e`
+    # before the reset, HEAD would stay at REMOTE and the next tick would
+    # refreeze on the stale build. `log` is best-effort too (see above);
+    # this ordering is the belt-and-suspenders guarantee.
+    local reset_ok=1
+    git reset --hard "${LOCAL}" >/dev/null 2>&1 || reset_ok=0
+    mkdir -p "${LOG_DIR}" 2>/dev/null || true
+    if [ "${reset_ok}" -eq 0 ]; then
         log "ERROR could not reset HEAD back to ${LOCAL:0:12}; manual triage needed"
         return 0
     fi
+    log "ERROR deploy of ${REMOTE:0:12} failed (rc=${rc}); rolled back to ${LOCAL:0:12}"
     # Reinstall the previous good commit's artifacts so systemd is not
     # left pointing at a half-updated unit file or venv.
     bash "${REPO_DIR}/deploy/install.sh" >/dev/null 2>&1 \
         || log "ERROR rollback install.sh failed; previous build still running, manual triage needed"
     if [ "${NEW_SERVICE_STARTED}" -eq 1 ]; then
-        systemctl --no-pager status nous.service 2>/dev/null | head -20 | sed "s/^/  /" >> "${LOG_FILE}" || true
+        systemctl --no-pager status nous.service 2>/dev/null | head -20 | sed "s/^/  /" >> "${LOG_FILE}" 2>/dev/null || true
         # Format: "<timestamp> <broken_sha> prev=<prev_sha>".
-        echo "$(stamp) ${REMOTE} prev=${LOCAL}" >> "${LAST_FAILED_FILE}"
+        echo "$(stamp) ${REMOTE} prev=${LOCAL}" >> "${LAST_FAILED_FILE}" 2>/dev/null || true
         systemctl daemon-reload >/dev/null 2>&1 || true
         systemctl restart nous.service >/dev/null 2>&1 \
             || log "ERROR rollback restart failed; nous.service may be down"

@@ -12,7 +12,9 @@ The two cases below also pin the rollback semantics raised in PR review:
   service) rolls HEAD back but must NOT blacklist the commit, or the
   skip guard would refuse a good commit forever;
 * a post-restart health-check failure (the new build is proven bad)
-  rolls HEAD back AND records the commit in ``last_failed``.
+  rolls HEAD back AND records the commit in ``last_failed``;
+* a deploy that makes the audit log unwritable (e.g. a full disk) still
+  rolls HEAD back rather than aborting the trap on the logging failure.
 """
 
 from __future__ import annotations
@@ -156,3 +158,23 @@ def test_failed_health_check_rolls_back_and_blacklists(tmp_path: Path) -> None:
     # proven bad, so the skip guard records it.
     last_failed = logdir / "auto-update.last_failed"
     assert last_failed.exists() and remote_sha in last_failed.read_text(), diagnostics
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is required")
+def test_unwritable_log_during_rollback_still_resets_head(tmp_path: Path) -> None:
+    logdir = tmp_path / "log"
+    # install.sh advances past the HEAD reset, then makes the audit log
+    # path unwritable (occupying it with a directory, which fails even as
+    # root) before failing. This stands in for "the install filled the
+    # disk so logging now fails". The rollback must reset HEAD anyway.
+    install_body = (
+        "#!/usr/bin/env bash\n"
+        f'rm -f "{logdir}/auto-update.log" 2>/dev/null || true\n'
+        f'mkdir -p "{logdir}/auto-update.log" 2>/dev/null || true\n'
+        "exit 1\n"
+    )
+    repo, local_sha, _ = _init_repo(tmp_path, install_body)
+    result, _ = _run_auto_update(tmp_path, repo, _SYSTEMCTL_OK)
+
+    diagnostics = result.stdout + result.stderr
+    assert _git(repo, "rev-parse", "HEAD") == local_sha, diagnostics
