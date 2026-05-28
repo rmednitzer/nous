@@ -18,13 +18,17 @@
 # Failure modes (all leave the previous good build running):
 #   - git fetch failure: exits non-zero before touching the tree;
 #     timer retries on next tick.
-#   - install.sh failure or nous.service refusing to come up: the
-#     EXIT trap rolls HEAD back to the previous commit, records the
-#     broken SHA in last_failed (so subsequent ticks skip it), and
-#     restarts the previous good code. HEAD is never left advanced
-#     past a failed deploy, so the next tick cannot mistake a frozen
-#     box for an up-to-date one. Manual triage / rollback via
-#     deploy/auto-update-rollback.sh.
+#   - install.sh or daemon-reload failure (before the new build is
+#     bounced into service): the EXIT trap restores HEAD and the
+#     installed artifacts to the previous commit and leaves the
+#     still-running service alone. The commit is NOT added to
+#     last_failed, because such failures are commonly transient.
+#   - nous.service failing its post-restart health check: the trap
+#     reinstalls the previous good artifacts, restarts onto them, and
+#     records the broken SHA in last_failed so subsequent ticks skip
+#     it. HEAD is never left advanced past a failed deploy, so the
+#     next tick cannot mistake a frozen box for an up-to-date one.
+#     Manual triage / rollback via deploy/auto-update-rollback.sh.
 
 set -euo pipefail
 
@@ -66,21 +70,45 @@ log "subject: $(git log -1 --pretty=%s "${REMOTE}")"
 # A deploy that aborts after the working tree advances must not leave
 # HEAD at REMOTE while nous.service still runs the old code: the next
 # tick would compute LOCAL == REMOTE, exit 0, and freeze the box on the
-# stale build with no marker. The trap rolls HEAD back to LOCAL, records
-# the broken commit in last_failed (so the skip guard above engages),
-# and best-effort restarts the previous good code. DEPLOY_OK disarms it
-# once the new build is confirmed active.
+# stale build with no marker. On failure the trap restores both the
+# working tree and the installed artifacts (units and venv, which a git
+# reset alone does not undo) to LOCAL, distinguishing two phases:
+#   - failure before the new build is bounced into service (install or
+#     daemon-reload): the previous service is still running untouched,
+#     so we restore the good artifacts but leave it running, and we do
+#     NOT record last_failed. These failures are commonly transient (a
+#     pip index or network hiccup) and the commit may deploy cleanly on
+#     the next tick.
+#   - failure at or after the restart: the new (bad) build is the
+#     running unit, so we reinstall the good artifacts and restart onto
+#     them, and we record the commit in last_failed because a build that
+#     came up and failed its health check is proven bad.
 DEPLOY_OK=0
+NEW_SERVICE_STARTED=0
 rollback_on_failure() {
     local rc=$?
     [ "${DEPLOY_OK}" -eq 1 ] && return 0
-    log "ERROR deploy of ${REMOTE:0:12} failed (rc=${rc}); rolling back to ${LOCAL:0:12}"
     mkdir -p "${LOG_DIR}"
-    systemctl --no-pager status nous.service 2>/dev/null | head -20 | sed "s/^/  /" >> "${LOG_FILE}" || true
-    # Format: "<timestamp> <broken_sha> prev=<prev_sha>".
-    echo "$(stamp) ${REMOTE} prev=${LOCAL}" >> "${LAST_FAILED_FILE}"
-    git reset --hard "${LOCAL}" >/dev/null 2>&1 || log "ERROR could not reset HEAD back to ${LOCAL:0:12}"
-    systemctl restart nous.service >/dev/null 2>&1 || true
+    log "ERROR deploy of ${REMOTE:0:12} failed (rc=${rc}); rolling back to ${LOCAL:0:12}"
+    if ! git reset --hard "${LOCAL}" >/dev/null 2>&1; then
+        log "ERROR could not reset HEAD back to ${LOCAL:0:12}; manual triage needed"
+        return 0
+    fi
+    # Reinstall the previous good commit's artifacts so systemd is not
+    # left pointing at a half-updated unit file or venv.
+    bash "${REPO_DIR}/deploy/install.sh" >/dev/null 2>&1 \
+        || log "ERROR rollback install.sh failed; previous build still running, manual triage needed"
+    if [ "${NEW_SERVICE_STARTED}" -eq 1 ]; then
+        systemctl --no-pager status nous.service 2>/dev/null | head -20 | sed "s/^/  /" >> "${LOG_FILE}" || true
+        # Format: "<timestamp> <broken_sha> prev=<prev_sha>".
+        echo "$(stamp) ${REMOTE} prev=${LOCAL}" >> "${LAST_FAILED_FILE}"
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        systemctl restart nous.service >/dev/null 2>&1 \
+            || log "ERROR rollback restart failed; nous.service may be down"
+    else
+        # The previous service was never stopped; leave it running.
+        systemctl daemon-reload >/dev/null 2>&1 || true
+    fi
 }
 trap rollback_on_failure EXIT
 
@@ -89,6 +117,9 @@ git reset --hard "${REMOTE}"
 bash "${REPO_DIR}/deploy/install.sh"
 
 systemctl daemon-reload
+
+# Past this point a failure means the new build was bounced into service.
+NEW_SERVICE_STARTED=1
 systemctl restart nous.service
 
 # Give uvicorn a moment to bind, then assert it actually came up.
