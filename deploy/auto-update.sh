@@ -15,13 +15,16 @@
 # deploy/auto-update-rollback.sh reads last_ok to roll the working tree
 # back to the previous known-good commit.
 #
-# Failure modes:
-#   - git fetch failure: exits non-zero; timer retries on next tick.
-#   - install.sh failure: exits non-zero; the previous nous.service
-#     keeps running with the previous code.
-#   - nous.service refuses to come up: the broken commit SHA is
-#     recorded in last_failed so subsequent ticks skip it; manual
-#     triage and rollback via deploy/auto-update-rollback.sh.
+# Failure modes (all leave the previous good build running):
+#   - git fetch failure: exits non-zero before touching the tree;
+#     timer retries on next tick.
+#   - install.sh failure or nous.service refusing to come up: the
+#     EXIT trap rolls HEAD back to the previous commit, records the
+#     broken SHA in last_failed (so subsequent ticks skip it), and
+#     restarts the previous good code. HEAD is never left advanced
+#     past a failed deploy, so the next tick cannot mistake a frozen
+#     box for an up-to-date one. Manual triage / rollback via
+#     deploy/auto-update-rollback.sh.
 
 set -euo pipefail
 
@@ -60,6 +63,27 @@ fi
 log "updating ${LOCAL:0:12} -> ${REMOTE:0:12}"
 log "subject: $(git log -1 --pretty=%s "${REMOTE}")"
 
+# A deploy that aborts after the working tree advances must not leave
+# HEAD at REMOTE while nous.service still runs the old code: the next
+# tick would compute LOCAL == REMOTE, exit 0, and freeze the box on the
+# stale build with no marker. The trap rolls HEAD back to LOCAL, records
+# the broken commit in last_failed (so the skip guard above engages),
+# and best-effort restarts the previous good code. DEPLOY_OK disarms it
+# once the new build is confirmed active.
+DEPLOY_OK=0
+rollback_on_failure() {
+    local rc=$?
+    [ "${DEPLOY_OK}" -eq 1 ] && return 0
+    log "ERROR deploy of ${REMOTE:0:12} failed (rc=${rc}); rolling back to ${LOCAL:0:12}"
+    mkdir -p "${LOG_DIR}"
+    systemctl --no-pager status nous.service 2>/dev/null | head -20 | sed "s/^/  /" >> "${LOG_FILE}" || true
+    # Format: "<timestamp> <broken_sha> prev=<prev_sha>".
+    echo "$(stamp) ${REMOTE} prev=${LOCAL}" >> "${LAST_FAILED_FILE}"
+    git reset --hard "${LOCAL}" >/dev/null 2>&1 || log "ERROR could not reset HEAD back to ${LOCAL:0:12}"
+    systemctl restart nous.service >/dev/null 2>&1 || true
+}
+trap rollback_on_failure EXIT
+
 git reset --hard "${REMOTE}"
 
 bash "${REPO_DIR}/deploy/install.sh"
@@ -71,13 +95,12 @@ systemctl restart nous.service
 sleep 3
 if ! systemctl is-active --quiet nous.service; then
     log "ERROR nous.service is not active after restart"
-    systemctl --no-pager status nous.service | head -20 | sed "s/^/  /" >> "${LOG_FILE}"
-    # Record the broken commit so the next tick refuses to re-deploy
-    # it. Format: "<timestamp> <broken_sha> prev=<prev_sha>".
-    mkdir -p "${LOG_DIR}"
-    echo "$(stamp) ${REMOTE} prev=${LOCAL}" >> "${LAST_FAILED_FILE}"
     exit 1
 fi
+
+# Confirmed active on the new build; disarm the rollback trap.
+DEPLOY_OK=1
+trap - EXIT
 
 # Record the new known-good commit. deploy/auto-update-rollback.sh
 # uses the most recent line's prev= field as the rollback target.
