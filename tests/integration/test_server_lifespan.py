@@ -48,15 +48,41 @@ async def test_tick_lifespan_idempotent_stop(engine: Engine) -> None:
 
 
 @pytest.mark.asyncio
-async def test_build_server_registers_lifespan(tmp_nous_home: object) -> None:
-    """The FastMCP server constructed by ``build_server`` carries a lifespan."""
-    server = build_server()
-    # The MCP SDK exposes the registered lifespan on the underlying server.
-    assert getattr(server, "_mcp_server", None) is not None
-    # The lifespan callable is stored on the MCP server; a lifespan was
-    # registered (the engine is no longer untickable).
-    lifespan_factory = getattr(server._mcp_server, "lifespan", None)
-    assert lifespan_factory is not None, "lifespan must be registered on FastMCP"
+async def test_build_app_exposes_engine_and_mcp(tmp_nous_home: object) -> None:
+    """``build_app`` returns the engine and FastMCP; ``build_server`` the latter."""
+    from mcp.server.fastmcp import FastMCP
+
+    from nous.server import build_app
+
+    app = build_app()
+    assert isinstance(app.engine, Engine)
+    assert isinstance(app.mcp, FastMCP)
+    # Back-compatible accessor still returns just the FastMCP tool surface.
+    assert isinstance(build_server(), FastMCP)
+
+
+@pytest.mark.asyncio
+async def test_attach_tick_lifespan_ticks_for_process(engine: Engine) -> None:
+    """The tick loop runs for the app (process) lifespan, not per request.
+
+    ADR 0024: under ``stateless_http`` the low-level MCP server runs once
+    per request, so a server-lifespan tick loop would reboot the engine on
+    every call. ``attach_tick_lifespan`` composes the tick loop onto the
+    Starlette app lifespan instead, so ticks accumulate continuously for
+    the whole lifespan and the engine stops exactly once on exit.
+    """
+    from starlette.applications import Starlette
+
+    from nous.server import attach_tick_lifespan
+
+    app = Starlette()
+    attach_tick_lifespan(app, engine, tick_hz=100.0)
+    initial = engine.state.tick
+    async with app.router.lifespan_context(app):
+        await anyio.sleep(0.1)
+        ticked = engine.state.tick - initial
+    assert ticked >= 5, f"expected continuous ticking over the lifespan, got {ticked}"
+    assert engine.state.mode is Mode.SHUTDOWN, "engine should stop once on exit"
 
 
 @pytest.mark.asyncio

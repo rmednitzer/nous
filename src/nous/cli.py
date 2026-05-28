@@ -55,15 +55,44 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
-    from .server import build_server
+    import anyio
+
+    from .server import attach_tick_lifespan, build_app, tick_lifespan
 
     cfg = get_settings()
     transport = args.transport or cfg.transport
-    mcp = build_server(cfg)
+    nous = build_app(cfg)
+    engine = nous.engine
+    mcp = nous.mcp
+
     if transport == "http":
-        mcp.run("streamable-http")
+        import uvicorn
+
+        # Run the engine tick loop for the process lifetime via the
+        # Starlette app lifespan, not the per-request MCP server lifespan
+        # (ADR 0024: stateless_http runs the low-level server once per
+        # request, so a server-lifespan loop reboots the engine each call).
+        starlette_app = attach_tick_lifespan(
+            mcp.streamable_http_app(), engine, cfg.tick_hz
+        )
+        config = uvicorn.Config(
+            starlette_app,
+            host=mcp.settings.host,
+            port=mcp.settings.port,
+            log_level=mcp.settings.log_level.lower(),
+        )
+
+        async def _serve_http() -> None:
+            await uvicorn.Server(config).serve()
+
+        anyio.run(_serve_http)
     else:
-        mcp.run("stdio")
+
+        async def _serve_stdio() -> None:
+            async with tick_lifespan(engine, cfg.tick_hz):
+                await mcp.run_stdio_async()
+
+        anyio.run(_serve_stdio)
     return 0
 
 

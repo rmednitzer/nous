@@ -15,6 +15,7 @@ from typing import Any
 
 import anyio
 from mcp.server.fastmcp import Context, FastMCP
+from starlette.applications import Starlette
 
 from . import __version__
 from .audit import AuditLogger
@@ -25,7 +26,13 @@ from .policy import PolicyMode
 from .runner import run as audited_run
 from .tick import tick_loop
 
-__all__ = ["Nous", "build_server", "tick_lifespan"]
+__all__ = [
+    "Nous",
+    "attach_tick_lifespan",
+    "build_app",
+    "build_server",
+    "tick_lifespan",
+]
 
 
 Work = Callable[[], Awaitable[str]]
@@ -44,7 +51,9 @@ def _ctx_ids(ctx: Context | None) -> tuple[str, str]:
 
 
 class Nous:
-    """Server-wide state: settings, audit sink, engine."""
+    """Server-wide state: settings, audit sink, engine, FastMCP server."""
+
+    mcp: FastMCP  # the audited tool surface; attached by build_app
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -91,15 +100,19 @@ async def tick_lifespan(
         engine.stop()
 
 
-def build_server(settings: Settings | None = None) -> FastMCP:
-    """Construct the FastMCP server with every tool registered."""
+def build_app(settings: Settings | None = None) -> Nous:
+    """Construct the :class:`Nous` application (engine plus audited FastMCP).
+
+    The tick loop is deliberately NOT registered on the MCP server
+    lifespan. Under ``stateless_http`` the low-level server runs once per
+    request, so a server-lifespan tick loop reboots the engine on every
+    call (reset -> boot -> one tick -> shutdown); see ADR 0024. The
+    returned ``Nous`` exposes ``.engine`` and ``.mcp`` so the serve
+    entrypoint attaches a process-lifetime tick loop with
+    :func:`attach_tick_lifespan`.
+    """
     cfg = settings or get_settings()
     app = Nous(cfg)
-
-    @asynccontextmanager
-    async def _lifespan(_server: FastMCP[None]) -> AsyncIterator[None]:
-        async with tick_lifespan(app.engine, cfg.tick_hz):
-            yield
 
     host, _, port_str = cfg.http_bind.partition(":")
     try:
@@ -118,7 +131,6 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         # directly. OAuth metadata, /authorize, /token, /register and /revoke
         # are SDK-registered as siblings; no conflict at the routing layer.
         "streamable_http_path": "/",
-        "lifespan": _lifespan,
     }
     if cfg.transport == "http" and cfg.oauth_enabled:
         from urllib.parse import urlparse
@@ -973,7 +985,40 @@ def build_server(settings: Settings | None = None) -> FastMCP:
             _work,
         )
 
-    return mcp
+    app.mcp = mcp
+    return app
+
+
+def build_server(settings: Settings | None = None) -> FastMCP:
+    """Back-compatible accessor returning just the FastMCP tool surface.
+
+    Most callers want the whole :class:`Nous` (engine plus server) via
+    :func:`build_app`; this thin wrapper keeps the historical
+    ``build_server() -> FastMCP`` contract for tests and embedders.
+    """
+    return build_app(settings).mcp
+
+
+def attach_tick_lifespan(
+    starlette_app: Starlette, engine: Engine, tick_hz: float
+) -> Starlette:
+    """Compose ``tick_lifespan`` into a Starlette app's process lifespan.
+
+    The streamable-HTTP app's own lifespan is the MCP session manager
+    (process-lifetime). Wrapping ``tick_lifespan`` around it runs the
+    engine tick loop once for the lifetime of the server process,
+    decoupled from the per-request MCP session lifecycle (ADR 0024). The
+    original lifespan's yielded state (if any) is passed through.
+    """
+    original = starlette_app.router.lifespan_context
+
+    @asynccontextmanager
+    async def _combined(scoped_app: Starlette) -> AsyncIterator[Any]:
+        async with tick_lifespan(engine, tick_hz), original(scoped_app) as state:
+            yield state
+
+    starlette_app.router.lifespan_context = _combined
+    return starlette_app
 
 
 _INSTRUCTIONS = """\
