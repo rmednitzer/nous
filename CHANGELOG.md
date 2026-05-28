@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (deployment: auto-update stale-build freeze)
+
+- `deploy/auto-update.sh` no longer leaves `HEAD` advanced past a failed
+  deploy. It used to `git reset --hard origin/main` before `install.sh`
+  and the service restart, so a failed install left the working tree on
+  the new commit while `nous.service` kept running the old code; the next
+  tick then computed `LOCAL == REMOTE` and exited as a no-op, freezing the
+  box on the stale build with no marker. The critical section now runs
+  under an EXIT trap that rolls `HEAD` back and reinstalls the previous
+  good artifacts (units and venv, which a git reset alone does not undo);
+  it records the commit in `last_failed` only when a freshly-restarted
+  build fails its health check, so a transient install or network failure
+  is not blacklisted and the still-running previous service is left
+  untouched. The rollback resets `HEAD` before any fallible logging (and
+  `log` is best-effort), so a full disk that makes the audit log
+  unwritable cannot abort it. Regression-pinned by
+  `tests/integration/test_auto_update_rollback.py`.
+  Tracked as BL-063; the live `nous-prod-01` resync and the AUDIT N2
+  degraded audit sink it should clear remain the open server-side action.
+
 ### Changed (ADR 0019 follow-ups)
 
 - Every subsystem constructor now accepts an optional keyword-only
