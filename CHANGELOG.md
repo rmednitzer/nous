@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (deployment: install.sh self-install aborted every auto-update)
+
+- `deploy/install.sh` installed `deploy/auto-update.sh` onto itself when
+  `REPO_DIR=/opt/nous` (the production layout): source and destination
+  were the same file, so `install` exited non-zero ("are the same file")
+  and, under `set -e`, aborted the deploy after `git reset` had advanced
+  `HEAD` but before the service restart. This was the underlying cause of
+  the stale-build freeze on `nous-prod-01` (the service ran the initial
+  deploy's code while `HEAD` silently advanced). The step now chmods the
+  script in place when source and destination are the same file, and only
+  copies it for a non-`/opt/nous` `REPO_DIR`. Tracked as BL-063.
+
 ### Fixed (deployment: auto-update stale-build freeze)
 
 - `deploy/auto-update.sh` no longer leaves `HEAD` advanced past a failed

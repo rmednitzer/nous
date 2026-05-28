@@ -39,7 +39,18 @@ install -m 0644 "${REPO_DIR}/deploy/systemd/nous-state-flush.service" /etc/syste
 install -m 0644 "${REPO_DIR}/deploy/systemd/nous-state-flush.timer" /etc/systemd/system/nous-state-flush.timer
 install -m 0644 "${REPO_DIR}/deploy/systemd/nous-auto-update.service" /etc/systemd/system/nous-auto-update.service
 install -m 0644 "${REPO_DIR}/deploy/systemd/nous-auto-update.timer" /etc/systemd/system/nous-auto-update.timer
-install -m 0755 "${REPO_DIR}/deploy/auto-update.sh" /opt/nous/deploy/auto-update.sh
+# Ensure the auto-update entrypoint is executable at the path the
+# nous-auto-update.service unit calls. On the production layout
+# REPO_DIR is /opt/nous, so source and destination are the same file
+# and `install` aborts with "are the same file" under `set -e`, which
+# fails every auto-update after `git reset` has advanced HEAD but
+# before the service restart. chmod in place when they are the same
+# file; otherwise copy it into place (non-/opt/nous REPO_DIR layouts).
+if [ "${REPO_DIR}/deploy/auto-update.sh" -ef /opt/nous/deploy/auto-update.sh ]; then
+    chmod 0755 "${REPO_DIR}/deploy/auto-update.sh"
+else
+    install -m 0755 "${REPO_DIR}/deploy/auto-update.sh" /opt/nous/deploy/auto-update.sh
+fi
 
 # Caddy template (do not overwrite an edited /etc/caddy/Caddyfile)
 if [ ! -f /etc/caddy/Caddyfile ]; then
