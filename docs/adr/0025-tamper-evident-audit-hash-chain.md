@@ -49,15 +49,22 @@ is the sequence of those commitments.
 
 `AuditLogger` owns the chain head. The genesis value is sixty-four
 zeros, a value no real SHA-256 of a record produces, so the first
-chained line is unambiguous. At construction the logger recovers the
-head from the tail of the existing file (the last line's `entry_hash`,
-or genesis if the file is empty or its last line predates the chain),
-so the chain survives a process restart and spans a log rotation as
-long as the process keeps running. `write()` stamps `prev_hash` from
-the head, computes `entry_hash`, emits the line, and advances the head
-only when the emit did not raise. The per-record cost is one SHA-256
-over a short canonical string, negligible beside the output hash and
-the fsync the handler already pays.
+chained line is unambiguous. Whenever the sink opens or reopens
+(construction, `resync`, and the opportunistic auto-resync) the logger
+recovers the head from the tail of the existing file (the last line's
+`entry_hash`, or genesis if the file is empty or its last line predates
+the chain). Recovering on every reopen, not just at construction, keeps
+the head grounded to the file across a restart, a rotation, and the
+degraded-then-recovered path: while the sink is degraded, writes go to
+the stderr fallback rather than the file, so the in-memory head can run
+ahead of the file, and re-reading the tail before the next file write
+re-links it. `write()` stamps `prev_hash` from the head, computes
+`entry_hash`, emits the line, and advances the head when the emit did
+not raise; a failed fsync does not roll the head back, because the line
+is already in the file and the next record must link to it (the
+durability counter, not the chain, tracks fsync). The per-record cost
+is one SHA-256 over a short canonical string, negligible beside the
+output hash and the fsync the handler already pays.
 
 A module-level `verify_chain(path)` walks a JSONL file and returns a
 structured result: whether the chain is intact, how many lines were

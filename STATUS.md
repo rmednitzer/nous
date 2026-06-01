@@ -129,7 +129,7 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 578 tests pass at the 2026-06-01 cadence
+  feature branch before merge. 580 tests pass at the 2026-06-01 cadence
   audit ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md)).
 - `make docs-build` (`mkdocs build --strict`) is warning-free.
 - `make policy` (em-dash + private-repo greps via

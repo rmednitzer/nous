@@ -128,6 +128,29 @@ def test_verify_skips_legacy_prefix(tmp_path: Path) -> None:
     assert report["lines"] == 5
 
 
+def test_verify_flags_deletion_at_legacy_boundary(tmp_path: Path) -> None:
+    """With a legacy prefix present, the first chained line must be
+    genesis-rooted (the upgrade starts the chain at genesis right after
+    the prefix). Deleting that line leaves the legacy lines and a
+    non-genesis first link, which must read as a break, not a rotation
+    segment (PR #73 review P3)."""
+    path = tmp_path / "audit.jsonl"
+    legacy = [json.dumps({"tool": "device_info", "tier": 0, "output_sha256": "abc"})]
+    path.write_text("\n".join(legacy) + "\n", encoding="utf-8")
+
+    logger = AuditLogger(path)
+    _write_n(logger, 3)
+
+    lines = _read_lines(path)
+    del lines[1]  # the genesis-rooted first chained line, after one legacy line
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    report = verify_chain(path)
+    assert report["ok"] is False
+    assert report["first_break_line"] == 2
+    assert "genesis" in report["reason"]
+
+
 def test_verify_flags_unchained_line_after_chain_start(tmp_path: Path) -> None:
     path = tmp_path / "audit.jsonl"
     logger = AuditLogger(path)
@@ -175,6 +198,33 @@ def test_chain_head_survives_restart(tmp_path: Path) -> None:
     lines = [json.loads(line) for line in _read_lines(path)]
     assert lines[3]["prev_hash"] == head_before
     assert verify_chain(path)["ok"] is True
+
+
+def test_resync_recovers_chain_head_from_existing_log(tmp_path: Path) -> None:
+    """A sink that starts degraded and is later pointed at an existing
+    chained log must re-ground its head from the file tail on resync.
+    Without it the next write stamps prev_hash as genesis and breaks the
+    chain on the documented degraded-then-recovered path (PR #73 review
+    P1)."""
+    path = tmp_path / "audit.jsonl"
+    seed = AuditLogger(path)
+    _write_n(seed, 3)
+    head = seed.summary()["chain_head"]
+
+    degraded = AuditLogger(Path("/proc/0/audit.jsonl"))
+    assert degraded.degraded
+    assert degraded.summary()["chain_head"] == _GENESIS_HASH
+
+    degraded.path = str(path)
+    result = degraded.resync()
+    assert result["recovered"] is True
+    assert degraded.summary()["chain_head"] == head
+
+    degraded.write(_record(output="after-resync"))
+    report = verify_chain(path)
+    assert report["ok"] is True
+    assert report["from_genesis"] is True
+    assert report["chained"] == 4
 
 
 def test_summary_reports_genesis_head_on_fresh_log(tmp_path: Path) -> None:

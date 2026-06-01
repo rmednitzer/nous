@@ -255,9 +255,11 @@ class AuditLogger:
         self._auto_resync_backoff_s = _INITIAL_AUTO_RESYNC_BACKOFF_S
         self._next_auto_resync_at_monotonic_s: float | None = None
         self._seen_handler_fsync_failures = 0
-        # Hash-chain head (ADR 0025 / BL-016). Recovered from the file
-        # tail after the sink opens so the chain survives a restart and
-        # spans a rotation within one process; genesis for a fresh log.
+        # Hash-chain head (ADR 0025 / BL-016). _open_sink re-reads it from
+        # the file tail on every successful (re)open (construction, resync,
+        # auto-resync) so the head stays grounded to the file after a
+        # restart, a rotation, or a degraded-then-recovered sink; genesis
+        # for a fresh log.
         self._chain_head = _GENESIS_HASH
         self._also_stderr = bool(also_stderr)
         self._log = logging.getLogger("nous.audit")
@@ -266,7 +268,6 @@ class AuditLogger:
         for handler in list(self._log.handlers):
             self._log.removeHandler(handler)
         self._open_sink()
-        self._recover_chain_head()
 
     def _open_sink(self) -> None:
         """Attach a fresh handler stack for the current ``self.path``.
@@ -311,13 +312,25 @@ class AuditLogger:
             echo.setFormatter(logging.Formatter("AUDIT %(message)s"))
             self._log.addHandler(echo)
 
+        if not self.degraded:
+            self._recover_chain_head()
+
     def _recover_chain_head(self) -> None:
         """Set the chain head from the last chained line in the file.
 
+        Called from :meth:`_open_sink` on every successful (re)open, so the
+        head is grounded to the file at construction and again after a
+        ``resync`` or an auto-resync reopens a sink. That keeps the chain
+        intact across a restart, across a rotation, and across the
+        degraded-then-recovered path: when the sink was degraded the writes
+        went to the stderr fallback (not the file), so the in-memory head
+        could have drifted ahead of the file; re-reading the tail before
+        the next file write re-links it. Closes the recovery gap in the
+        hash chain (ADR 0025 / BL-016; PR #73 review P1).
+
         Best-effort and never raises: a missing, unreadable, empty, or
-        pre-chain log leaves the head at genesis, so the first record
-        this process writes starts (or continues) the chain cleanly.
-        Closes the restart gap for the hash chain (ADR 0025 / BL-016).
+        pre-chain log leaves the head at genesis, so the first record this
+        process writes starts (or continues) the chain cleanly.
         """
         last = ""
         try:
@@ -365,7 +378,9 @@ class AuditLogger:
         A successful resync also clears the auto-resync backoff
         state (the next degradation starts at
         ``_INITIAL_AUTO_RESYNC_BACKOFF_S`` again, not the doubled
-        cap).
+        cap) and, via ``_open_sink``, re-reads the hash-chain head
+        from the file tail so a record written after recovery links
+        to the existing log rather than to genesis (PR #73 review P1).
         """
         was_degraded = bool(self.degraded)
         self._open_sink()
@@ -591,18 +606,22 @@ def verify_chain(path: str | Path) -> dict[str, Any]:
 
     ``from_genesis`` reports whether the first chained line roots at the
     genesis value. A complete log from origin is ``from_genesis: true``;
-    a segment produced after a log rotation (its first record links to
-    the prior segment, which is correct) is ``from_genesis: false`` but
-    still ``ok``, so routine rotation does not read as tampering. Front
-    or tail truncation also reads as ``ok`` with ``from_genesis: false``
-    or an unchanged head; detecting truncation needs the BL-031 daily
-    anchor, not the chain alone.
+    a rotation segment (no legacy prefix, first record links to the prior
+    segment, which is correct) is ``from_genesis: false`` but still
+    ``ok``, so routine rotation does not read as tampering. In a file
+    with no legacy prefix, front or tail truncation also reads as ``ok``
+    with ``from_genesis: false`` or an unchanged head; detecting
+    truncation there needs the BL-031 daily anchor, not the chain alone.
 
     Lines written before the chain shipped carry no ``entry_hash`` and
     are counted as a legacy prefix, skipped without failing the walk, so
     a log that straddles the upgrade verifies from its first chained
-    record. An unchained line that appears after the chain has started is
-    a break, not a legacy line.
+    record. Because the upgrade roots the chain at genesis right after
+    that prefix, the first chained line in a file that has a legacy prefix
+    must be genesis-rooted: a non-genesis first link there is a deletion
+    at the boundary and breaks the walk (PR #73 review P3). An unchained
+    line that appears after the chain has started is likewise a break, not
+    a legacy line.
 
     Returns a JSON-safe report::
 
@@ -676,7 +695,13 @@ def verify_chain(path: str | Path) -> dict[str, Any]:
                 return _break(line_no, "entry_hash does not match record body")
             prev = obj.get("prev_hash", "")
             if expected_prev is None:
-                report["from_genesis"] = prev == _GENESIS_HASH
+                rooted = prev == _GENESIS_HASH
+                report["from_genesis"] = rooted
+                if report["legacy"] > 0 and not rooted:
+                    return _break(
+                        line_no,
+                        "first chained line after a legacy prefix is not rooted at genesis",
+                    )
             elif prev != expected_prev:
                 return _break(line_no, "prev_hash does not match the prior link")
 
