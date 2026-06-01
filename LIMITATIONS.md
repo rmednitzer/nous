@@ -4,7 +4,7 @@ This document is authoritative on what `nous` is *not* yet, and what it does
 not aim to be at all. Read it before opening an issue claiming a missing
 capability.
 
-Last reviewed: 2026-05-24 ([`docs/audit-2026-05-24.md`](docs/audit-2026-05-24.md), code-index audit at HEAD `fb8356f`).
+Last reviewed: 2026-06-01 ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md), cadence delta audit). Prior: 2026-05-24 ([`docs/audit-2026-05-24.md`](docs/audit-2026-05-24.md)).
 
 ## L1. Pre-1.0
 
@@ -57,15 +57,22 @@ remains available.
 **Tracking.** See ADR-0005. The cap is intentional; raise the env var
 `NOUS_ANTHROPIC_DAILY_CAP` only with operator approval.
 
-## L5. No hot-reload of profiles
+## L5. Profile hot-reload is runtime-only, not mid-scenario
 
-**State.** Hardware profile YAML files are loaded once at engine
-construction. A change to a profile requires restarting the process.
+**State.** A running engine reloads its hardware profile through the
+`profile_reload` tool, which re-reads the YAML, re-validates it through
+the schema gate, and rebuilds every subsystem and estimator while
+preserving FSM mode and tick counter (`Engine.reload_profile`, BL-039).
+A failed load (missing file, bad schema) keeps the previous profile
+mounted.
 
-**Implication.** Scenarios cannot swap profiles mid-run. The CLI's
-`scenario` subcommand reconstructs the engine for each invocation.
+**Implication.** What is not supported is swapping profiles in the
+middle of a scenario run. The CLI's `scenario` subcommand reconstructs
+the engine for each invocation, and the scenario timeline has no
+profile-swap injector.
 
-**Tracking.** [BL-039] hot-reload is `[planned]` for L2.
+**Tracking.** [BL-039] runtime hot-reload is `[in-progress]` (shipped);
+mid-scenario profile swap stays out of scope for v0.1.
 
 ## L6. Parametric biometrics
 
@@ -92,7 +99,7 @@ There is no propagation model, no terrain blockage, and no mesh routing.
 of degraded links (failover, queueing, mode transitions), not for
 predicting actual RF performance.
 
-**Tracking.** [BL-041] propagation-aware comms is `[planned]` for L3.
+**Tracking.** [BL-048] propagation-aware comms is `[planned]` for L3.
 
 ## L8. Li-ion only
 
@@ -104,7 +111,7 @@ are not modelled in v0.1.
 estimator's covariance bound (see the `estimator-power-soc` model card) is
 calibrated for Li-ion only.
 
-**Tracking.** [BL-042] alternative chemistries are `[planned]` for L2.
+**Tracking.** [BL-042] alternative chemistries are `[planned]` for L3.
 
 ## L9. Mocked local inference
 
@@ -215,3 +222,21 @@ does not actively scan and L17 is held by author discipline. Append
 a specific private name to `private_repo_patterns` to activate the
 grep against that name; CI will then fail any commit that introduces
 a reference.
+
+## L18. Audit hash chain detects tampering, not truncation
+
+**State.** The audit JSONL is a per-record hash chain (ADR 0025 /
+BL-016): each line commits to its predecessor, so any in-place edit or
+mid-stream deletion, insertion, or reordering breaks the chain at a
+point `verify_chain` (and the `audit_verify` tool) reports. The chain
+does not detect tail truncation, since dropping the most recent records
+leaves a shorter but internally consistent chain, and it is evidence,
+not access control.
+
+**Implication.** Do not read a passing `audit_verify` as proof that no
+records were dropped from the end of the log. The chain supplements the
+append-only bit (`chattr +a`) and off-host shipping; it does not replace
+them.
+
+**Tracking.** [BL-031] a daily anchor over the chain head closes the
+tail-truncation gap; it is `[planned]` for L2.

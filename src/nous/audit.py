@@ -4,6 +4,14 @@ One JSON object per line. The output body is never written to disk -- only
 its SHA-256 and byte length -- so the log is safe to ship off-host.
 Arguments pass through a fixed redaction allowlist before they arrive.
 
+Each line is linked to the line before it by a hash chain (ADR 0025 /
+BL-016): ``entry_hash`` commits to the record body and to the predecessor's
+``entry_hash`` via ``prev_hash``, so the head is a fingerprint of the whole
+history. ``verify_chain`` walks a file and locates the first broken link;
+the ``audit_verify`` tool exposes it to a controller. The chain makes
+mutation and mid-stream deletion detectable but not tail truncation, which
+the BL-031 daily anchor closes.
+
 The handler is rotation-safe (``logging.handlers.WatchedFileHandler``): on
 Linux make ``audit.jsonl`` append-only with ``chattr +a`` and rotate it
 with the bundled ``deploy/logrotate.conf``.
@@ -19,6 +27,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import json
 import logging
 import os
 import re
@@ -32,7 +41,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-__all__ = ["AuditLogger", "AuditRecord", "redact"]
+__all__ = ["AuditLogger", "AuditRecord", "redact", "verify_chain"]
 
 
 _REDACT_KEYS = re.compile(
@@ -40,6 +49,12 @@ _REDACT_KEYS = re.compile(
 )
 _REDACT_PLACEHOLDER = "<REDACTED>"
 _MAX_ARG_LEN = 4096
+
+# Hash-chain genesis (ADR 0025 / BL-016). Sixty-four zeros: a value no
+# SHA-256 of a real record produces, so the first chained line is
+# unambiguous and a verifier can tell "start of chain" from "missing
+# predecessor."
+_GENESIS_HASH = "0" * 64
 
 # AUDIT-2026-05-23 N2 follow-up B: auto-resync schedule. Initial 5
 # seconds gives an operator who is actively diagnosing a small
@@ -56,6 +71,25 @@ def _now_iso() -> str:
 
 def _sha256_hex(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()
+
+
+def _canonical(payload: Mapping[str, Any]) -> str:
+    """Serialise a record body to canonical JSON for hashing.
+
+    Sorted keys and tight separators so the bytes a verifier reconstructs
+    from a parsed line match the bytes the writer hashed, independent of
+    field-definition order.
+    """
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _entry_hash(record_body: Mapping[str, Any]) -> str:
+    """Chain hash over a record body that excludes ``entry_hash`` itself.
+
+    ``prev_hash`` is part of ``record_body``, so the returned digest
+    commits to the predecessor and the sequence of digests is the chain.
+    """
+    return _sha256_hex(_canonical(record_body))
 
 
 def redact(args: Mapping[str, Any]) -> dict[str, Any]:
@@ -116,6 +150,11 @@ class AuditRecord(BaseModel):
     request_id: str = ""
     client_id: str = ""
     extra: dict[str, Any] = Field(default_factory=dict)
+    # Hash chain (ADR 0025 / BL-016). Stamped by ``AuditLogger.write``;
+    # empty on a record that is constructed but not written through the
+    # logger, and on every line written before the chain shipped.
+    prev_hash: str = ""
+    entry_hash: str = ""
 
     @classmethod
     def from_output(
@@ -216,6 +255,10 @@ class AuditLogger:
         self._auto_resync_backoff_s = _INITIAL_AUTO_RESYNC_BACKOFF_S
         self._next_auto_resync_at_monotonic_s: float | None = None
         self._seen_handler_fsync_failures = 0
+        # Hash-chain head (ADR 0025 / BL-016). Recovered from the file
+        # tail after the sink opens so the chain survives a restart and
+        # spans a rotation within one process; genesis for a fresh log.
+        self._chain_head = _GENESIS_HASH
         self._also_stderr = bool(also_stderr)
         self._log = logging.getLogger("nous.audit")
         self._log.setLevel(logging.INFO)
@@ -223,6 +266,7 @@ class AuditLogger:
         for handler in list(self._log.handlers):
             self._log.removeHandler(handler)
         self._open_sink()
+        self._recover_chain_head()
 
     def _open_sink(self) -> None:
         """Attach a fresh handler stack for the current ``self.path``.
@@ -266,6 +310,33 @@ class AuditLogger:
             echo = logging.StreamHandler(sys.stderr)
             echo.setFormatter(logging.Formatter("AUDIT %(message)s"))
             self._log.addHandler(echo)
+
+    def _recover_chain_head(self) -> None:
+        """Set the chain head from the last chained line in the file.
+
+        Best-effort and never raises: a missing, unreadable, empty, or
+        pre-chain log leaves the head at genesis, so the first record
+        this process writes starts (or continues) the chain cleanly.
+        Closes the restart gap for the hash chain (ADR 0025 / BL-016).
+        """
+        last = ""
+        try:
+            target = Path(self.path).expanduser()
+            if not target.exists():
+                return
+            with target.open("r", encoding="utf-8", errors="replace") as handle:
+                for line in handle:
+                    stripped = line.strip()
+                    if stripped:
+                        last = stripped
+            if not last:
+                return
+            obj = json.loads(last)
+        except (OSError, ValueError):
+            return
+        head = obj.get("entry_hash") if isinstance(obj, dict) else None
+        if isinstance(head, str) and head:
+            self._chain_head = head
 
     def resync(self) -> dict[str, Any]:
         """Attempt to re-open the audit sink in place.
@@ -377,10 +448,19 @@ class AuditLogger:
         Before the write, ``_maybe_auto_resync`` runs to give a
         degraded sink a chance to recover so the incoming record
         lands durably (AUDIT-2026-05-23 N2 follow-up B).
+
+        The record is stamped with the hash chain (ADR 0025 / BL-016)
+        before it is emitted: ``prev_hash`` from the current head and
+        ``entry_hash`` over the record body. The head advances only
+        when the emit does not raise, so the on-disk chain stays
+        consistent with what was actually written.
         """
         self._maybe_auto_resync()
+        record.prev_hash = self._chain_head
+        record.entry_hash = _entry_hash(record.model_dump(mode="json", exclude={"entry_hash"}))
         try:
             self._log.info(record.model_dump_json())
+            self._chain_head = record.entry_hash
             new_failures = self._sync_fsync_failure_state()
             if new_failures == 0:
                 self.writes_total += 1
@@ -432,6 +512,12 @@ class AuditLogger:
                                      auto-resync attempt; None when
                                      the sink is healthy or has not
                                      yet failed a write since startup
+            chain_head            -- current hash-chain head (ADR 0025 /
+                                     BL-016): the ``entry_hash`` of the
+                                     most recent written record, or the
+                                     genesis value when nothing has been
+                                     chained yet. ``audit_verify`` walks
+                                     the on-disk file against this.
         """
         next_at = self._next_auto_resync_at_monotonic_s
         due_in: float | None = (
@@ -448,6 +534,7 @@ class AuditLogger:
             "auto_resync_attempts": self.auto_resync_attempts,
             "last_auto_resync_ts_s": self.last_auto_resync_ts_s,
             "auto_resync_due_in_s": due_in,
+            "chain_head": self._chain_head,
         }
 
     def _sync_fsync_failure_state(self) -> int:
@@ -491,3 +578,111 @@ class AuditLogger:
                 continue
             with contextlib.suppress(OSError):
                 os.fsync(fd)
+
+
+def verify_chain(path: str | Path) -> dict[str, Any]:
+    """Walk an audit JSONL file and verify the hash chain (ADR 0025 / BL-016).
+
+    ``ok`` reports linkage integrity: every chained line recomputes to
+    its stored ``entry_hash`` and every line's ``prev_hash`` matches the
+    predecessor's ``entry_hash``. So ``ok`` is false on in-place mutation
+    of a chained record or on mid-stream insertion, deletion, or
+    reordering, and the offending line is ``first_break_line``.
+
+    ``from_genesis`` reports whether the first chained line roots at the
+    genesis value. A complete log from origin is ``from_genesis: true``;
+    a segment produced after a log rotation (its first record links to
+    the prior segment, which is correct) is ``from_genesis: false`` but
+    still ``ok``, so routine rotation does not read as tampering. Front
+    or tail truncation also reads as ``ok`` with ``from_genesis: false``
+    or an unchanged head; detecting truncation needs the BL-031 daily
+    anchor, not the chain alone.
+
+    Lines written before the chain shipped carry no ``entry_hash`` and
+    are counted as a legacy prefix, skipped without failing the walk, so
+    a log that straddles the upgrade verifies from its first chained
+    record. An unchained line that appears after the chain has started is
+    a break, not a legacy line.
+
+    Returns a JSON-safe report::
+
+        {
+            "path": "...",
+            "ok": true,             # linkage intact among chained lines
+            "lines": 128,           # total non-blank lines read
+            "chained": 120,         # lines carrying an entry_hash
+            "legacy": 8,            # pre-chain lines, skipped
+            "head": "<hex>",        # last verified entry_hash, or genesis
+            "from_genesis": true,   # first chained line roots at genesis
+            "first_break_line": null,  # 1-based line number of the break
+            "reason": "",           # why the chain broke, when it did
+        }
+
+    Never raises: an unreadable file is reported as a break with the OS
+    error in ``reason`` rather than propagated, consistent with the
+    best-effort posture of the audit sink.
+    """
+    target = Path(path).expanduser()
+    report: dict[str, Any] = {
+        "path": str(target),
+        "ok": True,
+        "lines": 0,
+        "chained": 0,
+        "legacy": 0,
+        "head": _GENESIS_HASH,
+        "from_genesis": False,
+        "first_break_line": None,
+        "reason": "",
+    }
+
+    def _break(line_no: int, reason: str) -> dict[str, Any]:
+        report["ok"] = False
+        report["first_break_line"] = line_no
+        report["reason"] = reason
+        return report
+
+    if not target.exists():
+        return report
+
+    try:
+        handle = target.open("r", encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return _break(0, f"cannot open audit log: {exc}")
+
+    expected_prev: str | None = None
+    seen_chained = False
+    with handle:
+        for line_no, raw in enumerate(handle, start=1):
+            stripped = raw.strip()
+            if not stripped:
+                continue
+            report["lines"] += 1
+            try:
+                obj = json.loads(stripped)
+            except ValueError:
+                return _break(line_no, "line is not valid JSON")
+            if not isinstance(obj, dict):
+                return _break(line_no, "line is not a JSON object")
+
+            recorded = obj.get("entry_hash")
+            if not recorded:
+                if seen_chained:
+                    return _break(line_no, "unchained line after the chain started")
+                report["legacy"] += 1
+                continue
+
+            body = {k: v for k, v in obj.items() if k != "entry_hash"}
+            if _entry_hash(body) != recorded:
+                return _break(line_no, "entry_hash does not match record body")
+            prev = obj.get("prev_hash", "")
+            if expected_prev is None:
+                report["from_genesis"] = prev == _GENESIS_HASH
+            elif prev != expected_prev:
+                return _break(line_no, "prev_hash does not match the prior link")
+
+            seen_chained = True
+            report["chained"] += 1
+            expected_prev = recorded
+            report["head"] = recorded
+
+    return report

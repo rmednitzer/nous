@@ -7,7 +7,9 @@ yet?" questions.
 
 The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`. Two deployment failure modes found on `nous-prod-01` are closed in code: `deploy/install.sh` no longer installs `auto-update.sh` onto itself (the self-install errored under `set -e` and aborted every deploy after the `git reset`, the root cause of the freeze; BL-063), and `deploy/auto-update.sh` now rolls `HEAD` back and reinstalls the previous good artifacts on any failed deploy. The VM was manually resynced on 2026-05-28 (restarted onto current `main`; verified 29 tools, calibrated self-model, `audit.degraded:false`, so AUDIT N2 is cleared). A separate fix (BL-064 / ADR 0024) makes the engine tick at process scope: under `stateless_http=True` the per-request server lifespan had been rebooting the engine on every tool call, so `tick` and the FSM never advanced.
 
-Last reviewed: 2026-05-27 second pass (delta audit at HEAD
+Last reviewed: 2026-06-01 ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md),
+cadence delta; the BL-016 audit hash chain landed behind ADR 0025).
+Prior pass 2026-05-27 second pass (delta audit at HEAD
 ``563175a``, post the ``claude/audit-carryforwards-2026-05-27``
 stack: six 2026-05-27 carry-forwards closed (H2 mypy strict for
 tests, N3 ``state_get`` enrichment, N4 snapshot parity test, N7
@@ -56,7 +58,7 @@ re-audit).
 | Phase | Name | State | Scope |
 |-------|------|-------|-------|
 | L0 | Scaffold | stable | Layout, governance docs, audited tool surface, FSM, engine tick, hardware-profile loader, OAuth issuer. v0.1 shipped; the FastMCP lifespan now drives `tick_loop` so the live server advances state (PR #40 + #42). |
-| L1 | Subsystem models + state machine | in-progress | All ten subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) implement step / truth / sensor_obs with live estimators; the state machine transitions on derived OperatorState and CommsState. Self-model layer (BL-018) now emits real capability claims; scenario loader / injectors / runner (BL-014) drive the engine end-to-end; SQLite migration (BL-015) and FSM transition persistence (BL-017) ship. Remaining L1 gap: audit hash chain (BL-016, optional). |
+| L1 | Subsystem models + state machine | in-progress | All ten subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) implement step / truth / sensor_obs with live estimators; the state machine transitions on derived OperatorState and CommsState. Self-model layer (BL-018) now emits real capability claims; scenario loader / injectors / runner (BL-014) drive the engine end-to-end; SQLite migration (BL-015) and FSM transition persistence (BL-017) ship. The audit hash chain (BL-016) now ships behind ADR 0025; the SQLite audit mirror (BL-065) and the daily anchor (BL-031) remain optional follow-ups. |
 | L2 | claude.ai integration + scenarios | planned | HTTP transport with OAuth + Caddy lockdown in place; scenario pack runs end-to-end; biometrics physiology-grounded; profile hot-reload. |
 | L3 | STPA completion + benchmarks | planned | STPA derived requirements complete; comms propagation model; learned self-model; multi-tenant claude.ai; real local inference; additional interop adapters. |
 
@@ -79,7 +81,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0017` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0025` | stable (decisions, not implementations) |
 | `docs/stpa/01..09` | in-progress |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -88,10 +90,10 @@ re-audit).
 
 | Component | State | Notes |
 |-----------|-------|-------|
-| `src/nous/server.py` (FastMCP wiring + representative tools) | in-progress | Nineteen tools registered: ten subsystem `*_status` reads (power, apu, thermal, compute, storage, comms, position, sensors, biometrics, inference) + `comms_state` (FSM aggregator) + `device_info` + `device_health` + `state_get` + `state_history` + `self_model_assess` + `self_estimator_status` + `interop_formats` + `inference_local`. The new `tick_lifespan` async context manager drives `tick_loop` for the lifetime of the server and calls `engine.stop()` in a `finally` (PR #40 + #42). |
+| `src/nous/server.py` (FastMCP wiring + tool surface) | in-progress | Twenty-nine tools registered across device telemetry (T0), the ten subsystem reads (T0), self-model and estimators (T0), interop schema + codec (T0/T1), local inference + cap (T0/T1), scenarios and configuration (T2), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain). See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
 | `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
-| `src/nous/audit.py` | stable | JSONL append-only. Changes require an ADR. |
+| `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). Changes require an ADR. |
 | `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. |
@@ -127,7 +129,8 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 351 tests pass at `43d0db2`.
+  feature branch before merge. 578 tests pass at the 2026-06-01 cadence
+  audit ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md)).
 - `make docs-build` (`mkdocs build --strict`) is warning-free.
 - `make policy` (em-dash + private-repo greps via
   `scripts/policy_checks.sh`) is enforced in CI as the `policy` job
