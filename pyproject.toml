@@ -57,7 +57,7 @@ dev = [
     # the same rule set. Bump together with the lint output the new
     # minor produces.
     "ruff>=0.15,<0.16",
-    "mypy>=1.13",
+    "mypy>=2.1.0",
     "hypothesis>=6.115",
     "types-PyYAML>=6.0.12.20260518",
 ]
