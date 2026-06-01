@@ -27,3 +27,4 @@
 | 0022 | [Runtime safety enforcer with structured result](0022-runtime-safety-enforcer.md) | Accepted | 2026-05-24 |
 | 0023 | [Audit cadence and regression-suite pattern](0023-audit-cadence-and-regression-suite.md) | Accepted | 2026-05-24 |
 | 0024 | [Engine lifecycle is process-scoped, not MCP-session-scoped](0024-engine-lifecycle-process-scope.md) | Accepted | 2026-05-28 |
+| 0025 | [Tamper-evident audit hash chain](0025-tamper-evident-audit-hash-chain.md) | Accepted | 2026-06-01 |

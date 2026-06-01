@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (audit: tamper-evident hash chain)
+
+- The audit JSONL is now a per-record hash chain (ADR 0025, BL-016).
+  Each line carries `prev_hash` and `entry_hash`, so the chain head is
+  a fingerprint of the whole history; `AuditLogger` recovers the head
+  from the file tail on restart so the chain survives a process bounce.
+  A module-level `verify_chain` walks a file and reports the first
+  broken link, and a new T0 `audit_verify` MCP tool plus a `chain_head`
+  field on `audit_summary` expose it to a controller. The chain detects
+  in-place mutation and mid-stream deletion, insertion, or reordering;
+  tail truncation needs the BL-031 daily anchor. The change is additive
+  (ADR 0007): existing readers ignore the new fields and pre-chain lines
+  verify as a legacy prefix.
+
 ### Fixed (server: engine ran per request under stateless HTTP)
 
 - The engine tick loop ran on the FastMCP server lifespan, which under

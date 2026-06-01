@@ -18,7 +18,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from starlette.applications import Starlette
 
 from . import __version__
-from .audit import AuditLogger
+from .audit import AuditLogger, verify_chain
 from .config import Settings, get_settings
 from .db import StateTransitionLog, init_db
 from .engine import Engine
@@ -271,6 +271,31 @@ def build_app(settings: Settings | None = None) -> Nous:
             return json.dumps(app.audit.resync(), indent=2)
 
         return await _wrap("audit_resync", {}, ctx, _work)
+
+    @mcp.tool()
+    async def audit_verify(ctx: Context | None = None) -> str:
+        """Verify the audit hash chain on disk (BL-016, ADR 0025).
+
+        Walks ``device_info.audit.path`` and recomputes the chain: each
+        line commits to its predecessor through ``prev_hash`` /
+        ``entry_hash``, so a mutated record or a mid-stream deletion
+        breaks a link the walk reports at ``first_break_line``. The
+        response carries ``ok`` (linkage intact), ``from_genesis`` (the
+        log roots at genesis; false for a post-rotation continuation
+        segment, which is still ``ok``), the line counts (``lines`` /
+        ``chained`` / ``legacy``), the verified ``head``, and the break
+        ``reason`` when ``ok`` is false. Pre-chain lines are counted as
+        ``legacy`` and skipped, so a log that straddles the upgrade still
+        verifies.
+
+        Tier T0 (read-only): the verifier only reads the file. It does
+        not detect truncation, which the BL-031 daily anchor closes.
+        """
+
+        async def _work() -> str:
+            return json.dumps(verify_chain(app.audit.path), indent=2)
+
+        return await _wrap("audit_verify", {}, ctx, _work)
 
     @mcp.tool()
     async def state_get(ctx: Context | None = None) -> str:
@@ -1030,6 +1055,7 @@ never written to disk. The audit log path is reported by `device_info`.
 
 Device telemetry (T0):
   device_info / device_health / state_get / state_history / audit_summary
+  audit_verify
 
 Subsystem reads (T0):
   power_status / apu_status / thermal_status / compute_status / storage_status

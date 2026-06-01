@@ -11,6 +11,9 @@ build.
 |------|------|---------|
 | `anthropic_cap_status` | T0 | Surface the Anthropic daily call cap (BL-021). |
 | `apu_status` | T0 | Auxiliary-power-unit state (solar, fuel cell, vehicle, USB-C PD). |
+| `audit_resync` | T2 | Re-open the audit sink in place (closes AUDIT-2026-05-23 N2). |
+| `audit_summary` | T0 | Read-only view of the audit handler's state. |
+| `audit_verify` | T0 | Verify the audit hash chain on disk (BL-016, ADR 0025). |
 | `biometrics_status` | T0 | Operator biometrics: heart rate, core temp, hydration, cognitive load. |
 | `comms_state` | T0 | Comms-stack summary (per ADR-0006). |
 | `comms_status` | T0 | Comms subsystem: per-link envelope, live RSSI, loss, throughput, age. |
@@ -31,7 +34,7 @@ build.
 | `self_model_assess` | T0 | Self-model capability assessment with calibrated p5/p50/p95 bands. |
 | `self_model_viability` | T0 | Decide whether a task is feasible against the current capabilities. |
 | `sensors_status` | T0 | Environmental sensor pack: ambient temp, humidity, baro pressure. |
-| `state_get` | T0 | Current FSM mode. |
+| `state_get` | T0 | Current FSM mode plus the labels a controller queries together. |
 | `state_history` | T0 | Recent FSM transitions (oldest first; up to ``limit`` rows). |
 | `storage_status` | T0 | Storage subsystem: capacity, used, wear, write rate. |
 | `thermal_status` | T0 | Two-state thermal model (junction + enclosure + ambient). |
@@ -61,6 +64,36 @@ tool registry.
 {
   "properties": {},
   "title": "apu_statusArguments",
+  "type": "object"
+}
+```
+
+### `audit_resync`
+
+```json
+{
+  "properties": {},
+  "title": "audit_resyncArguments",
+  "type": "object"
+}
+```
+
+### `audit_summary`
+
+```json
+{
+  "properties": {},
+  "title": "audit_summaryArguments",
+  "type": "object"
+}
+```
+
+### `audit_verify`
+
+```json
+{
+  "properties": {},
+  "title": "audit_verifyArguments",
   "type": "object"
 }
 ```
