@@ -215,6 +215,7 @@ def build_app(settings: Settings | None = None) -> Nous:
                     "path": app.audit.path,
                     "degraded": app.audit.degraded,
                     "anchor_path": app.anchor.path,
+                    "anchor_degraded": app.anchor.degraded,
                 },
             }
             return json.dumps(info, indent=2)

@@ -146,37 +146,65 @@ def _loads(line: str) -> dict[str, Any] | None:
     return obj if isinstance(obj, dict) else None
 
 
+def _first_link_error(prev: str, prev_head: str | None, seg_legacy: int, index: int) -> str:
+    """Validate the first chained record of a segment; "" means valid.
+
+    A segment's first chained record may root at genesis (a fresh chain, or a
+    post-restart segment whose recovered head was genesis). If a pre-chain
+    (legacy) prefix precedes it, it must root at genesis, matching
+    ``verify_chain`` (a non-genesis link there is a deletion at the upgrade
+    boundary). A later segment with no legacy prefix must either root at
+    genesis (restart) or link to the previous segment's last head
+    (continuation); anything else is a dangling link left by a deletion at the
+    rotation boundary. The oldest retained segment with no legacy prefix has
+    no earlier reference, so its first record is accepted as the retained
+    boundary (its ``prev`` only sets ``from_genesis``).
+    """
+    if seg_legacy > 0:
+        if prev != _GENESIS_HASH:
+            return "first chained line after a legacy prefix is not rooted at genesis"
+        return ""
+    if index > 0 and prev not in (_GENESIS_HASH, prev_head):
+        return "dangling first link at a segment boundary (records deleted at rotation)"
+    return ""
+
+
 def _reconstruct(audit_path: str | Path) -> _Walk:
     """Walk every on-disk audit segment, oldest first, and collect the heads.
 
     Each segment (the active file and its logrotate siblings) is verified
-    *independently*, mirroring :func:`nous.audit.verify_chain` per file:
-    recompute every ``entry_hash``, check ``prev_hash`` linkage within the
-    segment, and tolerate a pre-chain (legacy) prefix only at the segment's
-    own start. Segments are deliberately not required to link to each other:
-    a logrotate that moves the active file aside and is followed by a service
-    restart leaves the recovered head at genesis, so the new active file is a
-    fresh genesis-rooted segment, not a continuation. Demanding cross-segment
-    linkage would read that routine case as tampering.
+    mirroring :func:`nous.audit.verify_chain` per file: recompute every
+    ``entry_hash``, check ``prev_hash`` linkage within the segment, and
+    tolerate a pre-chain (legacy) prefix only at the segment's own start. At a
+    segment boundary the first record must root at genesis (a logrotate
+    followed by a restart leaves the recovered head at genesis, so the new
+    active file is a fresh genesis-rooted segment) or continue from the
+    previous segment's head; a link to anything else is a dangling reference
+    left by a deletion at the boundary. The oldest retained segment has no
+    earlier reference, so its first record sets ``from_genesis`` and is
+    otherwise accepted.
 
     The ordered union of chained ``entry_hash`` values (across all segments)
-    is what the anchor cross-check tests for membership. ``from_genesis`` is
-    whether the oldest retained segment roots at genesis. A segment that is
-    unreadable (permissions) or a corrupt ``.gz`` payload is reported as a
-    structured break, not allowed to escape as an exception.
+    is what the anchor cross-check tests for membership. A segment that is
+    unreadable, a corrupt ``.gz`` payload, or an unlistable audit directory is
+    reported as a structured break, never allowed to escape as an exception.
     """
-    segments = _segment_paths(audit_path)
-    seg_names = [str(path) for path in segments]
     heads: list[str] = []
     total_legacy = 0
     oldest_from_genesis = False
+
+    try:
+        segments = _segment_paths(audit_path)
+    except OSError as exc:
+        return _Walk(heads, False, False, f"cannot list audit directory: {exc}", 0, [])
+    seg_names = [str(path) for path in segments]
 
     def _break(reason: str) -> _Walk:
         return _Walk(heads, oldest_from_genesis, False, reason, total_legacy, seg_names)
 
     for index, segment in enumerate(segments):
         expected_prev: str | None = None
-        seen_chained = False
+        seg_legacy = 0
         try:
             for line in _iter_segment_lines(segment):
                 obj = _loads(line)
@@ -184,8 +212,9 @@ def _reconstruct(audit_path: str | Path) -> _Walk:
                     return _break("audit line is not a JSON object")
                 recorded = obj.get("entry_hash")
                 if not recorded:
-                    if seen_chained:
+                    if expected_prev is not None:
                         return _break("unchained line after the chain started")
+                    seg_legacy += 1
                     total_legacy += 1
                     continue
                 body = {key: value for key, value in obj.items() if key != "entry_hash"}
@@ -193,11 +222,13 @@ def _reconstruct(audit_path: str | Path) -> _Walk:
                     return _break("entry_hash does not match record body")
                 prev = obj.get("prev_hash", "")
                 if expected_prev is None:
+                    error = _first_link_error(prev, heads[-1] if heads else None, seg_legacy, index)
+                    if error:
+                        return _break(error)
                     if index == 0:
                         oldest_from_genesis = prev == _GENESIS_HASH
                 elif prev != expected_prev:
                     return _break("prev_hash does not match the prior link")
-                seen_chained = True
                 recorded_str = str(recorded)
                 heads.append(recorded_str)
                 expected_prev = recorded_str

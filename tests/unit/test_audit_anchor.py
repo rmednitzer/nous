@@ -416,6 +416,73 @@ def test_verify_detects_truncation_in_steady_state(tmp_path: Path) -> None:
     assert report["first_break"]["day"] == "2026-06-02"
 
 
+def test_verify_detects_deletion_at_rotation_boundary(tmp_path: Path) -> None:
+    """Deleting the first records of a later (continuation) segment leaves a
+    dangling first link that must be rejected, even if an anchored head later
+    in that segment survives (Codex P2)."""
+    audit = tmp_path / "audit.jsonl"
+    rotated = tmp_path / "audit.jsonl.1"
+    anchors = tmp_path / "audit-anchors.jsonl"
+
+    logger = AuditLogger(audit)
+    _write_n(logger, 4)
+    audit.rename(rotated)  # .1 = records 1-4
+    _write_n(logger, 3)  # active = records 5-7 (record 5 links to record 4)
+    log = AnchorLog(anchors)
+    assert log.maybe_anchor(audit, now=_day(1)) is not None  # pins head 7
+
+    # Delete the first record of the active segment; record 6 now links to the
+    # deleted record 5's head -- neither genesis nor the .1 head.
+    rows = _lines(audit)
+    audit.write_text("\n".join(rows[1:]) + "\n", encoding="utf-8")
+
+    report = verify_anchors(audit, anchors)
+    assert report["ok"] is False
+    assert report["audit_chain_ok"] is False
+    assert "dangling" in report["reason"]
+
+
+def test_verify_detects_deletion_at_legacy_boundary(tmp_path: Path) -> None:
+    """A segment that begins with legacy (pre-chain) lines must have its first
+    chained record rooted at genesis; deleting that record leaves a
+    non-genesis link after the legacy prefix, which is a break (Codex P2,
+    mirrors verify_chain)."""
+    audit = tmp_path / "audit.jsonl"
+    anchors = tmp_path / "audit-anchors.jsonl"
+
+    legacy = json.dumps({"tool": "device_info", "tier": 0, "output_sha256": "abc"})
+    audit.write_text(legacy + "\n", encoding="utf-8")
+    logger = AuditLogger(audit)
+    _write_n(logger, 3)  # first chained record is genesis-rooted after the legacy line
+    log = AnchorLog(anchors)
+    assert log.maybe_anchor(audit, now=_day(1)) is not None
+
+    rows = _lines(audit)  # [legacy, chained1(genesis), chained2, chained3]
+    del rows[1]  # drop the genesis-rooted first chained record
+    audit.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    report = verify_anchors(audit, anchors)
+    assert report["ok"] is False
+    assert report["audit_chain_ok"] is False
+    assert "genesis" in report["reason"]
+
+
+def test_verify_reports_unlistable_directory_as_structured_break(tmp_path: Path) -> None:
+    """If the audit directory cannot be listed (here the parent path is a
+    file, not a directory), the verifier returns a structured break rather
+    than letting the error escape as the runner's [error ...] string
+    (Codex P2)."""
+    not_a_dir = tmp_path / "not-a-dir"
+    not_a_dir.write_text("x", encoding="utf-8")
+    audit = not_a_dir / "audit.jsonl"  # parent is a file
+    anchors = tmp_path / "audit-anchors.jsonl"
+
+    report = verify_anchors(audit, anchors)
+    assert report["ok"] is False
+    assert report["audit_chain_ok"] is False
+    assert "cannot list audit directory" in report["reason"]
+
+
 def test_audit_anchor_verify_classified_read_only() -> None:
     tier, _ = classify("audit_anchor_verify", {})
     assert tier is Tier.READ_ONLY

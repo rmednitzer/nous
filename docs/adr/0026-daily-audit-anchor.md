@@ -57,15 +57,19 @@ removed out of order, which is a break.
 
 The verifier reconstructs across the conventional logrotate siblings
 (`audit.jsonl`, `audit.jsonl.1`, `audit.jsonl.2.gz` and upward, gunzipping
-transparently) oldest first, and verifies each segment *independently*:
-linkage and recompute hold within a segment, but segments are not required to
-link to each other, because a logrotate followed by a service restart leaves
-the recovered head at genesis, so the new active file is a fresh
-genesis-rooted segment rather than a continuation. The anchor cross-check
-then tests membership against the union of all segment heads. A segment that
-is unreadable (permissions) or a corrupt `.gz` payload is reported as a
-structured `audit_chain_ok: false`, never allowed to escape as an exception.
-`policy.py`
+transparently) oldest first, recomputing every `entry_hash` and checking
+`prev_hash` linkage within each segment. At a segment boundary the first
+record must root at genesis (a logrotate followed by a restart leaves the
+recovered head at genesis, so the new active file is a fresh genesis-rooted
+segment) or continue from the previous segment's head; a link to anything
+else is a dangling reference left by a deletion at the boundary, and a
+non-genesis link after a legacy (pre-chain) prefix is the same deletion at
+the upgrade boundary that `verify_chain` rejects. The oldest retained segment
+has no earlier reference, so its first record only sets `from_genesis`. The
+anchor cross-check then tests membership against the union of all segment
+heads. A segment that is unreadable, a corrupt `.gz` payload, or an
+unlistable audit directory is reported as a structured `audit_chain_ok:
+false`, never allowed to escape as an exception. `policy.py`
 classifies `audit_anchor_verify` as T0 (this ADR is the required record for
 that boundary edit), `install.sh` creates the anchor file and makes it
 append-only with `chattr +a` the way it already does for the audit log, and

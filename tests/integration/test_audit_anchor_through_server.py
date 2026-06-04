@@ -57,4 +57,5 @@ async def test_device_info_advertises_anchor_path(config: Settings) -> None:
     result = await app.mcp.call_tool("device_info", {})
     text = _collect_text(result)
     assert '"anchor_path"' in text
+    assert '"anchor_degraded"' in text
     assert str(config.resolved_anchor_path()) in text
