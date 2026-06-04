@@ -1,18 +1,23 @@
-## Description
+## What changed
 
-<!-- What does this PR change, and why? -->
+<!-- One paragraph in plain prose. -->
 
-## Type of change
+## Blast radius
 
-- [ ] New feature
-- [ ] Bug fix
-- [ ] Refactor
-- [ ] Documentation
-- [ ] CI or tooling
+<!-- Which components, which contracts, and which tests cover them. -->
+
+## Rollback path
+
+<!-- What a revert looks like, and whether any migrations or data changes are involved. -->
+
+## Security note
+
+<!-- Required for changes to policy.py, runner.py, audit.py, state/machine.py,
+     anthropic_client.py, estimators/base.py, or interop/base.py. Otherwise "n/a". -->
 
 ## Checklist
 
-- [ ] Follows [AGENTS.md](../AGENTS.md) and [CLAUDE.md](../CLAUDE.md)
+- [ ] Follows [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md)
 - [ ] `make check` passes (ruff, mypy --strict, pytest)
 - [ ] `make policy` is clean (no em-dashes in Markdown)
 - [ ] High blast radius surfaces are unchanged, or an ADR accompanies the change
