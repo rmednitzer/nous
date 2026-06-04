@@ -11,6 +11,7 @@ build.
 |------|------|---------|
 | `anthropic_cap_status` | T0 | Surface the Anthropic daily call cap (BL-021). |
 | `apu_status` | T0 | Auxiliary-power-unit state (solar, fuel cell, vehicle, USB-C PD). |
+| `audit_anchor_verify` | T0 | Cross-check the daily audit anchors against the chain (BL-031, ADR 0026). |
 | `audit_resync` | T2 | Re-open the audit sink in place (closes AUDIT-2026-05-23 N2). |
 | `audit_summary` | T0 | Read-only view of the audit handler's state. |
 | `audit_verify` | T0 | Verify the audit hash chain on disk (BL-016, ADR 0025). |
@@ -19,7 +20,7 @@ build.
 | `comms_status` | T0 | Comms subsystem: per-link envelope, live RSSI, loss, throughput, age. |
 | `compute_status` | T0 | Compute subsystem: load fraction, electrical draw, throttling. |
 | `device_health` | T0 | Engine snapshot: tick, ts_s, mode, operator/comms state. |
-| `device_info` | T0 | Report nous version, profile, transport, policy mode, audit path. |
+| `device_info` | T0 | Report nous version, profile, transport, policy mode, audit and anchor paths. |
 | `inference_local` | T1 | Local-path inference. |
 | `inference_status` | T0 | Inference subsystem totals: calls, tokens, joules, last latency. |
 | `interop_decode` | T1 | Decode a hex-encoded payload via the named adapter (BL-041 / T1). |
@@ -64,6 +65,16 @@ tool registry.
 {
   "properties": {},
   "title": "apu_statusArguments",
+  "type": "object"
+}
+```
+
+### `audit_anchor_verify`
+
+```json
+{
+  "properties": {},
+  "title": "audit_anchor_verifyArguments",
   "type": "object"
 }
 ```

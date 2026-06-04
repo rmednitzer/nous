@@ -58,7 +58,7 @@ re-audit).
 | Phase | Name | State | Scope |
 |-------|------|-------|-------|
 | L0 | Scaffold | stable | Layout, governance docs, audited tool surface, FSM, engine tick, hardware-profile loader, OAuth issuer. v0.1 shipped; the FastMCP lifespan now drives `tick_loop` so the live server advances state (PR #40 + #42). |
-| L1 | Subsystem models + state machine | in-progress | All ten subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) implement step / truth / sensor_obs with live estimators; the state machine transitions on derived OperatorState and CommsState. Self-model layer (BL-018) now emits real capability claims; scenario loader / injectors / runner (BL-014) drive the engine end-to-end; SQLite migration (BL-015) and FSM transition persistence (BL-017) ship. The audit hash chain (BL-016) now ships behind ADR 0025; the SQLite audit mirror (BL-065) and the daily anchor (BL-031) remain optional follow-ups. |
+| L1 | Subsystem models + state machine | in-progress | All ten subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) implement step / truth / sensor_obs with live estimators; the state machine transitions on derived OperatorState and CommsState. Self-model layer (BL-018) now emits real capability claims; scenario loader / injectors / runner (BL-014) drive the engine end-to-end; SQLite migration (BL-015) and FSM transition persistence (BL-017) ship. The audit hash chain (BL-016) ships behind ADR 0025 and the daily anchor (BL-031) behind ADR 0026; the SQLite audit mirror (BL-065) remains an optional follow-up. |
 | L2 | claude.ai integration + scenarios | planned | HTTP transport with OAuth + Caddy lockdown in place; scenario pack runs end-to-end; biometrics physiology-grounded; profile hot-reload. |
 | L3 | STPA completion + benchmarks | planned | STPA derived requirements complete; comms propagation model; learned self-model; multi-tenant claude.ai; real local inference; additional interop adapters. |
 
@@ -90,10 +90,11 @@ re-audit).
 
 | Component | State | Notes |
 |-----------|-------|-------|
-| `src/nous/server.py` (FastMCP wiring + tool surface) | in-progress | Twenty-nine tools registered across device telemetry (T0), the ten subsystem reads (T0), self-model and estimators (T0), interop schema + codec (T0/T1), local inference + cap (T0/T1), scenarios and configuration (T2), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain). See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
+| `src/nous/server.py` (FastMCP wiring + tool surface) | in-progress | Thirty tools registered across device telemetry (T0), the ten subsystem reads (T0), self-model and estimators (T0), interop schema + codec (T0/T1), local inference + cap (T0/T1), scenarios and configuration (T2), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
 | `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). Changes require an ADR. |
+| `src/nous/audit_anchor.py` | in-progress | Daily anchor over the chain head (ADR 0026 / BL-031): `AnchorLog` appends one hash-linked anchor per UTC day, and `verify_anchors` (the `audit_anchor_verify` tool) cross-checks anchored heads against the chain across logrotate segments to catch tail truncation within the retention window. |
 | `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. |
@@ -129,8 +130,9 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 580 tests pass at the 2026-06-01 cadence
-  audit ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md)).
+  feature branch before merge. 597 tests pass at HEAD (580 at the
+  2026-06-01 cadence audit, [`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md);
+  BL-031 / ADR 0026 added the daily-anchor suite).
 - `make docs-build` (`mkdocs build --strict`) is warning-free.
 - `make policy` (em-dash + private-repo greps via
   `scripts/policy_checks.sh`) is enforced in CI as the `policy` job

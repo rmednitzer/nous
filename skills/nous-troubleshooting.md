@@ -66,6 +66,29 @@ Treat this as an incident, not a warning. Triage:
    resync schedule (closes N2) are the in-process recovery paths
    that replace the restart.
 
+## Confirming the audit trail has not been tampered with
+
+Two T0 reads check audit integrity, and they answer different questions:
+
+1. `audit_verify` walks the on-disk hash chain (ADR 0025 / BL-016). `ok:
+   false` means a record was mutated, deleted mid-stream, inserted, or
+   reordered, and `first_break_line` is where. `from_genesis: false` on an
+   otherwise-`ok` log is a normal post-rotation continuation segment, not
+   tampering.
+2. `audit_anchor_verify` cross-checks the daily anchors (ADR 0026 / BL-031)
+   against the chain. The hash chain alone cannot see tail truncation
+   (dropping the most recent records leaves a shorter, still-consistent
+   chain); the anchor pins the chain head once per UTC day in
+   `device_info.audit.anchor_path`, so an anchored head that has gone
+   missing means the tail was cut. `ok: false` with a `truncation` reason
+   and a `first_break.day` is that signal. `unverifiable` counts anchors
+   whose content has aged out of the retained logrotate segments (not a
+   break). Run this after any suspected `chattr -a` window.
+
+Neither read is access control: both supplement the append-only bit and
+off-host shipping. A clean pair is evidence, not proof, that the medium
+was never writable.
+
 ## The live VM is serving an older tool surface
 
 The auto-update timer tracks `origin/main` every five minutes. If

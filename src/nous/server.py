@@ -19,6 +19,7 @@ from starlette.applications import Starlette
 
 from . import __version__
 from .audit import AuditLogger, verify_chain
+from .audit_anchor import AnchorLog
 from .config import Settings, get_settings
 from .db import StateTransitionLog, init_db
 from .engine import Engine
@@ -58,6 +59,7 @@ class Nous:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.audit = AuditLogger(str(settings.resolved_audit_path()))
+        self.anchor = AnchorLog(str(settings.resolved_anchor_path()))
         db_engine = None
         try:
             db_engine = init_db(settings.resolved_db_url())
@@ -175,7 +177,7 @@ def build_app(settings: Settings | None = None) -> Nous:
         work: Work,
     ) -> str:
         request_id, client_id = _ctx_ids(ctx)
-        return await audited_run(
+        result = await audited_run(
             tool=tool,
             args=args,
             work=work,
@@ -188,10 +190,18 @@ def build_app(settings: Settings | None = None) -> Nous:
             request_id=request_id,
             client_id=client_id,
         )
+        # Daily audit anchor (BL-031 / ADR 0026). The audit chain only
+        # advances on a tool call, so the tool-call path is the right
+        # cadence to pin it; ``maybe_anchor`` is a single date comparison
+        # except on the first call of a new UTC day. Best-effort: anchoring
+        # never breaks a tool call, matching the audit sink's posture.
+        with contextlib.suppress(Exception):
+            app.anchor.maybe_anchor(app.audit.path)
+        return result
 
     @mcp.tool()
     async def device_info(ctx: Context | None = None) -> str:
-        """Report nous version, profile, transport, policy mode, audit path."""
+        """Report nous version, profile, transport, policy mode, audit and anchor paths."""
 
         async def _work() -> str:
             info = {
@@ -204,6 +214,8 @@ def build_app(settings: Settings | None = None) -> Nous:
                 "audit": {
                     "path": app.audit.path,
                     "degraded": app.audit.degraded,
+                    "anchor_path": app.anchor.path,
+                    "anchor_degraded": app.anchor.degraded,
                 },
             }
             return json.dumps(info, indent=2)
@@ -296,6 +308,32 @@ def build_app(settings: Settings | None = None) -> Nous:
             return json.dumps(verify_chain(app.audit.path), indent=2)
 
         return await _wrap("audit_verify", {}, ctx, _work)
+
+    @mcp.tool()
+    async def audit_anchor_verify(ctx: Context | None = None) -> str:
+        """Cross-check the daily audit anchors against the chain (BL-031, ADR 0026).
+
+        The BL-016 hash chain (``audit_verify``) catches mutation and
+        mid-stream deletion but not tail truncation: dropping the most
+        recent records leaves a shorter, still-consistent chain. The daily
+        anchor closes that gap by pinning the chain head once per UTC day in
+        a separate append-only file (``device_info.audit.anchor_path``). This
+        tool reconstructs the audit chain across logrotate segments and
+        confirms every anchored head is still present; a missing anchored
+        head means the trail was truncated below the anchor, reported in
+        ``reason`` and ``first_break``. ``unverifiable`` counts anchors that
+        predate the oldest retained segment (rotated out, not a break).
+
+        Tier T0 (read-only): reads the audit and anchor files; mutates
+        nothing.
+        """
+
+        async def _work() -> str:
+            from .audit_anchor import verify_anchors
+
+            return json.dumps(verify_anchors(app.audit.path, app.anchor.path), indent=2)
+
+        return await _wrap("audit_anchor_verify", {}, ctx, _work)
 
     @mcp.tool()
     async def state_get(ctx: Context | None = None) -> str:
@@ -1055,7 +1093,7 @@ never written to disk. The audit log path is reported by `device_info`.
 
 Device telemetry (T0):
   device_info / device_health / state_get / state_history / audit_summary
-  audit_verify
+  audit_verify / audit_anchor_verify
 
 Subsystem reads (T0):
   power_status / apu_status / thermal_status / compute_status / storage_status
