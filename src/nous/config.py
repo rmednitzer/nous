@@ -72,6 +72,7 @@ class Settings(BaseSettings):
 
     # Audit
     audit_path: str = ""
+    anchor_path: str = ""
 
     @field_validator("transport")
     @classmethod
@@ -91,6 +92,11 @@ class Settings(BaseSettings):
 
     def resolved_audit_path(self) -> Path:
         return Path(self.audit_path) if self.audit_path else self.home / "audit.jsonl"
+
+    def resolved_anchor_path(self) -> Path:
+        if self.anchor_path:
+            return Path(self.anchor_path)
+        return self.resolved_audit_path().with_name("audit-anchors.jsonl")
 
     def resolved_db_url(self) -> str:
         if self.db_url:

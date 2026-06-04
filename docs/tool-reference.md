@@ -11,6 +11,7 @@ build.
 |------|------|---------|
 | `anthropic_cap_status` | T0 | Surface the Anthropic daily call cap (BL-021). |
 | `apu_status` | T0 | Auxiliary-power-unit state (solar, fuel cell, vehicle, USB-C PD). |
+| `audit_anchor_verify` | T0 | Cross-check the daily audit anchors against the chain (BL-031, ADR 0026). |
 | `audit_resync` | T2 | Re-open the audit sink in place (closes AUDIT-2026-05-23 N2). |
 | `audit_summary` | T0 | Read-only view of the audit handler's state. |
 | `audit_verify` | T0 | Verify the audit hash chain on disk (BL-016, ADR 0025). |
@@ -64,6 +65,16 @@ tool registry.
 {
   "properties": {},
   "title": "apu_statusArguments",
+  "type": "object"
+}
+```
+
+### `audit_anchor_verify`
+
+```json
+{
+  "properties": {},
+  "title": "audit_anchor_verifyArguments",
   "type": "object"
 }
 ```

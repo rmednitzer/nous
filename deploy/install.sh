@@ -76,4 +76,15 @@ if [ ! -f "${AUDIT_FILE}" ]; then
 fi
 chattr +a "${AUDIT_FILE}" 2>/dev/null || true
 
+# Daily audit anchor (BL-031). The anchor file pins the audit chain head
+# once per UTC day so tail truncation becomes detectable. It sits beside
+# the audit log, is append-only like it, and is deliberately not rotated:
+# its value is long-term retention of one short line per day.
+ANCHOR_FILE="${AUDIT_DIR}/audit-anchors.jsonl"
+if [ ! -f "${ANCHOR_FILE}" ]; then
+    sudo -u nous touch "${ANCHOR_FILE}"
+    chmod 0640 "${ANCHOR_FILE}"
+fi
+chattr +a "${ANCHOR_FILE}" 2>/dev/null || true
+
 echo "nous installer done."

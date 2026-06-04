@@ -223,20 +223,28 @@ a specific private name to `private_repo_patterns` to activate the
 grep against that name; CI will then fail any commit that introduces
 a reference.
 
-## L18. Audit hash chain detects tampering, not truncation
+## L18. Audit tamper-evidence is bounded by the retention window
 
 **State.** The audit JSONL is a per-record hash chain (ADR 0025 /
 BL-016): each line commits to its predecessor, so any in-place edit or
 mid-stream deletion, insertion, or reordering breaks the chain at a
 point `verify_chain` (and the `audit_verify` tool) reports. The chain
-does not detect tail truncation, since dropping the most recent records
-leaves a shorter but internally consistent chain, and it is evidence,
-not access control.
+alone does not detect tail truncation, since dropping the most recent
+records leaves a shorter but internally consistent chain. The BL-031
+daily anchor (ADR 0026, `audit_anchor_verify`) closes that gap: it pins
+the chain head once per UTC day into a separate append-only file and
+flags an anchored head that has gone missing from the chain. The
+combined property is "no undetected truncation within the retention
+window." Both surfaces are evidence, not access control.
 
-**Implication.** Do not read a passing `audit_verify` as proof that no
-records were dropped from the end of the log. The chain supplements the
-append-only bit (`chattr +a`) and off-host shipping; it does not replace
-them.
+**Implication.** A passing `audit_anchor_verify` means no records were
+dropped from the end of the log since the most recent anchor that is
+still within retention; it cannot speak to content that has aged out of
+the on-disk segments. The chain and the anchor supplement the
+append-only bit (`chattr +a`) and off-host shipping; they do not replace
+them. The anchor verifier also assumes the bundled logrotate naming; a
+deployment that rotates the audit log differently needs a matching
+segment reader (ADR 0026 revisit trigger).
 
-**Tracking.** [BL-031] a daily anchor over the chain head closes the
-tail-truncation gap; it is `[planned]` for L2.
+**Tracking.** [BL-031] is `[in-progress]` (shipped). Signed anchors for
+regulated deployments are tracked under [BL-059].
