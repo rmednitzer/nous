@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import gzip
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 from nous.audit import _GENESIS_HASH, AuditLogger, AuditRecord
@@ -60,6 +60,28 @@ def test_anchor_written_once_per_utc_day(tmp_path: Path) -> None:
     assert len(_lines(anchors)) == 2
     assert first.day == "2026-06-01"
     assert second.day == "2026-06-02"
+
+
+def test_maybe_anchor_normalizes_now_to_utc(tmp_path: Path) -> None:
+    """The cadence is the UTC calendar day regardless of the caller's
+    timezone: a wall-clock that is still 'yesterday' locally but past
+    midnight UTC anchors on the UTC day, and a second call on the same UTC
+    day (different wall clock) does not duplicate."""
+    audit = tmp_path / "audit.jsonl"
+    anchors = tmp_path / "audit-anchors.jsonl"
+    logger = AuditLogger(audit)
+    _write_n(logger, 2)
+    log = AnchorLog(anchors)
+
+    # 23:30 at UTC-5 is 04:30 the next day in UTC.
+    est = timezone(timedelta(hours=-5))
+    first = log.maybe_anchor(audit, now=datetime(2026, 6, 1, 23, 30, tzinfo=est))
+    assert first is not None
+    assert first.day == "2026-06-02"
+    # Same UTC day reached by a different wall clock -> no duplicate.
+    assert log.maybe_anchor(audit, now=datetime(2026, 6, 2, 0, 5, 0, tzinfo=UTC)) is None
+    # A naive datetime is assumed UTC, so it stays on the same UTC day.
+    assert log.maybe_anchor(audit, now=datetime(2026, 6, 2, 9, 0, 0)) is None
 
 
 def test_anchor_skips_empty_chain(tmp_path: Path) -> None:
@@ -261,29 +283,104 @@ def test_verify_reconstructs_across_gzipped_segments(tmp_path: Path) -> None:
     assert report["checked"] == 1
 
 
-def test_anchor_rotated_out_of_retention_is_unverifiable(tmp_path: Path) -> None:
-    """An anchor whose pinned content has aged out of the retention window
-    (the chain no longer roots at genesis and no older anchor is present)
-    reads as ``unverifiable``, never as a false truncation."""
+def test_old_anchor_rotated_out_is_unverifiable_when_newer_present(tmp_path: Path) -> None:
+    """An old anchor whose pinned content has aged out of the retention
+    window reads as ``unverifiable`` (not a false truncation) as long as a
+    newer anchor is still present, which is the steady-state case."""
     audit = tmp_path / "audit.jsonl"
     rotated = tmp_path / "audit.jsonl.1"
     anchors = tmp_path / "audit-anchors.jsonl"
 
     logger = AuditLogger(audit)
+    _write_n(logger, 2)
+    log = AnchorLog(anchors)
+    old = log.maybe_anchor(audit, now=_day(1))  # pins a head that will rotate out
+
+    # Continue the chain, anchor again (a newer head that stays retained),
+    # then evict the segment the old anchor pinned.
+    audit.rename(rotated)
+    _write_n(logger, 3)
+    new = log.maybe_anchor(audit, now=_day(2))
+    rotated.unlink()
+    assert old is not None and new is not None
+
+    report = verify_anchors(audit, anchors)
+    assert report["ok"] is True
+    assert report["unverifiable"] == 1
+    assert report["checked"] == 1
+
+
+def test_verify_survives_logrotate_plus_restart(tmp_path: Path) -> None:
+    """logrotate moves the active file aside; if the service restarts before
+    the next write, the recovered head is genesis, so the new active file is
+    an independent genesis-rooted segment, not a continuation. Each segment
+    is verified on its own, so this routine case must not read as a broken
+    chain (Codex P2: tolerate rotation restarts)."""
+    audit = tmp_path / "audit.jsonl"
+    rotated = tmp_path / "audit.jsonl.1"
+    anchors = tmp_path / "audit-anchors.jsonl"
+
+    first = AuditLogger(audit)
+    _write_n(first, 4)
+    audit.rename(rotated)
+    # A fresh AuditLogger over the (now empty) active path == a restart: its
+    # recovered head is genesis, so records start a new genesis-rooted chain.
+    restarted = AuditLogger(audit)
+    _write_n(restarted, 3)
+
+    log = AnchorLog(anchors)
+    anchor = log.maybe_anchor(audit, now=_day(1))
+    assert anchor is not None
+    assert anchor.chained == 7
+
+    report = verify_anchors(audit, anchors)
+    assert report["ok"] is True
+    assert report["audit_chain_ok"] is True
+    assert report["audit_chained"] == 7
+    assert report["checked"] == 1
+
+
+def test_verify_detects_active_log_wiped_while_running(tmp_path: Path) -> None:
+    """If the active log is truncated to zero while the service keeps running,
+    new records link to the stale in-memory head and contain none of the
+    anchored heads. The most-recent-anchor rule must flag this as truncation
+    rather than waving it through as ``unverifiable`` (Codex P2)."""
+    audit = tmp_path / "audit.jsonl"
+    anchors = tmp_path / "audit-anchors.jsonl"
+    logger = AuditLogger(audit)
     _write_n(logger, 4)
     log = AnchorLog(anchors)
     assert log.maybe_anchor(audit, now=_day(1)) is not None
 
-    # Continue the chain, then evict the segment the anchor pinned.
-    audit.rename(rotated)
-    _write_n(logger, 3)
-    rotated.unlink()
+    # Wipe the active file in place; the handler keeps its in-memory head, so
+    # the next records link to a head that is no longer on disk.
+    audit.write_text("", encoding="utf-8")
+    _write_n(logger, 2)
 
     report = verify_anchors(audit, anchors)
-    assert report["ok"] is True
-    assert report["from_genesis"] is False
-    assert report["unverifiable"] == 1
-    assert report["checked"] == 0
+    assert report["ok"] is False
+    assert "truncation" in report["reason"]
+    assert report["first_break"]["day"] == "2026-06-01"
+
+
+def test_verify_reports_unreadable_segment_as_structured_break(tmp_path: Path) -> None:
+    """A corrupt ``.gz`` rotated segment must surface as a structured
+    ``audit_chain_ok: false`` report, not an exception that escapes as the
+    runner's ``[error ...]`` string (Codex P2)."""
+    audit = tmp_path / "audit.jsonl"
+    anchors = tmp_path / "audit-anchors.jsonl"
+    logger = AuditLogger(audit)
+    _write_n(logger, 3)
+    log = AnchorLog(anchors)
+    log.maybe_anchor(audit, now=_day(1))
+
+    # A rotated segment that claims to be gzip but is not.
+    (tmp_path / "audit.jsonl.1.gz").write_bytes(b"this is not a valid gzip payload")
+
+    report = verify_anchors(audit, anchors)
+    assert report["ok"] is False
+    assert report["audit_chain_ok"] is False
+    assert "cannot read audit segment" in report["reason"]
 
 
 def test_verify_detects_truncation_in_steady_state(tmp_path: Path) -> None:

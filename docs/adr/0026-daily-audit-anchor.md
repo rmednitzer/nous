@@ -45,16 +45,27 @@ undetected either.
 a new T0 `audit_anchor_verify` tool exposes it. Each anchored head commits to
 its whole prefix, so a head that is present and linked proves that prefix is
 intact, and a head that is absent means the chain was cut at or before it.
-Because retention drops the oldest content first, the truncation signal is an
-anchor that is absent while an older anchor is still present: newer records
-were removed out of order. An anchor absent before any present anchor, once
-the retained chain no longer roots at genesis, was rotated out of the
-retention window and is reported `unverifiable` rather than as a false break.
+The newest anchor must always be present: it pins the most recent UTC day
+with audit activity, which lives in the active (or near-active) segment and
+is therefore within retention, so its absence is the truncation signal (the
+realistic attack is wiping the active log, after which new records link to a
+stale in-memory head and contain none of the anchored heads). Among the older
+anchors, retention drops the oldest content first, so a contiguous absent
+prefix is the legitimate "rotated out of the window" case (reported
+`unverifiable`); an anchor absent after a present one means newer content was
+removed out of order, which is a break.
 
-The verifier reconstructs the chain across the conventional logrotate
-siblings (`audit.jsonl`, `audit.jsonl.1`, `audit.jsonl.2.gz` and upward,
-gunzipping transparently) oldest first, so an anchor taken before a rotation
-still verifies as long as the segment it pinned is still on disk. `policy.py`
+The verifier reconstructs across the conventional logrotate siblings
+(`audit.jsonl`, `audit.jsonl.1`, `audit.jsonl.2.gz` and upward, gunzipping
+transparently) oldest first, and verifies each segment *independently*:
+linkage and recompute hold within a segment, but segments are not required to
+link to each other, because a logrotate followed by a service restart leaves
+the recovered head at genesis, so the new active file is a fresh
+genesis-rooted segment rather than a continuation. The anchor cross-check
+then tests membership against the union of all segment heads. A segment that
+is unreadable (permissions) or a corrupt `.gz` payload is reported as a
+structured `audit_chain_ok: false`, never allowed to escape as an exception.
+`policy.py`
 classifies `audit_anchor_verify` as T0 (this ADR is the required record for
 that boundary edit), `install.sh` creates the anchor file and makes it
 append-only with `chattr +a` the way it already does for the audit log, and

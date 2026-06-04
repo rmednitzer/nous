@@ -147,65 +147,64 @@ def _loads(line: str) -> dict[str, Any] | None:
 
 
 def _reconstruct(audit_path: str | Path) -> _Walk:
-    """Walk every on-disk audit segment, oldest first, as one logical chain.
+    """Walk every on-disk audit segment, oldest first, and collect the heads.
 
-    Mirrors :func:`nous.audit.verify_chain` (linkage + recompute + the
-    legacy-prefix rule) but spans the rotation siblings and returns the
-    ordered list of chained ``entry_hash`` values so the anchor cross-check
-    can test membership. A pre-chain (legacy) prefix is tolerated only at
-    the very start, exactly as the single-file verifier does.
+    Each segment (the active file and its logrotate siblings) is verified
+    *independently*, mirroring :func:`nous.audit.verify_chain` per file:
+    recompute every ``entry_hash``, check ``prev_hash`` linkage within the
+    segment, and tolerate a pre-chain (legacy) prefix only at the segment's
+    own start. Segments are deliberately not required to link to each other:
+    a logrotate that moves the active file aside and is followed by a service
+    restart leaves the recovered head at genesis, so the new active file is a
+    fresh genesis-rooted segment, not a continuation. Demanding cross-segment
+    linkage would read that routine case as tampering.
+
+    The ordered union of chained ``entry_hash`` values (across all segments)
+    is what the anchor cross-check tests for membership. ``from_genesis`` is
+    whether the oldest retained segment roots at genesis. A segment that is
+    unreadable (permissions) or a corrupt ``.gz`` payload is reported as a
+    structured break, not allowed to escape as an exception.
     """
     segments = _segment_paths(audit_path)
     seg_names = [str(path) for path in segments]
     heads: list[str] = []
-    legacy = 0
-    from_genesis = False
-    expected_prev: str | None = None
-    seen_chained = False
+    total_legacy = 0
+    oldest_from_genesis = False
 
-    for segment in segments:
-        for line in _iter_segment_lines(segment):
-            obj = _loads(line)
-            if obj is None:
-                return _Walk(
-                    heads, from_genesis, False,
-                    "audit line is not a JSON object", legacy, seg_names,
-                )
-            recorded = obj.get("entry_hash")
-            if not recorded:
-                if seen_chained:
-                    return _Walk(
-                        heads, from_genesis, False,
-                        "unchained line after the chain started", legacy, seg_names,
-                    )
-                legacy += 1
-                continue
-            body = {key: value for key, value in obj.items() if key != "entry_hash"}
-            if _entry_hash(body) != recorded:
-                return _Walk(
-                    heads, from_genesis, False,
-                    "entry_hash does not match record body", legacy, seg_names,
-                )
-            prev = obj.get("prev_hash", "")
-            if expected_prev is None:
-                from_genesis = prev == _GENESIS_HASH
-                if legacy > 0 and not from_genesis:
-                    return _Walk(
-                        heads, from_genesis, False,
-                        "first chained line after a legacy prefix is not rooted at genesis",
-                        legacy, seg_names,
-                    )
-            elif prev != expected_prev:
-                return _Walk(
-                    heads, from_genesis, False,
-                    "prev_hash does not match the prior link", legacy, seg_names,
-                )
-            seen_chained = True
-            recorded_str = str(recorded)
-            heads.append(recorded_str)
-            expected_prev = recorded_str
+    def _break(reason: str) -> _Walk:
+        return _Walk(heads, oldest_from_genesis, False, reason, total_legacy, seg_names)
 
-    return _Walk(heads, from_genesis, True, "", legacy, seg_names)
+    for index, segment in enumerate(segments):
+        expected_prev: str | None = None
+        seen_chained = False
+        try:
+            for line in _iter_segment_lines(segment):
+                obj = _loads(line)
+                if obj is None:
+                    return _break("audit line is not a JSON object")
+                recorded = obj.get("entry_hash")
+                if not recorded:
+                    if seen_chained:
+                        return _break("unchained line after the chain started")
+                    total_legacy += 1
+                    continue
+                body = {key: value for key, value in obj.items() if key != "entry_hash"}
+                if _entry_hash(body) != recorded:
+                    return _break("entry_hash does not match record body")
+                prev = obj.get("prev_hash", "")
+                if expected_prev is None:
+                    if index == 0:
+                        oldest_from_genesis = prev == _GENESIS_HASH
+                elif prev != expected_prev:
+                    return _break("prev_hash does not match the prior link")
+                seen_chained = True
+                recorded_str = str(recorded)
+                heads.append(recorded_str)
+                expected_prev = recorded_str
+        except (OSError, EOFError) as exc:
+            return _break(f"cannot read audit segment {segment.name}: {exc}")
+
+    return _Walk(heads, oldest_from_genesis, True, "", total_legacy, seg_names)
 
 
 def _read_anchors(
@@ -309,8 +308,15 @@ class AnchorLog:
         head and chained-record count, then appends one anchor. Returns the
         record it wrote, or ``None`` when nothing was due (same day, an empty
         chain, or a failed append).
+
+        ``now`` is normalized to UTC before the day is taken (an aware value
+        is converted, a naive value is assumed to be UTC), so the cadence is
+        the UTC calendar day regardless of the caller's timezone.
         """
-        moment = now or datetime.now(UTC)
+        moment = now if now is not None else datetime.now(UTC)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=UTC)
+        moment = moment.astimezone(UTC)
         day = moment.date().isoformat()
         if day == self._last_day:
             return None
@@ -377,14 +383,17 @@ def verify_anchors(audit_path: str | Path, anchor_path: str | Path) -> dict[str,
 
     The check has three layers. The anchor file's own hash chain is verified
     first (a tampered anchor is itself evidence). The audit chain is then
-    reconstructed across rotation segments (linkage + recompute). Finally
-    every anchored head is tested for membership in that chain. Retention
-    drops the oldest content first, so an anchor that is absent while an
-    *older* anchor is still present means newer records were removed (tail
-    truncation); an anchor absent before any present anchor, once the chain
-    no longer roots at genesis, was rotated out and is reported
-    ``unverifiable`` rather than as a false break. When the chain still roots
-    at genesis (nothing rotated out), any absent anchor is a hard break.
+    reconstructed across rotation segments, each verified independently
+    (linkage + recompute per segment; segments need not link to each other,
+    since a rotate-plus-restart legitimately restarts the chain at genesis).
+    Finally every anchored head is tested for membership in the union of
+    segment heads. The newest anchor must always be present (it pins recent
+    activity that is within retention, so its absence is tail truncation,
+    including the case where the active log was wiped and new records link to
+    a stale head). Older anchors that form a contiguous absent prefix were
+    rotated out of the retention window and are reported ``unverifiable``; an
+    anchor absent after a present one means newer content was removed out of
+    order, which is a break.
 
     Never raises. Returns a JSON-safe report::
 
@@ -444,57 +453,59 @@ def verify_anchors(audit_path: str | Path, anchor_path: str | Path) -> dict[str,
 
     # Membership is the cross-check: each anchored head commits to its whole
     # prefix, so a present-and-linked head proves that prefix is intact, and
-    # an absent head means the chain was cut at or before it. Retention
-    # removes the oldest content first, so the legitimate "absent" case is an
-    # anchor older than every retained record. An anchor absent while an
-    # *older* anchor is still present is therefore the truncation signal:
-    # newer content was removed out of order.
+    # an absent head means the chain was cut at or before it.
+    #
+    # The newest anchor must always be present. It pins the most recent UTC
+    # day with audit activity, which lives in the active (or near-active)
+    # segment and is therefore always within retention; if it is gone, the
+    # tail was truncated (the realistic attack: wipe the active log to erase
+    # recent actions, where the records then link to a stale in-memory head
+    # and contain none of the anchored heads). Among the older anchors,
+    # retention removes the oldest content first, so a contiguous prefix of
+    # absent anchors is the legitimate "rotated out of the window" case
+    # (``unverifiable``); an anchor absent *after* a present one means newer
+    # content was removed out of order, which is truncation.
     present = {head: index for index, head in enumerate(walk.heads)}
+
+    def _fail(day: str, reason: str) -> dict[str, Any]:
+        report["ok"] = False
+        report["first_break"] = {"day": day, "reason": reason}
+        report["reason"] = reason
+        return report
+
+    newest = anchors[-1]
+    if newest.head not in present:
+        return _fail(
+            newest.day,
+            f"most recent anchor ({newest.day}) head is absent from the retained "
+            "chain (tail truncation of recent records)",
+        )
+
     last_index = -1
     seen_present = False
     for anchor in anchors:
         index = present.get(anchor.head)
-        if index is not None:
-            if index < last_index:
-                reason = f"anchor for {anchor.day} head appears out of order (records reordered)"
-                report["ok"] = False
-                report["first_break"] = {"day": anchor.day, "reason": reason}
-                report["reason"] = reason
-                return report
-            last_index = index
-            seen_present = True
-            report["checked"] += 1
+        if index is None:
+            if seen_present:
+                return _fail(
+                    anchor.day,
+                    f"anchor for {anchor.day} head is absent while an earlier anchor "
+                    "is still present (tail truncation of newer records)",
+                )
+            report["unverifiable"] += 1
             continue
-        # absent
-        if walk.from_genesis:
-            if anchor.chained > len(walk.heads):
-                reason = (
-                    f"anchor for {anchor.day} pinned {anchor.chained} chained records; "
-                    f"the audit chain now has {len(walk.heads)} (tail truncation)"
-                )
-            else:
-                reason = (
-                    f"anchor for {anchor.day} head is absent from an intact chain "
-                    "(history diverged, or the anchor belongs to a different log)"
-                )
-            report["ok"] = False
-            report["first_break"] = {"day": anchor.day, "reason": reason}
-            report["reason"] = reason
-            return report
-        if seen_present:
-            reason = (
-                f"anchor for {anchor.day} head is absent while an earlier anchor is "
-                "still present (tail truncation of newer records)"
+        if index < last_index:
+            return _fail(
+                anchor.day,
+                f"anchor for {anchor.day} head appears out of order (records reordered)",
             )
-            report["ok"] = False
-            report["first_break"] = {"day": anchor.day, "reason": reason}
-            report["reason"] = reason
-            return report
-        report["unverifiable"] += 1
+        last_index = index
+        seen_present = True
+        report["checked"] += 1
 
-    if report["unverifiable"] and report["checked"] == 0:
+    if report["unverifiable"]:
         report["reason"] = (
-            "all anchors predate the oldest retained audit segment; "
-            "cannot verify (rotated out of the retention window)"
+            f"{report['unverifiable']} anchor(s) predate the oldest retained audit "
+            "segment and could not be verified (rotated out of the retention window)"
         )
     return report

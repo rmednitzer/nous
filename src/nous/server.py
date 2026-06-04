@@ -201,7 +201,7 @@ def build_app(settings: Settings | None = None) -> Nous:
 
     @mcp.tool()
     async def device_info(ctx: Context | None = None) -> str:
-        """Report nous version, profile, transport, policy mode, audit path."""
+        """Report nous version, profile, transport, policy mode, audit and anchor paths."""
 
         async def _work() -> str:
             info = {
