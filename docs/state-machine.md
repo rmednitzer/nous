@@ -103,7 +103,9 @@ reachability work, alongside direct `safe` from every operational mode.
 
 ## Vocabularies
 
-`OperatorState` and `CommsState` are derived from estimator state. ADR
-0027 begins consuming them for auto-safing, but the label-driven
-transitions land with the reachability edges; today the labels are still
-primarily summary fields the controller reads (see ADR-0006).
+`OperatorState` and `CommsState` are derived from estimator state and are
+summary labels the controller reads (see ADR-0006). The tick-driven
+auto-safing (ADR 0027) does not consume them: it judges only SC-8 and SC-2
+from the numeric safety context. The label-driven auto-triggers (comms
+`DENIED`, operator `INCAPACITATED`) are deferred to the reachability work,
+which adds the direct `safe` edges they need.
