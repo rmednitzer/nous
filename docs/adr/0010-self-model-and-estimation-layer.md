@@ -21,8 +21,10 @@ Two layers:
 1. **Estimators** (`src/nous/estimators/`). One per subsystem. Each
    implements the `Estimator` Protocol (`predict / update / state`).
    The simplest filter that meets the model card's covariance bound is
-   the right choice; v0.1 uses Kalman / EKF / UKF / particle filter as
-   needed. Linear-Gaussian assumptions are explicit in
+   the right choice; v0.1 uses Kalman and particle filters as
+   needed (EKF / UKF remain on the menu for the nonlinear couplings
+   tracked in the backlog, but no v0.1 estimator needs one yet).
+   Linear-Gaussian assumptions are explicit in
    `LIMITATIONS.md` L13.
 2. **Self-model** (`src/nous/self_model/`). The `assess` function reads
    estimator state and produces an `Assessment` with calibrated

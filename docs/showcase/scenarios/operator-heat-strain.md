@@ -25,7 +25,7 @@ rest as defaults. See [Fidelity](../fidelity.md) for the legend.
 | compute | `filtered` | load fraction + profile-driven draw curve; per-channel Kalman |
 | storage | `filtered` | NAND wear + capacity accounting; per-channel Kalman |
 | sensors | `filtered` | temp / humidity / baro authoritative ambient; multi-channel Kalman |
-| position | `parametric` | dead reckoning + GNSS fix gating; EKF passthrough (full EKF is BL-026) |
+| position | `parametric` | dead reckoning + GNSS fix gating; Kalman passthrough (IMU fusion is BL-061) |
 | biometrics | `filtered` | HR / core temp / hydration / cognitive load with multi-channel Kalman |
 | comms | `parametric` | per-link envelopes drive FSM each tick; particle filter is BL-030 |
 | inference | `parametric` | local-path with profile-derived latency / energy / capacity |

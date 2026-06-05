@@ -4,7 +4,7 @@ This document is authoritative on what `nous` is *not* yet, and what it does
 not aim to be at all. Read it before opening an issue claiming a missing
 capability.
 
-Last reviewed: 2026-06-01 ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md), cadence delta audit). Prior: 2026-05-24 ([`docs/audit-2026-05-24.md`](docs/audit-2026-05-24.md)).
+Last reviewed: 2026-06-06 ([`docs/audit-2026-06-06.md`](docs/audit-2026-06-06.md), full-repo validation audit). Prior: 2026-06-01 ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md), cadence delta audit).
 
 ## L1. Pre-1.0
 
@@ -169,7 +169,8 @@ long radio blackout) has to live with the link being denied.
 
 ## L13. Linear-Gaussian estimators only
 
-**State.** All estimators are Kalman / EKF / UKF / particle filter. There
+**State.** All estimators are linear Kalman filters (scalar, multi-channel,
+or constant-velocity) or a particle filter (comms link state). There
 is no neural estimator, no learned residual model, and no online
 parameter estimation.
 

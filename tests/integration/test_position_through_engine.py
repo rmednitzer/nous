@@ -1,8 +1,8 @@
-"""Engine integration: position subsystem feeds the EKF and snapshot.
+"""Engine integration: position subsystem feeds the Kalman filter and snapshot.
 
 These tests run the real :class:`Engine` and confirm that the BL-010
 position subsystem advances ground truth via dead-reckoning, that the
-v0.1 :class:`PositionEKF` tracks the truth when a GNSS fix is held,
+v0.1 :class:`PositionKalman` tracks the truth when a GNSS fix is held,
 and that the FSM's safety context can see the fix-lost condition
 through `engine.position.has_fix` and the snapshot block.
 """

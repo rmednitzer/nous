@@ -22,7 +22,7 @@ the same questions:
 
 | Estimator / Model | Card |
 |-------------------|------|
-| Position EKF | [estimator-position-ekf.md](estimator-position-ekf.md) |
+| Position (constant-velocity Kalman) | [estimator-position-kalman.md](estimator-position-kalman.md) |
 | Power SoC | [estimator-power-soc.md](estimator-power-soc.md) |
 | APU per-source Kalman | [estimator-apu.md](estimator-apu.md) |
 | Thermal Kalman | [estimator-thermal-kalman.md](estimator-thermal-kalman.md) |

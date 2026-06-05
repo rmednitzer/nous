@@ -7,8 +7,11 @@ yet?" questions.
 
 The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`. Two deployment failure modes found on `nous-prod-01` are closed in code: `deploy/install.sh` no longer installs `auto-update.sh` onto itself (the self-install errored under `set -e` and aborted every deploy after the `git reset`, the root cause of the freeze; BL-063), and `deploy/auto-update.sh` now rolls `HEAD` back and reinstalls the previous good artifacts on any failed deploy. The VM was manually resynced on 2026-05-28 (restarted onto current `main`; verified 29 tools, calibrated self-model, `audit.degraded:false`, so AUDIT N2 is cleared). A separate fix (BL-064 / ADR 0024) makes the engine tick at process scope: under `stateless_http=True` the per-request server lifespan had been rebooting the engine on every tool call, so `tick` and the FSM never advanced.
 
-Last reviewed: 2026-06-01 ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md),
-cadence delta; the BL-016 audit hash chain landed behind ADR 0025).
+Last reviewed: 2026-06-06 ([`docs/audit-2026-06-06.md`](docs/audit-2026-06-06.md),
+full-repo validation: standards / NATO / BOM verification, a live-VM probe, the
+position estimator relabel, and the `state_transition` control tool). Prior:
+2026-06-01 ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md), cadence
+delta; the BL-016 audit hash chain landed behind ADR 0025).
 Prior pass 2026-05-27 second pass (delta audit at HEAD
 ``563175a``, post the ``claude/audit-carryforwards-2026-05-27``
 stack: six 2026-05-27 carry-forwards closed (H2 mypy strict for
@@ -28,7 +31,7 @@ for the prior baseline.
 
 Deployment-side status note: the L1 subsystem rollout has been on
 `origin/main` since PR #38, so the auto-update timer lands the
-current thirty-tool surface on the live VM on the next poll after
+current thirty-one-tool surface on the live VM on the next poll after
 `origin/main` advances (no-op when the remote HEAD is unchanged).
 Eight audit findings have closed since the 2026-05-23 baseline and
 the post-baseline §10 re-audit: **C3** (FastMCP lifespan ticks the
@@ -92,7 +95,7 @@ re-audit).
 
 | Component | State | Notes |
 |-----------|-------|-------|
-| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Thirty tools registered across device telemetry (T0), the ten subsystem reads (T0), self-model and estimators (T0), interop schema + codec (T0/T1), local inference + cap (T0/T1), scenarios and configuration (T2), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
+| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Thirty-one tools registered across device telemetry (T0), the ten subsystem reads (T0), self-model and estimators (T0), interop schema + codec (T0/T1), local inference + cap (T0/T1), scenarios and configuration (T2), posture control (T2 `state_transition`, ADR 0031), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
 | `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). Changes require an ADR. |
@@ -118,7 +121,7 @@ re-audit).
 | `src/nous/estimators/compute.py` | in-progress | 1-D Kalman per channel over (load_pct, draw_w); covariance shrinks under observation. Full multi-state EKF is BL-031a. |
 | `src/nous/estimators/storage.py` | in-progress | 1-D Kalman per channel over (used_gib, wear_pct); slow process variance matches the physical reality of NAND wear. |
 | `src/nous/estimators/comms.py` | in-progress | Per-link SIR particle filter (BL-030): N binary-state particles per link, sticky Markov transition conditioned on RSSI + loss, log-throughput observation model, systematic resampling. Deterministic under the engine seed. |
-| `src/nous/estimators/position.py` | in-progress | Constant-velocity EKF over `(lat, lon, alt, v_*)` (BL-026). Velocity tracked as predict-only; full IMU observation channel lands with the situational-awareness fusion track (BL-061). |
+| `src/nous/estimators/position.py` | in-progress | Constant-velocity (linear) Kalman filter over `(lat, lon, alt, v_*)` (BL-026): the state is in degrees so process and measurement are both linear (no Jacobian); the nonlinear EKF with m/s IMU fusion is BL-061. Velocity tracked as predict-only. |
 | `src/nous/estimators/sensors.py` | in-progress | Multi-channel Kalman over (temp_c, humidity_pct, baro_kpa); validates against physical bounds, rejects without poisoning the central estimate. |
 | `src/nous/estimators/biometrics.py` | in-progress | Multi-channel Kalman over biometric channels with physiological-bounds validation; `hydration_pct` added as a fourth tracked channel in BL-011. |
 | `src/nous/self_model/*` | in-progress | `assess` / `explain` / `viability` (BL-018) read live estimator state and emit capability claims. BL-035 lands the Monte Carlo-based calibrated quantile mapping (default `mode="monte_carlo"`; legacy `"gaussian"` opt-out retained). |
@@ -133,11 +136,12 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 645 tests pass at HEAD (the ADR 0022
-  safety-enforcer foundation plus its fail-closed hardening add the most
-  recent 39; 580 at the
-  2026-06-01 cadence audit, [`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md),
-  where BL-031 / ADR 0026 added the daily-anchor suite).
+  feature branch before merge. 739 tests pass at HEAD: the 2026-06-06
+  cadence audit ([`docs/audit-2026-06-06.md`](docs/audit-2026-06-06.md))
+  measured 736 green at the start of the pass (correcting a stale `645`
+  this section had carried) and added three with the `state_transition`
+  tool (ADR 0031); 580 at the 2026-06-01 daily-anchor audit
+  ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md), BL-031 / ADR 0026).
 - `make docs-build` (`mkdocs build --strict`) is warning-free.
 - `make policy` (em-dash + private-repo greps via
   `scripts/policy_checks.sh`) is enforced in CI as the `policy` job

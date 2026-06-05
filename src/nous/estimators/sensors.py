@@ -8,7 +8,7 @@ profile's advertised sigmas and resyncs its clock to ``obs.ts_s``.
 
 Out-of-range or non-finite readings are rejected without poisoning
 the central estimate (matches the validation contract from
-:class:`~nous.estimators.position.PositionEKF` and
+:class:`~nous.estimators.position.PositionKalman` and
 :class:`~nous.estimators.biometrics.BiometricsKalman`).
 """
 

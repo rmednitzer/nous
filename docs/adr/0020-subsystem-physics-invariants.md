@@ -54,7 +54,7 @@ Hypothesis with the engine RNG injected per case:
 - **Comms link envelope.** Throughput is monotonic in SNR
   (loss-monotone in the reverse direction). Link age is monotonic in
   ticks-since-last-tx.
-- **Position.** Under predict-only (fix lost), the EKF covariance is
+- **Position.** Under predict-only (fix lost), the Kalman covariance is
   monotone non-decreasing in elapsed time. Under observation, the
   posterior covariance is monotone non-increasing.
 - **Storage.** ``used_gib`` is monotone non-decreasing under writes

@@ -28,7 +28,7 @@ from .estimators.apu import ApuEstimator
 from .estimators.biometrics import BiometricsKalman
 from .estimators.comms import CommsParticleFilter
 from .estimators.compute import ComputeKalman
-from .estimators.position import PositionEKF
+from .estimators.position import PositionKalman
 from .estimators.power import PowerEstimator
 from .estimators.sensors import EnvironmentalKalman
 from .estimators.storage import StorageKalman
@@ -233,7 +233,7 @@ class Engine:
         self.state.comms_state, self.state.comms_state_reason = (
             self.comms.derive_state()
         )
-        self.position_est = PositionEKF()
+        self.position_est = PositionKalman()
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est = EnvironmentalKalman()
         self.sensors_est.update(self.sensors.sensor_obs())
@@ -322,7 +322,7 @@ class Engine:
         )
         self.comms_est = CommsParticleFilter(rng=self.rng)
         self.comms_est.update(self.comms.sensor_obs())
-        self.position_est = PositionEKF()
+        self.position_est = PositionKalman()
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est = EnvironmentalKalman()
         self.sensors_est.update(self.sensors.sensor_obs())

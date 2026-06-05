@@ -1,4 +1,4 @@
-"""Property-based tests for Kalman and EKF estimators.
+"""Property-based tests for Kalman estimators.
 
 The properties below are the contract the self-model relies on:
 
@@ -21,7 +21,7 @@ from hypothesis import strategies as st
 
 from nous.estimators.apu import ApuEstimator
 from nous.estimators.biometrics import BiometricsKalman
-from nous.estimators.position import PositionEKF
+from nous.estimators.position import PositionKalman
 from nous.estimators.power import PowerEstimator
 from nous.types import Observation
 
@@ -82,7 +82,7 @@ def test_power_rejects_out_of_range_soc(garbage: float) -> None:
     lon=_finite_floats.filter(lambda v: -179.0 <= v <= 179.0),
 )
 def test_position_accepts_valid_lat_lon(lat: float, lon: float) -> None:
-    est = PositionEKF()
+    est = PositionKalman()
     obs = Observation(
         source="position",
         ts_s=1.0,
@@ -98,8 +98,8 @@ def test_position_accepts_valid_lat_lon(lat: float, lon: float) -> None:
 
 
 def test_position_wraps_lon_innovation_across_antimeridian() -> None:
-    """An EKF prior at 179.9 must blend toward an obs at -179.9 via the short arc."""
-    est = PositionEKF()
+    """A Kalman prior at 179.9 must blend toward an obs at -179.9 via the short arc."""
+    est = PositionKalman()
     est.update(
         Observation(
             source="position",
@@ -128,7 +128,7 @@ def test_position_wraps_lon_innovation_across_antimeridian() -> None:
     lat=st.sampled_from([math.nan, math.inf, -math.inf, 100.0, -200.0]),
 )
 def test_position_rejects_garbage_lat(lat: float) -> None:
-    est = PositionEKF()
+    est = PositionKalman()
     obs = Observation(
         source="position",
         ts_s=1.0,
