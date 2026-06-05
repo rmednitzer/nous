@@ -15,6 +15,13 @@ constraint judges. The machine routes every gate through a
 records the violation for ``device_info`` to surface. A gate whose context
 is missing fails closed, preserving the UCAs in
 ``docs/stpa/07-unsafe-control-actions.md``.
+
+The failsafe exits are never gated and are kept complete: a ``safe`` trigger
+reaches ``SAFE`` from every operational or impaired mode, and a ``fault``
+trigger reaches the terminal ``FAULT`` from every powered mode (ADR 0028, ADR
+0030). A hardware fault is mode-independent and unrecoverable, so it must
+never be refused or stranded one rung short; it is one trigger from anywhere
+the device is powered.
 """
 
 from __future__ import annotations
@@ -103,9 +110,12 @@ _TRANSITIONS: dict[tuple[Mode, str], Mode] = {
     (Mode.DEGRADED, "fault"): Mode.FAULT,
     (Mode.THERMAL_LIMIT, "cool"): Mode.IDLE,
     (Mode.THERMAL_LIMIT, "safe"): Mode.SAFE,
+    (Mode.THERMAL_LIMIT, "fault"): Mode.FAULT,
     (Mode.LOW_POWER, "recover"): Mode.IDLE,
     (Mode.LOW_POWER, "safe"): Mode.SAFE,
+    (Mode.LOW_POWER, "fault"): Mode.FAULT,
     (Mode.SAFE, "recover"): Mode.IDLE,
+    (Mode.SAFE, "fault"): Mode.FAULT,
     (Mode.SAFE, "shutdown"): Mode.SHUTDOWN,
     (Mode.BOOT, "shutdown"): Mode.SHUTDOWN,
     (Mode.MISSION, "shutdown"): Mode.SHUTDOWN,

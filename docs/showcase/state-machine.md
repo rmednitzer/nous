@@ -51,11 +51,14 @@ stateDiagram-v2
     DEGRADED --> SHUTDOWN: shutdown
     THERMAL_LIMIT --> IDLE: cool
     THERMAL_LIMIT --> SAFE: safe
+    THERMAL_LIMIT --> FAULT: fault
     THERMAL_LIMIT --> SHUTDOWN: shutdown
     LOW_POWER --> IDLE: recover
     LOW_POWER --> SAFE: safe
+    LOW_POWER --> FAULT: fault
     LOW_POWER --> SHUTDOWN: shutdown
     SAFE --> IDLE: recover
+    SAFE --> FAULT: fault
     SAFE --> SHUTDOWN: shutdown
     FAULT --> STOWED: reset
     SHUTDOWN --> STOWED: reset
@@ -76,7 +79,7 @@ stateDiagram-v2
 | `complete` | `<active mode> -> IDLE` | controller |
 | `shutdown` | `<most modes> -> SHUTDOWN` | controller |
 | `reset` | `FAULT -> STOWED`, `SHUTDOWN -> STOWED` | controller |
-| `fault` | `<most modes> -> FAULT` | engine or controller |
+| `fault` | `<any powered mode> -> FAULT` (one trigger from every powered mode, ADR 0030) | engine or controller |
 
 ## Guards and auto-safing
 
