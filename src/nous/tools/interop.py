@@ -44,11 +44,13 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
     ) -> str:
         """Encode ``data`` via the named interop adapter (BL-041 / T1).
 
-        Returns a structured response: ``{"adapter": ..., "payload_hex":
-        ..., "len": N}`` on success or ``{"error": ...}`` on a
-        StaleEstimateError or schema failure. The payload is hex-encoded
-        so the wire bytes survive an MCP JSON-RPC trip without
-        codec-related corruption.
+        Returns a structured response. On success: ``{"adapter": ...,
+        "payload_hex": ..., "len": N}``. An unknown adapter returns
+        ``{"error": ...}``; a stale estimate returns ``{"adapter": ...,
+        "error": "stale_estimate", "age_s": ..., "max_age_s": ...}``; a
+        schema or value error returns ``{"adapter": ..., "error": ...}``.
+        The payload is hex-encoded so the wire bytes survive an MCP
+        JSON-RPC trip without codec-related corruption.
         """
 
         async def _work() -> str:
@@ -91,10 +93,11 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
     ) -> str:
         """Decode a hex-encoded payload via the named adapter (BL-041 / T1).
 
-        Returns the adapter's structured decode output as JSON. Hex
-        decoding errors and unknown adapter names return ``{"error":
-        ...}``; an adapter's own ``{"error": ...}`` decode response
-        passes through unchanged.
+        On success returns ``{"adapter": ..., "decoded": ...}`` where
+        ``decoded`` is the adapter's structured output (which may itself
+        carry an ``{"error": ...}`` key the adapter chose to emit). An
+        unknown adapter returns ``{"error": ...}``; a hex-decoding error
+        returns ``{"adapter": ..., "error": "hex: ..."}``.
         """
 
         async def _work() -> str:
