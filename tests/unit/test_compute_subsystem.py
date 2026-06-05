@@ -80,6 +80,46 @@ def test_clear_thermal_throttle_restores_delivered_load() -> None:
     assert c.throttled is False
 
 
+def test_mode_load_ceiling_caps_delivered_load_and_preserves_request() -> None:
+    # ADR 0029 entry action: the FSM-posture ceiling caps delivered load while
+    # the controller's request is preserved, so recovery can lift it.
+    c = ComputeSubsystem(_profile())
+    c.set_load_pct(100.0)
+    pre = c.draw_w
+    c.set_mode_load_ceiling(15.0)
+    assert c.load_pct == pytest.approx(15.0)
+    assert c.requested_load_pct == pytest.approx(100.0)
+    assert c.draw_w < pre
+    assert c.throttled is True
+    assert c.truth()["mode_load_ceiling_pct"] == pytest.approx(15.0)
+
+
+def test_mode_load_ceiling_clear_restores_request() -> None:
+    c = ComputeSubsystem(_profile())
+    c.set_load_pct(100.0)
+    pre = c.draw_w
+    c.set_mode_load_ceiling(15.0)
+    c.set_mode_load_ceiling(None)
+    assert c.load_pct == pytest.approx(100.0)
+    assert c.draw_w == pytest.approx(pre)
+    assert c.throttled is False
+    assert c.truth()["mode_load_ceiling_pct"] is None
+
+
+def test_mode_ceiling_and_thermal_throttle_take_the_minimum() -> None:
+    # Both ceilings active: delivered load is the min of the request and every
+    # active cap, and clearing one leaves the other in force.
+    c = ComputeSubsystem(_profile())
+    c.set_load_pct(100.0)
+    c.set_mode_load_ceiling(15.0)
+    c.set_thermal_throttle(throttling=True)  # 60 % thermal ceiling
+    assert c.load_pct == pytest.approx(15.0)  # mode ceiling is tighter
+    c.set_mode_load_ceiling(None)
+    assert c.load_pct == pytest.approx(60.0)  # thermal ceiling still binds
+    c.clear_thermal_throttle()
+    assert c.load_pct == pytest.approx(100.0)
+
+
 def test_inference_rate_within_capacity() -> None:
     c = ComputeSubsystem(_profile())
     c.set_inference_rate(100.0)  # 50% of 200 tok/s capacity

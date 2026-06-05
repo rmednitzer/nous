@@ -18,7 +18,7 @@ import pytest
 
 from nous.audit import AuditLogger
 from nous.db import StateTransitionLog, init_db
-from nous.engine import Engine
+from nous.engine import _OPERATOR_PERSISTENCE_TICKS, Engine
 from nous.policy import Tier
 from nous.state.comms_state import CommsState
 from nous.state.machine import Mode, is_operational
@@ -40,6 +40,18 @@ def _engine_in(mode_trigger: str, *, audit_path: str | None = None) -> Engine:
     ok, _mode, _reason = eng.request_transition(mode_trigger, context=_OK_ENTRY)
     assert ok
     return eng
+
+
+def _drive_operator_incapacitated(eng: Engine) -> None:
+    """Hold the operator label INCAPACITATED past the debounce window (ADR 0029).
+
+    Sets the label and evaluates the auto-safe ``_OPERATOR_PERSISTENCE_TICKS``
+    times so the streak crosses the threshold, mimicking a sustained (not
+    single-tick) incapacitation.
+    """
+    eng.state.operator_state = OperatorState.INCAPACITATED
+    for _ in range(_OPERATOR_PERSISTENCE_TICKS):
+        eng._auto_safe()
 
 
 def test_auto_safe_power_from_mission_enters_low_power(tmp_nous_home: Path) -> None:
@@ -148,19 +160,41 @@ def test_auto_safe_recovery_is_controller_gated(tmp_nous_home: Path) -> None:
     assert not ok
     assert mode is Mode.LOW_POWER
     assert "SC-8" in reason
-    # Once the pack recovers, the controller can recover (thermal is healthy).
+    # Once the pack recovers, the controller can recover to the neutral IDLE
+    # (ADR 0029: recover/cool land in IDLE, not the prior operational mode).
     eng.power.set_soc_pct(80.0)
     ok, mode, _reason = eng.request_transition("recover")
     assert ok
-    assert mode is Mode.MISSION
+    assert mode is Mode.IDLE
 
 
 def test_auto_safe_operator_incapacitated_enters_safe(tmp_nous_home: Path) -> None:
-    # ADR 0028: an incapacitated operator takes the full safe posture, using
-    # the direct safe edge the reachability work added.
+    # ADR 0028/0029: a confirmed-incapacitated operator (held past the debounce
+    # window) takes the full safe posture via the direct safe edge.
+    eng = _engine_in("mission")
+    _drive_operator_incapacitated(eng)
+    assert eng.state.mode is Mode.SAFE
+
+
+def test_auto_safe_operator_single_tick_spike_does_not_safe(tmp_nous_home: Path) -> None:
+    # ADR 0029 debounce: one tick of INCAPACITATED is not enough to force the
+    # one-way SAFE; the estimator spike is absorbed.
     eng = _engine_in("mission")
     eng.state.operator_state = OperatorState.INCAPACITATED
-    eng._auto_safe()
+    for _ in range(_OPERATOR_PERSISTENCE_TICKS - 1):
+        eng._auto_safe()
+        assert eng.state.mode is Mode.MISSION
+
+
+@pytest.mark.parametrize("trigger", ["relay", "monitoring", "c2"])
+def test_auto_safe_operator_uses_safe_not_degrade_fallback(
+    tmp_nous_home: Path, trigger: str
+) -> None:
+    # Per-condition fallback (ADR 0029 L1): from RELAY/MONITORING/C2 the device
+    # hazards fall back to `degrade`, but the operator condition demands the
+    # full `safe` and never downgrades.
+    eng = _engine_in(trigger)
+    _drive_operator_incapacitated(eng)
     assert eng.state.mode is Mode.SAFE
 
 
@@ -189,12 +223,13 @@ def test_auto_safe_comms_denied_ignored_outside_link_modes(
 
 
 def test_auto_safe_operator_outranks_device_hazards(tmp_nous_home: Path) -> None:
-    # Incapacitated operator plus a critical pack: the operator condition
-    # wins and the device takes the full safe posture, not LOW_POWER.
+    # Incapacitated operator plus a critical pack. The pack safes to LOW_POWER
+    # instantaneously, then the confirmed operator condition deepens the
+    # posture to the full SAFE, honouring the operator priority across the
+    # debounce window (ADR 0029).
     eng = _engine_in("mission")
-    eng.state.operator_state = OperatorState.INCAPACITATED
     eng.power.set_soc_pct(2.0)
-    eng._auto_safe()
+    _drive_operator_incapacitated(eng)
     assert eng.state.mode is Mode.SAFE
 
 

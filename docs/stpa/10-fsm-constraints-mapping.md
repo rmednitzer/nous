@@ -17,9 +17,14 @@ mirrored to the audit log under `Tier.SAFETY`.
 
 ## Entry gates
 
-Every transition into an operational mode (`MISSION`/`RELAY`/`MONITORING`/
-`C2`) is gated on both constraints; the first unsatisfied one names the
-refusal. Gates fail closed on missing context.
+Two kinds of transition are gated on both constraints; the first unsatisfied
+one names the refusal, and gates fail closed on missing or non-numeric
+context. The first kind enters an operational mode (`MISSION`/`RELAY`/
+`MONITORING`/`C2`) from `IDLE`. The second kind is the `recover`/`cool` exit
+out of an impaired mode: it lands in the neutral `IDLE` (ADR 0029), not back
+in the prior operational mode, but stays gated so a device cannot leave the
+impaired posture until the hazard has cleared. The controller then re-selects
+an operational mode through a first-kind gate.
 
 | Transition | Constraint | Hazard | Mechanism |
 |------------|------------|--------|-----------|
@@ -27,27 +32,37 @@ refusal. Gates fail closed on missing context.
 | `IDLE -relay-> RELAY` | SC-2, SC-8 | H-2, H-8 | entry gate |
 | `IDLE -monitoring-> MONITORING` | SC-2, SC-8 | H-2, H-8 | entry gate |
 | `IDLE -c2-> C2` | SC-2, SC-8 | H-2, H-8 | entry gate |
-| `DEGRADED -recover-> MISSION` | SC-2, SC-8 | H-2, H-8 | entry gate |
-| `THERMAL_LIMIT -cool-> MISSION` | SC-2, SC-8 | H-2, H-8 | entry gate |
-| `LOW_POWER -recover-> MISSION` | SC-2, SC-8 | H-2, H-8 | entry gate |
+| `DEGRADED -recover-> IDLE` | SC-2, SC-8 | H-2, H-8 | impaired-exit gate |
+| `THERMAL_LIMIT -cool-> IDLE` | SC-2, SC-8 | H-2, H-8 | impaired-exit gate |
+| `LOW_POWER -recover-> IDLE` | SC-2, SC-8 | H-2, H-8 | impaired-exit gate |
 
 ## Auto-safing
 
-From an operational mode, each tick evaluates these conditions in priority
-order and fires the first that trips. The preferred trigger is taken when
-the mode offers it; otherwise the condition falls back to `degrade`. The
-move is one-way: recovery is a controller call that the entry gates re-check.
+Each tick evaluates these conditions in priority order and fires the first
+that trips. The preferred trigger is taken when the mode offers it; otherwise
+the condition falls back to its own fallback (per-condition, ADR 0029). The
+move is one-way: recovery is a controller call that the gates re-check, and
+the chosen safer mode also actuates (entering `LOW_POWER`/`THERMAL_LIMIT`/
+`SAFE` caps compute load; ADR 0029). The conditions fire from an operational
+mode; the operator condition (only) also fires from an impaired mode, so a
+confirmed incapacitation deepens an already-impaired posture to `SAFE`.
 
 | Priority | Condition | Source | Preferred trigger | Fallback | Addresses |
 |----------|-----------|--------|-------------------|----------|-----------|
-| 1 | Operator `INCAPACITATED` | `OperatorState` label | `safe` | `degrade` | H-2, H-8 (no supervisor) |
+| 1 | Operator `INCAPACITATED` (debounced) | `OperatorState` label (biometrics estimate) | `safe` | `safe` | H-2, H-8 (no supervisor) |
 | 2 | SC-8 power reserve violated | enforcer | `low_power` | `degrade` | H-8 |
 | 3 | SC-2 thermal headroom violated | enforcer | `thermal_limit` | `degrade` | H-2 |
-| 4 | Comms `DENIED` (RELAY/C2 only) | `CommsState` label | `degrade` | `degrade` | operational prudence |
+| 4 | Comms `DENIED` (RELAY/C2 only) | `CommsState` label (reported state) | `degrade` | `degrade` | operational prudence |
 
 `MISSION` offers `low_power` and `thermal_limit`, so it reaches the precise
-safer mode; `RELAY`/`MONITORING`/`C2` fall back to `degrade` (ADR 0028
-records why they do not gain their own edges).
+safer mode; `RELAY`/`MONITORING`/`C2` fall back to `degrade` for the enforcer
+hazards (ADR 0028 records why they do not gain their own edges). The operator
+condition is the exception: its fallback is also `safe` (a reachability
+invariant guarantees `safe` from every operational and impaired mode), so it
+never downgrades to `degrade`. Because the operator label reads the biometrics
+Kalman estimate, it is debounced over a few consecutive ticks; the enforcer
+and comms conditions read smoothly-evolving reported state and stay
+instantaneous.
 
 The first three conditions control numbered hazards: an incapacitated
 operator means no one can supervise the device near its thermal or power

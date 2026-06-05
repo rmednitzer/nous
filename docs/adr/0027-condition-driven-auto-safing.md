@@ -39,7 +39,8 @@ truth-sourced decision recorded on the ADR 0022 wiring PR):
 
 1. SC-8 power reserve. Power depletion is the least recoverable hazard,
    and the load shed by `LOW_POWER` also relieves thermal stress, so it is
-   checked first.
+   checked first. (That shed became a real entry action only in ADR 0029;
+   on this PR `LOW_POWER` set the posture without yet capping the load.)
 2. SC-2 thermal headroom.
 
 The first violated constraint fires one transition toward safety: the
@@ -69,10 +70,12 @@ from a controller-driven one.
 
 ## Consequences
 
-Easier: the device protects itself on a long run. The "sustains" half of
-H-2 and H-8 is closed for `MISSION`, which gains precise targeting
-(`thermal_limit`, `low_power`), and the other operational modes degrade
-rather than coasting on a dying pack or a throttling junction. The
+Easier: the device steers itself toward a safer mode on a long run (ADR 0029
+then makes the steer actuate, capping load on entry so the posture sheds work
+rather than only relabelling). The "sustains" half of H-2 and H-8 is closed
+for `MISSION`, which gains precise targeting (`thermal_limit`, `low_power`),
+and the other operational modes degrade rather than coasting on a dying pack
+or a throttling junction. The
 behaviour is observable three ways: the `auto-safe:` rows in
 `state_history`, the `Tier.SAFETY` audit records, and the enforcer
 violation counter in `device_info`.

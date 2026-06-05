@@ -84,6 +84,7 @@ class ComputeSubsystem:
         self._requested_load_pct = _DEFAULT_LOAD_PCT
         self._load_pct = _DEFAULT_LOAD_PCT
         self._throttle_ceiling_pct: float | None = None
+        self._mode_ceiling_pct: float | None = None
         self._draw_w = self._interpolate_draw_w(self._load_pct)
         self._saturated = False
 
@@ -115,6 +116,20 @@ class ComputeSubsystem:
     def clear_thermal_throttle(self) -> None:
         """Remove any thermal-throttle cap."""
         self.set_thermal_throttle(throttling=False)
+
+    def set_mode_load_ceiling(self, ceiling_pct: float | None) -> None:
+        """Cap delivered load to an FSM-posture ceiling (entry action, ADR 0029).
+
+        Composes with the thermal-throttle ceiling: delivered load is the
+        minimum of the controller request and every active ceiling. ``None``
+        clears the cap, restoring the controller's requested load. Entering
+        ``LOW_POWER`` / ``SAFE`` / ``THERMAL_LIMIT`` sets this so auto-safing
+        actually sheds load rather than only relabelling the posture.
+        """
+        self._mode_ceiling_pct = (
+            None if ceiling_pct is None else _clamp_pct(ceiling_pct)
+        )
+        self._apply_throttle()
 
     @property
     def load_pct(self) -> float:
@@ -169,6 +184,7 @@ class ComputeSubsystem:
             "draw_w_load": self._draw_w_load,
             "throttled": self.throttled,
             "saturated": self._saturated,
+            "mode_load_ceiling_pct": self._mode_ceiling_pct,
             "tok_per_s_capacity": self._tok_per_s_p50,
             "t": self._t,
         }
@@ -182,12 +198,12 @@ class ComputeSubsystem:
         )
 
     def _apply_throttle(self) -> None:
-        if self._throttle_ceiling_pct is None:
-            self._load_pct = self._requested_load_pct
-        else:
-            self._load_pct = min(
-                self._requested_load_pct, self._throttle_ceiling_pct
-            )
+        ceilings = [
+            c
+            for c in (self._throttle_ceiling_pct, self._mode_ceiling_pct)
+            if c is not None
+        ]
+        self._load_pct = min([self._requested_load_pct, *ceilings])
         self._draw_w = self._interpolate_draw_w(self._load_pct)
 
     def _interpolate_draw_w(self, load_pct: float) -> float:

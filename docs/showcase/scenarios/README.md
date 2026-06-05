@@ -7,7 +7,7 @@ See [Fidelity](../fidelity.md) for the legend.
 | --- | --- | ---: | --- | ---: | ---: |
 | [apu-fuelcell-overnight](apu-fuelcell-overnight.md) | `jetson-agx-orin` | 1440 | `idle` | 94.084 | 0.0 |
 | [apu-solar-sustained](apu-solar-sustained.md) | `jetson-agx-orin` | 720 | `idle` | 98.526 | 5.0 |
-| [c2-degraded-comms](c2-degraded-comms.md) | `jetson-agx-orin` | 720 | `mission` | 82.013 | 0.0 |
+| [c2-degraded-comms](c2-degraded-comms.md) | `jetson-agx-orin` | 720 | `idle` | 82.013 | 0.0 |
 | [env-monitoring-urban](env-monitoring-urban.md) | `jetson-agx-orin` | 600 | `idle` | 85.078 | 0.0 |
 | [operator-heat-strain](operator-heat-strain.md) | `jetson-agx-orin` | 540 | `degraded` | 86.6 | 0.0 |
 | [relay-mountain](relay-mountain.md) | `jetson-agx-orin` | 1440 | `degraded` | 62.99 | 0.0 |
