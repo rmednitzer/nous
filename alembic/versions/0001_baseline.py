@@ -9,6 +9,11 @@ the v0.1 schema. ``init_db`` still creates these tables idempotently
 on first boot for developer ergonomics; the migration is the
 authoritative source once a deployment has crossed the first
 schema-evolution boundary (BL-051).
+
+``audit_entries`` is created here but is reserved schema, not a live
+mirror: the authoritative audit trail is the JSONL sink, and nothing
+writes ``AuditEntry`` (BL-065, ADR 0002 update). The table ships so the
+mirror can be wired later without a migration.
 """
 
 from __future__ import annotations

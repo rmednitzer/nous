@@ -21,8 +21,9 @@ up by copying.
 
 - Structured state lives in SQLite at `$NOUS_HOME/state.db`, opened with
   `PRAGMA journal_mode=WAL` and `synchronous=NORMAL`. Schema is managed
-  by Alembic; the v0.1 baseline ships two tables (`state_transitions`,
-  `audit_entries` as a mirror of the JSONL log).
+  by Alembic; the v0.1 baseline ships two tables: the live `state_transitions`,
+  and `audit_entries`, reserved for a future JSONL mirror (it was never wired;
+  see the 2026-06-05 update below).
 - Audit records live in a *separate* JSONL file at
   `$NOUS_HOME/audit.jsonl`. The handler is a `WatchedFileHandler` so
   rotation does not break the file descriptor. On Linux, the operator
@@ -34,9 +35,10 @@ up by copying.
 Easier: backups copy a directory. Audit ships as one file. Migrations
 follow Alembic conventions.
 
-Harder: two stores must stay in sync if a downstream consumer expects a
-single source of truth for "what happened". The SQLite mirror of the
-audit log is deliberately a *subset* of the JSONL record.
+Harder: two stores would have to stay in sync if a downstream consumer
+expected a single source of truth for "what happened". That sync burden is
+why the `audit_entries` mirror was left reserved rather than wired (see the
+update below); the JSONL record is the single audit source today.
 
 Alternatives rejected:
 
@@ -49,3 +51,25 @@ Alternatives rejected:
 - Audit query latency on a large file becomes a bottleneck.
 - A regulator asks for a tamper-evident chain over the audit (then
   enable the optional daily hash chain, BL-031).
+
+## Update (2026-06-05, BL-065)
+
+This ADR specified `audit_entries` as a mirror of the JSONL log, but the
+mirror was never wired: nothing instantiates `AuditEntry`, so the live audit
+trail is the JSONL sink alone (AUDIT-2026-06-01 N19). The decision is to leave
+the table **reserved**, not to wire a second audit surface.
+
+The JSONL record is already append-only, ships off-host, and carries the
+BL-016 hash chain and the BL-031 daily anchor. A live SQLite mirror would
+reintroduce the sync burden noted under Consequences and add a second tamper
+surface to protect, with no current consumer: the audit tools (`audit_verify`,
+`audit_summary`) read the JSONL, and only `state_transitions` is queried from
+SQLite. Wiring the mirror would also touch the audit path, a high blast-radius
+surface, for no present need.
+
+The schema stays in the Alembic baseline so the table is ready. The revisit
+trigger is a controller that needs SQL queries over the audit: at that point
+the mirror is wired carrying `prev_hash` / `entry_hash` so both surfaces
+verify against the same chain. `AuditEntry` carries a docstring marking it
+reserved, and `tests/unit/test_audit_entries_reserved.py` pins that the live
+audit path does not write the table.
