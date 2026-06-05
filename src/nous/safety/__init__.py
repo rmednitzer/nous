@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from .enforcer import (
     CLAMPED,
+    ERRORED,
     REFUSED,
     UNREGISTERED,
     Evaluator,
@@ -19,6 +20,7 @@ from .enforcer import (
 
 __all__ = [
     "CLAMPED",
+    "ERRORED",
     "REFUSED",
     "UNREGISTERED",
     "Evaluator",

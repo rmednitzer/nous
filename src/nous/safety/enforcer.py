@@ -18,11 +18,13 @@ land in the wiring PR with its own security note. The enforcer ships with no
 constraints pre-registered: it governs the seam, not which constraints are
 enforced. A call site registers its constraint and then checks against it.
 
-Fail-closed posture. Both shipped evaluators refuse on missing, non-numeric,
-or non-finite context (NaN or infinity) rather than waving the candidate
-through, and a `check` against an unregistered constraint id refuses as well.
-A safety check that cannot establish the evidence it needs denies the action;
-it never approves by default.
+Fail-closed posture. Both shipped evaluators refuse on missing, boolean,
+non-numeric, or non-finite context (NaN or infinity) rather than waving the
+candidate through. A `check` against an unregistered constraint id, or one
+whose evaluator raises, refuses as well, so `check` always returns a
+structured disposition and never propagates an exception. A safety check that
+cannot establish the evidence it needs denies the action; it never approves
+by default.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from typing import Any
 
 __all__ = [
     "CLAMPED",
+    "ERRORED",
     "REFUSED",
     "UNREGISTERED",
     "Evaluator",
@@ -46,6 +49,7 @@ __all__ = [
 REFUSED = "refused"
 CLAMPED = "clamped"
 UNREGISTERED = "unregistered"
+ERRORED = "errored"
 
 
 @dataclass(frozen=True)
@@ -145,13 +149,17 @@ def _coerce_pair(a: Any, b: Any) -> tuple[float, float] | str:
 
     Returns the parsed floats on success and a short reason string
     (``unknown`` / ``non-numeric`` / ``non-finite``) when either side is
-    absent, not a number, or not finite (NaN or infinity). A safety seam
-    treats an infinity as a broken estimator, not a valid measurement: an
-    infinite headroom must not approve and an infinite ceiling must not wave
-    an unbounded value through.
+    absent, a boolean, not a number, or not finite (NaN or infinity).
+    Booleans are rejected even though ``float(True)`` succeeds: a bool in a
+    numeric safety context is malformed, not a measurement of 1 or 0. A
+    safety seam treats an infinity as a broken estimator, not a valid
+    measurement: an infinite headroom must not approve and an infinite ceiling
+    must not wave an unbounded value through.
     """
     if a is None or b is None:
         return "unknown"
+    if isinstance(a, bool) or isinstance(b, bool):
+        return "non-numeric"
     try:
         fa, fb = float(a), float(b)
     except (TypeError, ValueError):
@@ -186,7 +194,9 @@ class SafetyEnforcer:
     ) -> SafetyResult:
         """Judge ``candidate`` against ``constraint_id`` and record the result.
 
-        An unregistered constraint refuses fail-closed. A refusal or a clamp
+        An unregistered constraint, or one whose evaluator raises, refuses
+        fail-closed so ``check`` always returns a structured disposition and
+        never propagates an exception to its caller. A refusal or a clamp
         increments the per-id and total violation counters; a clean pass does
         not.
         """
@@ -202,7 +212,17 @@ class SafetyEnforcer:
                 evidence=ev,
             )
         else:
-            result = replace(evaluator(candidate, ev), constraint_id=constraint_id)
+            try:
+                result = replace(evaluator(candidate, ev), constraint_id=constraint_id)
+            except Exception as exc:  # noqa: BLE001
+                ev["detail"] = f"evaluator raised {exc!r} (fail closed)"
+                result = SafetyResult(
+                    False,
+                    candidate,
+                    constraint_id=constraint_id,
+                    violation_type=ERRORED,
+                    evidence=ev,
+                )
         if not result.approved or result.was_clamped:
             self._violations[constraint_id] = self._violations.get(constraint_id, 0) + 1
         return result
