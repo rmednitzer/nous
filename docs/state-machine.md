@@ -76,8 +76,36 @@ live subsystem state and mirrors each check to the audit log under
 `Tier.SAFETY`, so an after-action review can pull every safety event by tier
 and group it by `constraint_id`.
 
+## Auto-safing
+
+The safety gates refuse an unsafe transition the controller *requests*;
+ADR 0027 adds the other half, a control law the engine runs on itself.
+On each tick, from an operational mode (`mission`, `relay`, `monitoring`,
+`c2`), `Engine._auto_safe` asks the same enforcer whether the live
+reported state still satisfies SC-8 (power reserve) then SC-2 (thermal
+headroom). The first violated constraint fires one transition toward
+safety: the mode's preferred safer trigger when the table offers one
+(`low_power` for SC-8, `thermal_limit` for SC-2, both from `mission`),
+otherwise `degrade`.
+
+Auto-safing is one-way. The engine only ever moves toward a safer mode and
+never auto-recovers; `recover` and `cool` stay controller calls that the
+enforcer re-checks. That one-way property is the hysteresis: with no
+auto-recovery there is no oscillation to damp, so the loop needs no
+debounce. Each auto-safing decision is recorded to `state_history` with an
+`auto-safe:` reason and mirrored to the audit log under `Tier.SAFETY`
+(tool `auto_safe`).
+
+The label-driven conditions (comms `DENIED`, operator `INCAPACITATED`)
+and the per-mode `thermal_limit`/`low_power` edges that would let
+`relay`/`monitoring`/`c2` reach the precise safer mode land with the
+reachability work, alongside direct `safe` from every operational mode.
+
 ## Vocabularies
 
-`OperatorState` and `CommsState` are derived from estimator state and
-*do not* drive the FSM directly. They are summary labels the
-controller reads (see ADR-0006).
+`OperatorState` and `CommsState` are derived from estimator state and are
+summary labels the controller reads (see ADR-0006). The tick-driven
+auto-safing (ADR 0027) does not consume them: it judges only SC-8 and SC-2
+from the numeric safety context. The label-driven auto-triggers (comms
+`DENIED`, operator `INCAPACITATED`) are deferred to the reachability work,
+which adds the direct `safe` edges they need.
