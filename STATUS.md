@@ -97,6 +97,7 @@ re-audit).
 | `src/nous/audit_anchor.py` | in-progress | Daily anchor over the chain head (ADR 0026 / BL-031): `AnchorLog` appends one hash-linked anchor per UTC day, and `verify_anchors` (the `audit_anchor_verify` tool) cross-checks anchored heads against the chain across logrotate segments to catch tail truncation within the retention window. |
 | `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
+| `src/nous/safety/enforcer.py` | in-progress | Runtime safety-enforcer foundation (ADR 0022): `SafetyEnforcer.check` returns a structured `SafetyResult` (approved / clamped / evidence) and counts per-constraint and total violations; `floor_threshold` and `ceiling_clamp` cover the SC-2 refusal and throttle-clamp shapes. Generic seam, no constraints pre-registered; the audit mirror (`Tier.SAFETY`) and the first FSM caller land in the wiring PR. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. |
 | `src/nous/engine.py` | in-progress | Tick orchestration; all ten L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. |
 | `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |
@@ -130,8 +131,8 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 606 tests pass at HEAD (the ADR 0021
-  tier-classifier coverage check adds the most recent 2; 580 at the
+  feature branch before merge. 637 tests pass at HEAD (the ADR 0022
+  safety-enforcer foundation adds the most recent 31; 580 at the
   2026-06-01 cadence audit, [`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md),
   where BL-031 / ADR 0026 added the daily-anchor suite).
 - `make docs-build` (`mkdocs build --strict`) is warning-free.
