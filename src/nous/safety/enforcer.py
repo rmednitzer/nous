@@ -34,6 +34,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+import numpy as np
+
 __all__ = [
     "CLAMPED",
     "ERRORED",
@@ -60,8 +62,9 @@ class SafetyResult:
     float when ``approved`` and not clamped, the clamped ceiling when
     ``was_clamped``. A fail-closed refusal echoes the original candidate.
     ``violation_type`` is ``None`` on a clean pass and one of the module
-    constants (``REFUSED`` / ``CLAMPED`` / ``UNREGISTERED``) when the
-    constraint fired. ``evidence`` carries the inputs and a ``detail`` string
+    constants (``REFUSED`` / ``CLAMPED`` / ``UNREGISTERED`` / ``ERRORED``)
+    when the constraint fired or its evaluator raised. ``evidence`` carries
+    the inputs and a ``detail`` string
     explaining the verdict, suitable for an audit line or a
     ``GuardDenied.reason``.
     """
@@ -149,16 +152,17 @@ def _coerce_pair(a: Any, b: Any) -> tuple[float, float] | str:
 
     Returns the parsed floats on success and a short reason string
     (``unknown`` / ``non-numeric`` / ``non-finite``) when either side is
-    absent, a boolean, not a number, or not finite (NaN or infinity).
-    Booleans are rejected even though ``float(True)`` succeeds: a bool in a
-    numeric safety context is malformed, not a measurement of 1 or 0. A
-    safety seam treats an infinity as a broken estimator, not a valid
-    measurement: an infinite headroom must not approve and an infinite ceiling
-    must not wave an unbounded value through.
+    absent, a boolean, not a number, or not finite (NaN or infinity). Python
+    and NumPy booleans are rejected even though ``float(True)`` and
+    ``float(np.bool_(False))`` succeed: a boolean in a numeric safety context
+    is malformed, not a measurement of 1 or 0, and the simulator's estimator
+    paths deal in NumPy scalars. A safety seam treats an infinity as a broken
+    estimator, not a valid measurement: an infinite headroom must not approve
+    and an infinite ceiling must not wave an unbounded value through.
     """
     if a is None or b is None:
         return "unknown"
-    if isinstance(a, bool) or isinstance(b, bool):
+    if isinstance(a, bool | np.bool_) or isinstance(b, bool | np.bool_):
         return "non-numeric"
     try:
         fa, fb = float(a), float(b)
@@ -215,7 +219,10 @@ class SafetyEnforcer:
             try:
                 result = replace(evaluator(candidate, ev), constraint_id=constraint_id)
             except Exception as exc:  # noqa: BLE001
-                ev["detail"] = f"evaluator raised {exc!r} (fail closed)"
+                message = " ".join(str(exc).split())[:200]
+                ev["detail"] = (
+                    f"evaluator raised {type(exc).__name__}: {message} (fail closed)"
+                )
                 result = SafetyResult(
                     False,
                     candidate,

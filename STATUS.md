@@ -131,9 +131,9 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 642 tests pass at HEAD (the ADR 0022
+  feature branch before merge. 645 tests pass at HEAD (the ADR 0022
   safety-enforcer foundation plus its fail-closed hardening add the most
-  recent 36; 580 at the
+  recent 39; 580 at the
   2026-06-01 cadence audit, [`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md),
   where BL-031 / ADR 0026 added the daily-anchor suite).
 - `make docs-build` (`mkdocs build --strict`) is warning-free.
