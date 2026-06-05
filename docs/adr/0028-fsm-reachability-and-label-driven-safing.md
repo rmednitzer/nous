@@ -51,9 +51,12 @@ denied comms link (`CommsState.DENIED`) degrades the link-bearing modes
 (`RELAY`/`C2`), whose function depends on it; a `MISSION` or `MONITORING` run
 that does not need comms is left alone. The SC-8 and SC-2 enforcer rules keep
 their place between the two, so the priority is operator, then power, then
-thermal, then comms. The label conditions read the derived state
-labels, which are estimator-sourced by construction, and each fires through
-the same one-way, audited path as the enforcer rules.
+thermal, then comms. The label conditions read the derived state labels (the
+operator label from the biometrics Kalman estimate, the comms label from the
+per-link reported state), and each fires through the same one-way, audited
+path as the enforcer rules. ADR 0029 later debounces the operator label,
+because it is the estimate-sourced one, and leaves the reported-state comms
+label instantaneous.
 
 Verify the structure with exhaustive walks over the table (every mode
 reachable from `STOWED`; `SAFE` and `SHUTDOWN` reachable from every

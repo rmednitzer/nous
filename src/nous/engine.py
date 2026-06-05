@@ -18,7 +18,7 @@ from typing import Any
 
 import numpy as np
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from .audit import AuditLogger, AuditRecord, redact
 from .clocks import Clock, MonotonicClock
@@ -43,6 +43,7 @@ from .state.machine import (
     Mode,
     StateMachine,
     build_fsm_enforcer,
+    is_impaired,
     is_operational,
 )
 from .state.operator_state import OperatorState
@@ -62,11 +63,38 @@ from .types import TickContext
 __all__ = ["Engine", "EngineState"]
 
 
+# Safety-critical numeric profile fields (section, key). They feed the SC-8
+# power-reserve and SC-2 thermal-headroom gates as floats; a non-numeric value
+# here would crash the tick loop in ``_safety_context`` rather than failing
+# closed, and is reachable through the ``profile_reload`` tool (ADR 0029).
+_SAFETY_NUMERIC_FIELDS: tuple[tuple[str, str], ...] = (
+    ("power", "soc_pct_critical_threshold"),
+    ("thermal", "headroom_threshold_c"),
+)
+
+
 class ProfileModel(BaseModel):
     """Minimal schema gate for hardware profile YAML files."""
 
     model_config = ConfigDict(extra="allow")
     name: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def _safety_thresholds_numeric(cls, data: Any) -> Any:
+        """Refuse a malformed safety threshold at load (ADR 0029).
+
+        The SC-8 reserve and SC-2 headroom thresholds must be finite numbers.
+        Validating them here means a bad ``profile_reload`` is rejected before
+        any subsystem is rebuilt, so the previous good profile stays live and
+        the tick loop never meets a non-numeric reserve.
+        """
+        if isinstance(data, Mapping):
+            for section, key in _SAFETY_NUMERIC_FIELDS:
+                block = data.get(section)
+                if isinstance(block, Mapping) and key in block:
+                    _require_finite_number(block[key], f"{section}.{key}")
+        return data
 
 
 @dataclass
@@ -84,9 +112,10 @@ class EngineState:
 # Priority-ordered enforcer safing rules (ADR 0027): (constraint id,
 # safety-context candidate key, preferred safer trigger). Power before
 # thermal: depletion is the least recoverable hazard, and the load LOW_POWER
-# sheds also relieves heat. A mode without the preferred trigger falls back
-# to ``degrade``. Operator-incapacitation (ADR 0028) outranks both and the
-# comms-denied rule trails them; see ``_safing_decision``.
+# sheds (the entry action of ADR 0029) also relieves heat. A mode without the
+# preferred trigger falls back to ``degrade``. Operator-incapacitation (ADR
+# 0028) outranks both and the comms-denied rule trails them; see
+# ``_safing_decision``.
 _SAFING_RULES: tuple[tuple[str, str, str], ...] = (
     (SC_POWER_RESERVE, "soc_pct", "low_power"),
     (SC_THERMAL_HEADROOM, "thermal_headroom_c", "thermal_limit"),
@@ -103,6 +132,24 @@ _LABEL_COMMS = "label:comms-denied"
 # MISSION or MONITORING run that does not need comms is not degraded by a
 # dead link.
 _LINK_MODES = frozenset({Mode.RELAY, Mode.C2})
+
+# Compute-load ceilings applied as FSM entry actions (ADR 0029). Entering a
+# safed or throttled posture caps delivered load so auto-safing actuates
+# rather than only relabelling: SAFE drops to a minimal heartbeat, LOW_POWER
+# sheds enough to slow the drain it is named for, THERMAL_LIMIT caps to a
+# cool-down load. DEGRADED keeps full load (it is the generic / comms posture,
+# not a power or thermal command); modes absent from the table clear the cap.
+_MODE_LOAD_CEILINGS: dict[Mode, float] = {
+    Mode.SAFE: 5.0,
+    Mode.LOW_POWER: 15.0,
+    Mode.THERMAL_LIMIT: 40.0,
+}
+
+# Consecutive ticks the operator-incapacitation label must hold before the
+# auto-safe fires (ADR 0029). The label reads the biometrics Kalman estimate,
+# so a single-tick spike must not force a one-way SAFE. The SC-2 / SC-8 and
+# comms conditions read smoothly-evolving reported state and stay instantaneous.
+_OPERATOR_PERSISTENCE_TICKS = 3
 
 
 class Engine:
@@ -129,6 +176,7 @@ class Engine:
         self.transition_log = transition_log or StateTransitionLog(None)
         self._started = False
         self._wall_start = 0.0
+        self._operator_incap_streak = 0
         # ADR 0019 deterministic seed + clock seams. ``seed=None``
         # falls back to OS entropy (current behaviour); ``clock=None``
         # picks the real ``MonotonicClock``. A test that needs a
@@ -204,7 +252,7 @@ class Engine:
             self._record_transition(prev_boot, "boot", new_boot, reason="boot")
         self._started = True
         self._wall_start = time.monotonic()
-        self.state.mode = self.fsm.current
+        self._set_mode(self.fsm.current)
         self.state.ts_s = 0.0
         self.state.tick = 0
 
@@ -278,6 +326,7 @@ class Engine:
         self.state.operator_state, self.state.operator_state_reason = (
             derive_operator(self.biometrics_est.state())
         )
+        self._apply_mode_entry(self.state.mode)
 
         return {
             "profile": self.settings.profile,
@@ -302,9 +351,9 @@ class Engine:
             prev = self.fsm.current
             new = self.fsm.transition("shutdown")
             self._record_transition(prev, "shutdown", new, reason="engine.stop")
-            self.state.mode = new
+            self._set_mode(new)
         else:
-            self.state.mode = self.fsm.current
+            self._set_mode(self.fsm.current)
 
     def request_transition(
         self, trigger: str, *, context: Mapping[str, Any] | None = None
@@ -333,7 +382,7 @@ class Engine:
             return False, self.fsm.current, str(exc)
         self._audit_safety_checks(trigger, prev, new)
         self._record_transition(prev, trigger, new, reason="controller")
-        self.state.mode = new
+        self._set_mode(new)
         return True, new, ""
 
     def _audit_safety_checks(self, trigger: str, frm: Mode, to: Mode) -> None:
@@ -368,20 +417,35 @@ class Engine:
     def _auto_safe(self) -> None:
         """Drive the FSM toward a safer mode when a safety condition trips.
 
-        Evaluated each tick, from an operational mode only (ADR 0027, ADR
-        0028). The highest-priority tripped condition fires one transition
-        toward safety: its preferred trigger when the table offers one from
-        the current mode, else ``degrade``. The move is one-way; recovery
-        stays controller-gated, so there is no oscillation to debounce.
+        Evaluated each tick. The operator-incapacitation streak is tracked
+        every tick (so the debounce sees consecutive ticks regardless of
+        mode). Safing fires from an operational mode (every condition) and
+        from an impaired mode (ADR 0027/0028/0029): from an impaired mode the
+        device-hazard and comms conditions find no edge and no-op, but a
+        confirmed operator incapacitation can still deepen the posture to
+        ``SAFE``. That closes the race where a co-occurring device hazard
+        safes to ``LOW_POWER`` during the operator-confirmation window: the
+        operator priority is honoured once the label is confirmed rather than
+        being stranded one rung short. The highest-priority tripped condition
+        fires one transition toward safety: its preferred trigger when the
+        table offers one from the current mode, else the condition's own
+        fallback (``degrade`` for the enforcer hazards, ``safe`` for the
+        operator condition). The move is one-way; recovery stays
+        controller-gated, so there is no oscillation to debounce.
         """
-        if not is_operational(self.state.mode):
+        if self.state.operator_state is OperatorState.INCAPACITATED:
+            self._operator_incap_streak += 1
+        else:
+            self._operator_incap_streak = 0
+        mode = self.state.mode
+        if not (is_operational(mode) or is_impaired(mode)):
             return
         ctx = self._safety_context()
         decision = self._safing_decision(ctx)
         if decision is None:
             return
-        preferred, safety, reason = decision
-        trigger = preferred if self.fsm.can(preferred) else "degrade"
+        preferred, fallback, safety, reason = decision
+        trigger = preferred if self.fsm.can(preferred) else fallback
         if not self.fsm.can(trigger):
             return
         prev = self.fsm.current
@@ -396,36 +460,86 @@ class Engine:
             new,
             reason=f"auto-safe: {safety['constraint_id']} -> {trigger}",
         )
-        self.state.mode = new
+        self._set_mode(new)
+
+    def _set_mode(self, mode: Mode) -> None:
+        """Write ``state.mode`` and run the posture's entry action (ADR 0029).
+
+        The single mode-write seam: every path that changes the posture goes
+        through here, so ``state.mode`` stays a faithful mirror of
+        ``fsm.current`` and the actuation a posture implies has one home.
+        """
+        self.state.mode = mode
+        self._apply_mode_entry(mode)
+
+    def _apply_mode_entry(self, mode: Mode) -> None:
+        """Actuate ``mode``: cap (or release) delivered compute load.
+
+        Entering SAFE / LOW_POWER / THERMAL_LIMIT caps the compute subsystem's
+        delivered load to the mode's ceiling, so auto-safing genuinely sheds
+        load (lower draw, slower drain, less heat) instead of only relabelling
+        the posture. Every other mode clears the cap, restoring the
+        controller's requested load; the request was preserved under the cap,
+        so recovery to IDLE lifts it.
+        """
+        self.compute.set_mode_load_ceiling(_MODE_LOAD_CEILINGS.get(mode))
 
     def _safing_decision(
         self, ctx: Mapping[str, Any]
-    ) -> tuple[str, dict[str, Any], str] | None:
+    ) -> tuple[str, str, dict[str, Any], str] | None:
         """Highest-priority tripped safing condition, or ``None`` when safe.
 
-        Returns ``(preferred_trigger, safety_projection, reason)``. Operator
-        incapacitation outranks the device hazards (a full ``safe`` posture
-        when no one can supervise); then SC-8 power reserve and SC-2 thermal
-        headroom through the enforcer; then a fully denied comms link degrades
-        the link-bearing modes (``RELAY``/``C2``), whose function depends on
-        it. The label-driven conditions read the derived state labels, which
-        are estimator-sourced by construction.
+        Returns ``(preferred_trigger, fallback_trigger, safety_projection,
+        reason)``. The fallback is the trigger to use when the table offers no
+        preferred edge from the current mode; it is per-condition so the
+        operator condition never downgrades to ``degrade``.
+
+        Operator incapacitation outranks the device hazards (a full ``safe``
+        posture when no one can supervise) and is debounced: it fires only
+        after the label has held for ``_OPERATOR_PERSISTENCE_TICKS`` because it
+        reads the biometrics Kalman estimate, where a single-tick spike must
+        not force a one-way ``safe``. A reachability invariant guarantees
+        ``safe`` from every operational and impaired mode, so its fallback is
+        also ``safe`` and it can deepen an already-impaired posture.
+
+        The device-hazard and comms conditions are evaluated only from an
+        operational mode: they have no safer edge from an impaired mode and
+        would only inflate the violation counter. SC-8 power reserve and SC-2
+        thermal headroom go through the enforcer (fallback ``degrade``); a
+        fully denied comms link degrades the link-bearing modes (``RELAY`` /
+        ``C2``), whose function depends on it. The SC-* and comms conditions
+        read smoothly-evolving reported state, so they stay instantaneous.
         """
-        if self.state.operator_state is OperatorState.INCAPACITATED:
+        if (
+            self.state.operator_state is OperatorState.INCAPACITATED
+            and self._operator_incap_streak >= _OPERATOR_PERSISTENCE_TICKS
+        ):
             reason = self.state.operator_state_reason or "operator incapacitated"
-            return "safe", _label_safety(_LABEL_OPERATOR, reason, ctx), reason
+            return "safe", "safe", _label_safety(_LABEL_OPERATOR, reason, ctx), reason
+        if not is_operational(self.state.mode):
+            return None
         for constraint_id, candidate_key, preferred in _SAFING_RULES:
             result = self.safety.check(
                 constraint_id, ctx.get(candidate_key), evidence=ctx
             )
             if not result.approved:
-                return preferred, _safety_result_to_dict(result), result.reason
+                return (
+                    preferred,
+                    "degrade",
+                    _safety_result_to_dict(result),
+                    result.reason,
+                )
         if (
             self.state.mode in _LINK_MODES
             and self.state.comms_state is CommsState.DENIED
         ):
             reason = self.state.comms_state_reason or "comms denied"
-            return "degrade", _label_safety(_LABEL_COMMS, reason, ctx), reason
+            return (
+                "degrade",
+                "degrade",
+                _label_safety(_LABEL_COMMS, reason, ctx),
+                reason,
+            )
         return None
 
     def _audit_auto_safe(
@@ -475,17 +589,26 @@ class Engine:
         )
 
     def _safety_context(self) -> dict[str, Any]:
+        """Build the safety-gate context from current truth (ADR 0022, 0029).
+
+        The thermal and SoC readings are subsystem properties (always finite
+        floats). The SoC critical reserve is read from the profile dict, so it
+        is coerced defensively: a non-numeric value (which ``ProfileModel``
+        rejects at load, but a directly-constructed profile could still carry)
+        is omitted rather than crashing the tick loop. With the key absent the
+        SC-8 floor has no threshold and fails closed, so a malformed reserve
+        refuses operational entry and auto-safes instead of raising.
+        """
         power_cfg = self.profile.get("power") or {}
-        return {
+        ctx: dict[str, Any] = {
             "thermal_headroom_c": float(self.thermal.headroom_c),
-            "thermal_headroom_threshold_c": float(
-                self.thermal.headroom_threshold_c
-            ),
+            "thermal_headroom_threshold_c": float(self.thermal.headroom_threshold_c),
             "soc_pct": float(self.power.soc_pct),
-            "soc_pct_critical": float(
-                power_cfg.get("soc_pct_critical_threshold", 5.0)
-            ),
         }
+        reserve = _coerce_finite(power_cfg.get("soc_pct_critical_threshold", 5.0))
+        if reserve is not None:
+            ctx["soc_pct_critical"] = reserve
+        return ctx
 
     def tick(self) -> TickContext:
         """Advance the simulator by one tick. Returns the tick context."""
@@ -740,6 +863,33 @@ def _label_safety(
         "value": None,
         "evidence": redacted,
     }
+
+
+def _coerce_finite(value: Any) -> float | None:
+    """Coerce ``value`` to a finite, non-bool float, or ``None``.
+
+    Returns ``None`` for a boolean, a non-numeric value, or a non-finite float
+    (NaN / infinity), so a safety context can omit the key and let the gate
+    fail closed instead of carrying a malformed threshold into the tick loop.
+    """
+    if isinstance(value, bool):
+        return None
+    try:
+        coerced = float(value)
+    except (TypeError, ValueError):
+        return None
+    return coerced if math.isfinite(coerced) else None
+
+
+def _require_finite_number(value: Any, field_name: str) -> None:
+    """Raise ``ValueError`` unless ``value`` is a finite, non-bool number.
+
+    The load-time half of the SC-8 / SC-2 fail-closed posture: a malformed
+    safety threshold is refused with a named field so a controller reloading a
+    profile sees why it bounced (ADR 0029).
+    """
+    if _coerce_finite(value) is None:
+        raise ValueError(f"{field_name} must be a finite number, got {value!r}")
 
 
 def _load_profile(name: str) -> Mapping[str, Any]:

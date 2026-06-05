@@ -19,6 +19,7 @@ is missing fails closed, preserving the UCAs in
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any, NamedTuple
@@ -76,6 +77,8 @@ _TRANSITIONS: dict[tuple[Mode, str], Mode] = {
     (Mode.IDLE, "relay"): Mode.RELAY,
     (Mode.IDLE, "monitoring"): Mode.MONITORING,
     (Mode.IDLE, "c2"): Mode.C2,
+    (Mode.IDLE, "safe"): Mode.SAFE,
+    (Mode.IDLE, "fault"): Mode.FAULT,
     (Mode.IDLE, "shutdown"): Mode.SHUTDOWN,
     (Mode.MISSION, "degrade"): Mode.DEGRADED,
     (Mode.MISSION, "thermal_limit"): Mode.THERMAL_LIMIT,
@@ -95,12 +98,12 @@ _TRANSITIONS: dict[tuple[Mode, str], Mode] = {
     (Mode.C2, "complete"): Mode.IDLE,
     (Mode.C2, "safe"): Mode.SAFE,
     (Mode.C2, "fault"): Mode.FAULT,
-    (Mode.DEGRADED, "recover"): Mode.MISSION,
+    (Mode.DEGRADED, "recover"): Mode.IDLE,
     (Mode.DEGRADED, "safe"): Mode.SAFE,
     (Mode.DEGRADED, "fault"): Mode.FAULT,
-    (Mode.THERMAL_LIMIT, "cool"): Mode.MISSION,
+    (Mode.THERMAL_LIMIT, "cool"): Mode.IDLE,
     (Mode.THERMAL_LIMIT, "safe"): Mode.SAFE,
-    (Mode.LOW_POWER, "recover"): Mode.MISSION,
+    (Mode.LOW_POWER, "recover"): Mode.IDLE,
     (Mode.LOW_POWER, "safe"): Mode.SAFE,
     (Mode.SAFE, "recover"): Mode.IDLE,
     (Mode.SAFE, "shutdown"): Mode.SHUTDOWN,
@@ -160,10 +163,13 @@ class _SafetyGate(NamedTuple):
 _GATE_THERMAL = _SafetyGate(SC_THERMAL_HEADROOM, "thermal_headroom_c")
 _GATE_POWER = _SafetyGate(SC_POWER_RESERVE, "soc_pct")
 
-# Entering an operational mode (MISSION / RELAY / MONITORING / C2, and the
-# recover/cool paths back into them) requires both thermal headroom (SC-2)
-# and battery reserve (SC-8). Gates are checked in order, so the first
-# unsatisfied constraint is the one the refusal names.
+# Two kinds of transition are gated on both thermal headroom (SC-2) and
+# battery reserve (SC-8): entering an operational mode (MISSION / RELAY /
+# MONITORING / C2) from IDLE, and the recover/cool transitions out of an
+# impaired mode (which land in IDLE but stay gated, so the device cannot
+# leave the impaired posture until the hazard has cleared; ADR 0029). The
+# failsafe exits (safe / shutdown) are never gated. Gates are checked in
+# order, so the first unsatisfied constraint is the one the refusal names.
 _SAFETY_GATES: dict[tuple[Mode, str], tuple[_SafetyGate, ...]] = {
     (Mode.IDLE, "mission"): (_GATE_THERMAL, _GATE_POWER),
     (Mode.IDLE, "relay"): (_GATE_THERMAL, _GATE_POWER),
@@ -201,6 +207,13 @@ def build_fsm_enforcer() -> SafetyEnforcer:
     return enforcer
 
 
+# Cap on the in-memory transition and refusal logs (ADR 0029). The durable
+# record is the SQLite ``state_transitions`` table; these deques only back the
+# ``state_history`` in-memory fallback (which reads the last 256 rows), so a
+# long-running server does not accumulate them without bound.
+_HISTORY_MAXLEN = 512
+
+
 class StateMachine:
     """Explicit-table FSM over :class:`Mode` with enforcer-routed safety gates.
 
@@ -215,8 +228,10 @@ class StateMachine:
     ) -> None:
         self._current = start
         self._checker = checker if checker is not None else build_fsm_enforcer()
-        self._history: list[tuple[Mode, str, Mode]] = []
-        self._refusals: list[tuple[Mode, str, Mode, str]] = []
+        self._history: deque[tuple[Mode, str, Mode]] = deque(maxlen=_HISTORY_MAXLEN)
+        self._refusals: deque[tuple[Mode, str, Mode, str]] = deque(
+            maxlen=_HISTORY_MAXLEN
+        )
         self._last_checks: list[SafetyResult] = []
 
     @property
@@ -224,10 +239,20 @@ class StateMachine:
         return self._current
 
     def can(self, trigger: str) -> bool:
+        """True if the table admits ``trigger`` from the current mode.
+
+        Consults the transition table only, not the safety gates: a gated
+        transition can still be refused by the enforcer at :meth:`transition`
+        time. ``can`` answers "is this edge in the table," not "would it pass."
+        """
         return (self._current, trigger) in _TRANSITIONS
 
     def would(self, trigger: str) -> Mode | None:
-        """Return the destination if ``trigger`` is admitted by the table, else ``None``."""
+        """Return the table destination for ``trigger``, else ``None``.
+
+        Table-only, like :meth:`can`: a returned mode is the edge's target, not
+        a promise the gate will admit it.
+        """
         return _TRANSITIONS.get((self._current, trigger))
 
     def transition(
@@ -281,7 +306,9 @@ class StateMachine:
     def reset(self, mode: Mode = Mode.STOWED) -> None:
         """Force the FSM back to ``mode`` without traversing transitions.
 
-        Used by the engine to restart cleanly after ``stop()`` without
-        threading a ``reset`` trigger through SHUTDOWN -> STOWED.
+        A hard reseat for tests and tooling that need a known starting mode. It
+        bypasses the table and the gates and writes no audit record, so it is
+        not on the engine's restart path: :meth:`Engine.start` threads the
+        ``reset`` trigger through the table instead.
         """
         self._current = mode

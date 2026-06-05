@@ -72,12 +72,13 @@ def test_concurrent_heat_strain_and_thermal_throttle(engine: Engine) -> None:
     assert mode is Mode.THERMAL_LIMIT
     assert "below threshold" in reason
 
-    # 5. Admit `cool` once headroom recovers.
+    # 5. Admit `cool` once headroom recovers; it lands in the neutral IDLE
+    #    (ADR 0029), from which the controller re-selects an operational mode.
     ok, mode, _ = engine.request_transition(
         "cool",
         context={"thermal_headroom_c": 12.0, "thermal_headroom_threshold_c": 5.0},
     )
-    assert ok and mode is Mode.MISSION
+    assert ok and mode is Mode.IDLE
 
     # No state machine deadlock: history contains forward progress and
     # the refused transition is recorded separately.
