@@ -209,7 +209,8 @@ def test_operator_deepens_impaired_posture_to_safe(tmp_nous_home: Path) -> None:
     eng = _engine_in("relay")
     eng.state.comms_state = CommsState.DENIED
     eng._auto_safe()
-    assert eng.state.mode is Mode.DEGRADED
+    impaired_mode = eng.state.mode
+    assert impaired_mode is Mode.DEGRADED
     eng.state.comms_state = CommsState.CONNECTED
     _drive_operator_incapacitated(eng)
     assert eng.state.mode is Mode.SAFE
