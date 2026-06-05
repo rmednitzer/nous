@@ -36,7 +36,14 @@ from .estimators.thermal import ThermalKalman
 from .policy import Tier
 from .safety import SafetyResult
 from .state.comms_state import CommsState
-from .state.machine import GuardDenied, Mode, StateMachine, build_fsm_enforcer
+from .state.machine import (
+    SC_POWER_RESERVE,
+    SC_THERMAL_HEADROOM,
+    GuardDenied,
+    Mode,
+    StateMachine,
+    build_fsm_enforcer,
+)
 from .state.operator_state import OperatorState
 from .state.operator_state import derive as derive_operator
 from .subsystems.apu import ApuSubsystem
@@ -71,6 +78,22 @@ class EngineState:
     comms_state: CommsState = CommsState.CONNECTED
     comms_state_reason: str = ""
     last_capabilities: dict[str, float] = field(default_factory=dict)
+
+
+# Modes the tick-driven auto-safing loop fires from (ADR 0027). Already-safed
+# and terminal modes are excluded so the loop only ever moves toward safety.
+_OPERATIONAL_MODES = frozenset(
+    {Mode.MISSION, Mode.RELAY, Mode.MONITORING, Mode.C2}
+)
+
+# Priority-ordered safing rules (ADR 0027): (constraint id, safety-context
+# candidate key, preferred safer trigger). Power before thermal: depletion is
+# the least recoverable hazard, and the load LOW_POWER sheds also relieves
+# heat. A mode without the preferred trigger falls back to ``degrade``.
+_SAFING_RULES: tuple[tuple[str, str, str], ...] = (
+    (SC_POWER_RESERVE, "soc_pct", "low_power"),
+    (SC_THERMAL_HEADROOM, "thermal_headroom_c", "thermal_limit"),
+)
 
 
 class Engine:
@@ -333,6 +356,63 @@ class Engine:
                 )
             )
 
+    def _auto_safe(self) -> None:
+        """Drive the FSM toward a safer mode when a constraint trips (ADR 0027).
+
+        Evaluated each tick, from an operational mode only. The shared enforcer
+        judges the live reported-state safety context; the first violated
+        constraint, in priority order, fires one transition toward safety
+        (the mode's preferred safer trigger when it exists, else ``degrade``).
+        The move is one-way: recovery stays controller-gated, so there is no
+        oscillation to debounce.
+        """
+        if self.state.mode not in _OPERATIONAL_MODES:
+            return
+        ctx = self._safety_context()
+        for constraint_id, candidate_key, preferred in _SAFING_RULES:
+            result = self.safety.check(
+                constraint_id, ctx.get(candidate_key), evidence=ctx
+            )
+            if result.approved:
+                continue
+            trigger = preferred if self.fsm.can(preferred) else "degrade"
+            if not self.fsm.can(trigger):
+                return
+            prev = self.fsm.current
+            try:
+                new = self.fsm.transition(trigger, context=ctx)
+            except (GuardDenied, ValueError):
+                return
+            self._audit_auto_safe(trigger, prev, new, result)
+            self._record_transition(
+                prev, trigger, new, reason=f"auto-safe: {constraint_id} -> {trigger}"
+            )
+            self.state.mode = new
+            return
+
+    def _audit_auto_safe(
+        self, trigger: str, frm: Mode, to: Mode, result: SafetyResult
+    ) -> None:
+        """Mirror one auto-safing decision to the audit log under Tier.SAFETY."""
+        if self.audit is None:
+            return
+        self.audit.write(
+            AuditRecord.from_output(
+                tool="auto_safe",
+                tier=int(Tier.SAFETY),
+                args={
+                    "trigger": trigger,
+                    "from": frm.value,
+                    "to": to.value,
+                    "constraint_id": result.constraint_id,
+                },
+                output=f"auto-safe {frm.value} -> {to.value} ({trigger})",
+                denied=True,
+                decision_reason=result.reason,
+                safety=_safety_result_to_dict(result),
+            )
+        )
+
     def _record_transition(
         self,
         frm: Mode,
@@ -419,6 +499,7 @@ class Engine:
 
         self._refresh_capabilities()
         self._assert_post_tick_finite()
+        self._auto_safe()
 
         ctx = TickContext(
             tick=self.state.tick,
