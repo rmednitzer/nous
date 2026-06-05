@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "nous"
 version = "0.1.0"
-description = "Digital twin of an edge-AI inference appliance: per-subsystem physics and recursive estimators feed a self-model an LLM controller queries over MCP."
+description = "Simulation-based digital twin of an edge-AI inference appliance: per-subsystem physics and recursive estimators feed a self-model an LLM controller queries over MCP."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"

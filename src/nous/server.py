@@ -1085,7 +1085,7 @@ def attach_tick_lifespan(
 
 
 _INSTRUCTIONS = """\
-nous -- a digital twin of an edge-AI inference appliance.
+nous -- a simulation-based digital twin of an edge-AI inference appliance.
 
 Read the runbooks under `skills/` (nous-getting-started.md first). Every
 tool call is tier-classified and audited; output bodies are SHA-256 hashed,
