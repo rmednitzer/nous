@@ -8,7 +8,6 @@ v0.1 surface; full subsystem coverage lands in L1 (see ``docs/backlog.md``).
 from __future__ import annotations
 
 import contextlib
-import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -25,7 +24,7 @@ from .engine import Engine
 from .policy import PolicyMode
 from .runner import run as audited_run
 from .tick import tick_loop
-from .tools import audit, inference, meta, self_model, state, subsystems
+from .tools import audit, inference, interop, meta, scenarios, self_model, state, subsystems
 
 __all__ = [
     "Nous",
@@ -213,178 +212,9 @@ def build_app(settings: Settings | None = None) -> Nous:
 
     inference.register(mcp, app, _wrap)
 
-    @mcp.tool()
-    async def interop_formats(ctx: Context | None = None) -> str:
-        """List the interop adapters the server knows about."""
+    interop.register(mcp, app, _wrap)
 
-        async def _work() -> str:
-            from .interop import REGISTRY
-
-            return json.dumps(
-                {
-                    "adapters": sorted(REGISTRY.keys()),
-                    "note": "adapters live in src/nous/interop/",
-                }
-            )
-
-        return await _wrap("interop_formats", {}, ctx, _work)
-
-    @mcp.tool()
-    async def interop_encode(
-        adapter: str,
-        data: dict[str, Any] | None = None,
-        ctx: Context | None = None,
-    ) -> str:
-        """Encode ``data`` via the named interop adapter (BL-041 / T1).
-
-        Returns a structured response: ``{"adapter": ..., "payload_hex":
-        ..., "len": N}`` on success or ``{"error": ...}`` on a
-        StaleEstimateError or schema failure. The payload is hex-encoded
-        so the wire bytes survive an MCP JSON-RPC trip without
-        codec-related corruption.
-        """
-
-        async def _work() -> str:
-            from .interop import StaleEstimateError, build_adapter
-
-            try:
-                impl = build_adapter(adapter)
-            except KeyError as exc:
-                return json.dumps({"error": str(exc)})
-            try:
-                payload = impl.encode(dict(data or {}))
-            except StaleEstimateError as exc:
-                return json.dumps(
-                    {
-                        "adapter": adapter,
-                        "error": "stale_estimate",
-                        "age_s": exc.age_s,
-                        "max_age_s": exc.max_age_s,
-                    }
-                )
-            except (ValueError, TypeError) as exc:
-                return json.dumps({"adapter": adapter, "error": str(exc)})
-            return json.dumps(
-                {
-                    "adapter": adapter,
-                    "payload_hex": payload.hex(),
-                    "len": len(payload),
-                }
-            )
-
-        return await _wrap(
-            "interop_encode", {"adapter": adapter, "data": dict(data or {})}, ctx, _work
-        )
-
-    @mcp.tool()
-    async def interop_decode(
-        adapter: str,
-        payload_hex: str,
-        ctx: Context | None = None,
-    ) -> str:
-        """Decode a hex-encoded payload via the named adapter (BL-041 / T1).
-
-        Returns the adapter's structured decode output as JSON. Hex
-        decoding errors and unknown adapter names return ``{"error":
-        ...}``; an adapter's own ``{"error": ...}`` decode response
-        passes through unchanged.
-        """
-
-        async def _work() -> str:
-            from .interop import build_adapter
-
-            try:
-                impl = build_adapter(adapter)
-            except KeyError as exc:
-                return json.dumps({"error": str(exc)})
-            try:
-                payload = bytes.fromhex(payload_hex)
-            except ValueError as exc:
-                return json.dumps({"adapter": adapter, "error": f"hex: {exc}"})
-            decoded = impl.decode(payload)
-            return json.dumps({"adapter": adapter, "decoded": dict(decoded)})
-
-        return await _wrap(
-            "interop_decode",
-            {"adapter": adapter, "payload_hex_len": len(payload_hex)},
-            ctx,
-            _work,
-        )
-
-    @mcp.tool()
-    async def profile_reload(
-        name: str = "", ctx: Context | None = None
-    ) -> str:
-        """Hot-reload the hardware profile from disk.
-
-        ``name`` defaults to the currently-active profile; pass a
-        different name to switch profiles entirely. Subsystems and
-        estimators are rebuilt; FSM mode and tick counter are
-        preserved. Returns a summary the controller can audit.
-        """
-
-        async def _work() -> str:
-            summary = app.engine.reload_profile(name=name or None)
-            return json.dumps(summary)
-
-        return await _wrap("profile_reload", {"name": name}, ctx, _work)
-
-    @mcp.tool()
-    async def scenario_load(path: str, ctx: Context | None = None) -> str:
-        """Load and run a scenario YAML against the engine.
-
-        Returns the structured run report (steps fired, snapshot after
-        the last tick). The runner advances the engine through the
-        scenario's tick budget, so a long scenario blocks the tool
-        call -- a future enhancement (BL-014) can switch to background
-        execution if the controller needs to interleave reads.
-
-        If the scenario names a profile that does not match the
-        currently-mounted one, the engine hot-reloads to the requested
-        profile (BL-039) before running so the report's physics matches
-        the declared scenario environment.
-        """
-
-        async def _work() -> str:
-            from .scenarios import load_scenario_file, run_scenario
-
-            scenario = load_scenario_file(path)
-            reloaded_from = ""
-            if scenario.profile and scenario.profile != app.engine.settings.profile:
-                reloaded_from = app.engine.settings.profile
-                app.engine.reload_profile(name=scenario.profile)
-            report = dict(run_scenario(app.engine, scenario))
-            if reloaded_from:
-                report["profile_reloaded_from"] = reloaded_from
-            return json.dumps(report)
-
-        return await _wrap("scenario_load", {"path": path}, ctx, _work)
-
-    @mcp.tool()
-    async def scenario_inject(
-        action: str,
-        args: dict[str, Any] | None = None,
-        ctx: Context | None = None,
-    ) -> str:
-        """Fire a single scenario injector against the live engine.
-
-        Useful for ad-hoc what-ifs without the overhead of writing a
-        YAML scenario. ``action`` matches the names in
-        :mod:`nous.scenarios.injectors`.
-        """
-
-        async def _work() -> str:
-            from .scenarios.injectors import apply_injection
-
-            outcome = apply_injection(app.engine, action, args or {})
-            return json.dumps(outcome)
-
-        return await _wrap(
-            "scenario_inject",
-            {"action": action, "args": dict(args or {})},
-            ctx,
-            _work,
-        )
+    scenarios.register(mcp, app, _wrap)
 
     app.mcp = mcp
     return app
