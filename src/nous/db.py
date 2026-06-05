@@ -1,7 +1,8 @@
 """SQLite-backed persistence with WAL journalling.
 
-The simulator writes per-tick state transitions to the live
-``state_transitions`` table. The ``audit_entries`` table is reserved schema,
+The simulator writes each admitted state-machine transition (and each guard
+refusal) to the live ``state_transitions`` table; rows are written per
+transition, not per tick. The ``audit_entries`` table is reserved schema,
 not a live mirror: the authoritative audit trail is the append-only JSONL sink
 (``nous.audit.AuditLogger``). See :class:`AuditEntry` and ADR 0002 (BL-065).
 The default database lives at ``$NOUS_HOME/state.db`` and is opened with WAL so
