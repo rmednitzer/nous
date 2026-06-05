@@ -65,7 +65,7 @@ nav:
       - Compute subsystem: model-cards/subsystem-compute.md
       - Storage subsystem: model-cards/subsystem-storage.md
       - Environmental sensor subsystem: model-cards/subsystem-sensors.md
-      - Position EKF: model-cards/estimator-position-ekf.md
+      - Position (CV Kalman): model-cards/estimator-position-kalman.md
       - Power SoC: model-cards/estimator-power-soc.md
       - APU per-source: model-cards/estimator-apu.md
       - Thermal Kalman: model-cards/estimator-thermal-kalman.md

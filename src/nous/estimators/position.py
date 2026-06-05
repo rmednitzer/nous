@@ -1,12 +1,18 @@
-"""Position EKF over GNSS + IMU (BL-026).
+"""Position Kalman filter over GNSS fixes (BL-026).
 
-Implements a constant-velocity kinematic Extended Kalman Filter over the
+Implements a constant-velocity kinematic Kalman filter over the
 six-dimensional state ``(lat, lon, alt, v_lat, v_lon, v_alt)``. Lat and
 lon are tracked in degrees; velocities are tracked in degrees-per-second
-of the matching axis. The filter consumes GNSS observations (lat / lon
-/ alt) from :class:`~nous.subsystems.position.PositionSubsystem` and
-predicts the trajectory between fixes using the constant-velocity
-process model.
+of the matching axis. Because the state stays in degrees (not metres),
+both the constant-velocity process model and the direct GNSS measurement
+model are linear, so this is a plain linear Kalman filter, not an EKF:
+there is no Jacobian and no linearisation step. A genuine EKF only earns
+its name once the state carries body-frame velocity in m/s or a
+range/bearing measurement, either of which couples the axes through
+``cos(lat)``; that lands with the IMU-fusion track (BL-061). The filter
+consumes GNSS observations (lat / lon / alt) from
+:class:`~nous.subsystems.position.PositionSubsystem` and predicts the
+trajectory between fixes using the constant-velocity process model.
 
 Input validation refuses NaN / Inf / out-of-range coordinates without
 poisoning the central estimate -- a rejected observation increments
@@ -18,7 +24,7 @@ The implementation deliberately stays diagonal (no cross-covariance
 between lat / lon / alt) because the GNSS observation model is
 diagonal and the constant-velocity decoupling between axes is exact in
 the small-angle regime relevant to a backpack-class device. A full
-6x6 EKF with cross-covariance is left for BL-061 (situational-awareness
+6x6 filter with cross-covariance is left for BL-061 (situational-awareness
 fusion).
 """
 
@@ -28,7 +34,7 @@ import math
 
 from ..types import Estimate, Observation
 
-__all__ = ["PositionEKF"]
+__all__ = ["PositionKalman"]
 
 
 _INIT_POS_VAR = 1.0
@@ -41,8 +47,8 @@ _PROCESS_VEL_VAR_PER_S = (1e-7) ** 2
 _PROCESS_VEL_ALT_VAR_PER_S = (0.005) ** 2
 
 
-class PositionEKF:
-    """Constant-velocity EKF on lat / lon / alt + velocity components."""
+class PositionKalman:
+    """Constant-velocity linear Kalman filter on lat / lon / alt + velocity."""
 
     name: str = "position"
 

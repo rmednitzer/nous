@@ -17,4 +17,4 @@ or carried by the backlog.
 | DR-7 | The OAuth issuer defaults to `single_client=true`; disabling lockdown emits a startup warning and lands in the audit log. | SC-7 | BL-019 | ADR-0008 | review |
 | DR-8 | `CallCap.increment` fails closed (raises `CapExhausted`) on a corrupted persistence file. Concurrent writers cannot race the truncate/write window. | SC-5 | BL-021 | ADR-0005 | **enforced** |
 | DR-9 | The policy classifier's additive-surface rule defaults unknown tools to `STATEFUL`, so guarded mode refuses them without an explicit allow regex. | SC-7, additive-surface | BL-038 | ADR-0007 | **enforced** |
-| DR-10 | The position EKF and biometric Kalman validate inputs; NaN, Inf, and out-of-range observations are rejected without poisoning the central estimate. | SC-1 | BL-026, BL-029 | ADR-0010 | **enforced** |
+| DR-10 | The position and biometric Kalman filters validate inputs; NaN, Inf, and out-of-range observations are rejected without poisoning the central estimate. | SC-1 | BL-026, BL-029 | ADR-0010 | **enforced** |

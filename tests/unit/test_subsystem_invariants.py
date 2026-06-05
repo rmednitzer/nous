@@ -13,7 +13,7 @@ convergence to ambient at zero load, comms link-age
 monotonicity, tx-resets-age). This file extends to the rest of
 the ADR 0020 list: Peukert capacity-vs-current monotonicity,
 thermal junction-above-enclosure under load, compute throttling
-never-increases, position EKF covariance growth under predict-
+never-increases, position Kalman covariance growth under predict-
 only and shrink under update, storage used / wear monotonicity,
 FSM transition closure. The comms SNR-to-throughput coupling
 from the ADR text is not modelled in the current subsystem (RSSI,
@@ -32,7 +32,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from nous.estimators.position import PositionEKF
+from nous.estimators.position import PositionKalman
 from nous.state.machine import GuardDenied, Mode, StateMachine
 from nous.subsystems.comms import CommsSubsystem
 from nous.subsystems.compute import ComputeSubsystem
@@ -243,17 +243,17 @@ def test_compute_throttling_never_increases_draw_or_load(
     assert throttled_draw <= unthrottled_draw + 1e-9
 
 
-# --- Position EKF: covariance growth + shrink ---
+# --- Position Kalman: covariance growth + shrink ---
 
 
 @given(dt_s=st.floats(min_value=0.1, max_value=10.0))
 def test_position_ekf_predict_only_covariance_grows(dt_s: float) -> None:
-    """Without an observation, the EKF's belief gets less certain
+    """Without an observation, the Kalman filter's belief gets less certain
     over time. Every covariance entry is monotone non-decreasing
     under ``predict(dt)`` per the existing
     ``test_estimator_properties`` contract; this case lifts the
-    invariant into the subsystem suite at the position-EKF level."""
-    ekf = PositionEKF()
+    invariant into the subsystem suite at the position-Kalman level."""
+    ekf = PositionKalman()
     before = dict(ekf.state().covariance)
     ekf.predict(dt_s)
     after = dict(ekf.state().covariance)
@@ -263,9 +263,9 @@ def test_position_ekf_predict_only_covariance_grows(dt_s: float) -> None:
 
 def test_position_ekf_update_shrinks_covariance() -> None:
     """The complement: an observation tightens the posterior. The
-    EKF was grown via repeated predicts; a confident observation
+    filter was grown via repeated predicts; a confident observation
     pulls every channel covariance below its pre-update value."""
-    ekf = PositionEKF()
+    ekf = PositionKalman()
     for _ in range(10):
         ekf.predict(1.0)
     grown = dict(ekf.state().covariance)

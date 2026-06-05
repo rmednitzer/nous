@@ -125,12 +125,12 @@ carries an RSSI / loss / throughput / age tuple. Links time out after
 
 `src/nous/subsystems/position.py`. Ground truth advances by
 dead-reckoning each tick; GNSS sensor observations carry profile
-sigmas. Loss of fix widens the position EKF variance through
+sigmas. Loss of fix widens the position Kalman variance through
 predict-only.
 
 - Dead-reckoning treats heading as exact. Real IMU drift is correlated
   across axes and grows roughly as the cube root of time; the full
-  EKF is tracked under BL-026.
+  Kalman filter is tracked under BL-026.
 - Altitude is barometric in profile shape but here is treated as a
   free state. There is no terrain model.
 - No multi-path. GNSS sigmas are constant per profile and do not

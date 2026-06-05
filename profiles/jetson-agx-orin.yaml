@@ -30,10 +30,7 @@ power:
 
 apu:
   solar_w_peak: 60
-  solar_w_typical: 25
   fuelcell_w_continuous: 25
-  fuelcell_fuel_capacity_g: 250
-  fuelcell_efficiency: 0.45
   solar:
     panel_w_peak: 60
     mppt_efficiency: 0.92

@@ -277,6 +277,10 @@ Interop (T0 schema + T1 codec):
 Local inference and cloud cap (T0/T1):
   inference_local / anthropic_cap_status
 
+Posture control (T2):
+  state_transition (drive the FSM: ready -> idle, then mission / relay /
+  monitoring / c2, or safe / shutdown)
+
 Scenarios and configuration (T2):
   scenario_load / scenario_inject / profile_reload
 

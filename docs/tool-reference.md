@@ -37,6 +37,7 @@ the committed copy after changing a tool's signature or docstring.
 | `sensors_status` | T0 | Environmental sensor pack: ambient temp, humidity, baro pressure. |
 | `state_get` | T0 | Current FSM mode plus the labels a controller queries together. |
 | `state_history` | T0 | Recent FSM transitions (oldest first; up to ``limit`` rows). |
+| `state_transition` | T2 | Drive the mission-posture FSM through one explicit trigger (ADR 0031). |
 | `storage_status` | T0 | Storage subsystem: capacity, used, wear, write rate. |
 | `thermal_status` | T0 | Two-state thermal model (junction + enclosure + ambient). |
 
@@ -463,6 +464,37 @@ tool registry.
     }
   },
   "title": "state_historyArguments",
+  "type": "object"
+}
+```
+
+### `state_transition`
+
+```json
+{
+  "properties": {
+    "context": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context"
+    },
+    "trigger": {
+      "title": "Trigger",
+      "type": "string"
+    }
+  },
+  "required": [
+    "trigger"
+  ],
+  "title": "state_transitionArguments",
   "type": "object"
 }
 ```

@@ -27,8 +27,9 @@ capabilities are intact right now, which have degraded, how long the device
 can sustain a given workload, and what an estimator can honestly say about the
 operator and the environment. To that end every subsystem has a parametric
 physics model, a sensor model that emits noisy observations, and a recursive
-estimator (Kalman, EKF, UKF, or particle filter as appropriate) that turns
-those observations back into a calibrated belief state. A self-model layer
+estimator (a Kalman filter sized to the subsystem, or a particle filter for
+the discrete comms link state) that turns those observations back into a
+calibrated belief state. A self-model layer
 aggregates those beliefs into capability claims the controller can reason
 about.
 
@@ -87,8 +88,9 @@ examples/        a self-driving demo, an inspector quickstart
 - Hand-rolled finite-state machine over the mission posture (stowed, boot,
   idle, mission, relay, monitoring, C2, degraded, thermal-limited, low-power,
   safe, shutdown, fault) with explicit transitions.
-- Recursive estimators per subsystem (Kalman / EKF / UKF / particle filter as
-  appropriate) feeding a self-model capability layer that produces calibrated
+- Recursive estimators per subsystem (per-channel Kalman filters, plus a
+  particle filter for the comms link state) feeding a self-model capability
+  layer that produces calibrated
   endurance, thermal-headroom, inference-capacity, and link-budget claims.
 - A FastMCP tool surface exposed over stdio or HTTP with OAuth 2.1, with
   every tool call classified into a tier (read-only, reversible, stateful,
