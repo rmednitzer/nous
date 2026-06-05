@@ -93,10 +93,10 @@ The FSM now also initiates transitions on its own. Each tick, from an
 operational mode, `Engine._auto_safe` drives the device toward a safer mode
 when a constraint is violated mid-run (ADR 0027/0028): SC-8 fires
 `low_power`, SC-2 fires `thermal_limit`, an incapacitated operator fires
-`safe`, and a denied comms link degrades, falling back to `degrade` where a
-mode lacks the precise edge. Auto-safing is one-way; recovery stays a
-controller call. Every auto-safing decision is mirrored to the audit log
-under `Tier.SAFETY`.
+`safe`, and a denied comms link degrades the link-bearing modes `RELAY`/`C2`
+(falling back to `degrade` where a mode lacks the precise safer edge).
+Auto-safing is one-way; recovery stays a controller call. Every auto-safing
+decision is mirrored to the audit log under `Tier.SAFETY`.
 
 The audit log records every transition. The trigger names are stable
 across versions; the schema is captured in `docs/state-machine.md`

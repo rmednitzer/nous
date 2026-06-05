@@ -106,8 +106,10 @@ ADR 0028 adds the two label-driven conditions on top of the enforcer
 rules. An operator derived as `INCAPACITATED` takes the full `safe` posture
 and outranks the device hazards (when no one can supervise, the safest hold
 is right regardless of the pack or the junction); a fully denied comms link
-(`DENIED`) degrades. The full priority is operator, then power (SC-8), then
-thermal (SC-2), then comms. `relay`/`monitoring`/`c2` keep the `degrade`
+(`DENIED`) degrades the link-bearing modes `relay`/`c2`, leaving a
+comms-independent `mission` or `monitoring` run alone. The full priority is
+operator, then power (SC-8), then thermal (SC-2), then comms.
+`relay`/`monitoring`/`c2` keep the `degrade`
 fallback for the enforcer rules rather than gaining their own
 `thermal_limit`/`low_power` edges; ADR 0028 records why.
 

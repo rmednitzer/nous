@@ -43,7 +43,7 @@ move is one-way: recovery is a controller call that the entry gates re-check.
 | 1 | Operator `INCAPACITATED` | `OperatorState` label | `safe` | `degrade` | H-2, H-8 (no supervisor) |
 | 2 | SC-8 power reserve violated | enforcer | `low_power` | `degrade` | H-8 |
 | 3 | SC-2 thermal headroom violated | enforcer | `thermal_limit` | `degrade` | H-2 |
-| 4 | Comms `DENIED` | `CommsState` label | `degrade` | `degrade` | operational prudence |
+| 4 | Comms `DENIED` (RELAY/C2 only) | `CommsState` label | `degrade` | `degrade` | operational prudence |
 
 `MISSION` offers `low_power` and `thermal_limit`, so it reaches the precise
 safer mode; `RELAY`/`MONITORING`/`C2` fall back to `degrade` (ADR 0028
@@ -52,10 +52,12 @@ records why they do not gain their own edges).
 The first three conditions control numbered hazards: an incapacitated
 operator means no one can supervise the device near its thermal or power
 edge (H-2, H-8), and the enforcer conditions are SC-8 and SC-2 directly. The
-comms-`DENIED` rule is operational prudence rather than a hazard control: a
-device that has lost its command channel should not hold a full operational
-workload it can no longer be told to stop, so it degrades to a posture the
-controller can resume once a link returns.
+comms-`DENIED` rule is operational prudence rather than a hazard control,
+and it applies only to the link-bearing modes (`RELAY`/`C2`): a relay or a
+command loop that has lost its link should not hold a full workload it can
+no longer be told to stop, so it degrades to a posture the controller can
+resume once a link returns. A `MISSION` or `MONITORING` run that does not
+depend on comms is left alone.
 
 ## Failsafe reachability
 

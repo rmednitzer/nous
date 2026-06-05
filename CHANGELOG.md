@@ -40,8 +40,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`is_operational`/`is_impaired`/`is_terminal`) land in `state/machine.py`.
   Auto-safing gains the label-driven conditions: operator `INCAPACITATED`
   takes the full `safe` posture (outranking the device hazards) and comms
-  `DENIED` degrades. `docs/stpa/10-fsm-constraints-mapping.md` traces every
-  safety-relevant transition to its constraint and hazard.
+  `DENIED` degrades the link-bearing modes (`RELAY`/`C2`).
+  `docs/stpa/10-fsm-constraints-mapping.md` traces every safety-relevant
+  transition to its constraint and hazard.
 
 ### Changed (server: per-subsystem tool modules, ADR 0021)
 
