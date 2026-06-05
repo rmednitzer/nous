@@ -1,9 +1,9 @@
 # Security policy
 
-`nous` is a simulator, not a production C2 system. It nevertheless ships a
-deliberate threat model and hardening posture, both because the project
-deploys to a public VM and because the simulator is meant to demonstrate
-audited tool surfaces.
+`nous` is a simulation-based digital twin, not a production C2 system. It
+nevertheless ships a deliberate threat model and hardening posture, both
+because the project deploys to a public VM and because the twin is meant to
+demonstrate audited tool surfaces.
 
 ## Reporting a vulnerability
 

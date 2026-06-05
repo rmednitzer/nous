@@ -28,9 +28,9 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 SYSTEM_PROMPT = (
-    "You are operating a backpack inference unit (nous). You have a set "
-    "of MCP tools exposed by the simulator. Each turn: read state, plan, "
-    "act, and report. Keep replies short."
+    "You are operating an edge-AI inference appliance (nous), a "
+    "simulation-based digital twin. You have a set of MCP tools exposed by "
+    "the twin. Each turn: read state, plan, act, and report. Keep replies short."
 )
 
 

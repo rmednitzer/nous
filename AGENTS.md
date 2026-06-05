@@ -6,11 +6,13 @@ Claude, Codex, and Cursor agents.
 
 ## What `nous` is
 
-A simulator for a man-portable AI inference appliance: tick-loop physics,
-subsystem state estimators, a self-model capability layer, and an MCP tool
-surface that a controller (typically a Claude session) drives. The runtime
-is asyncio, the build is `uv` + hatchling, the configuration is
-`pydantic-settings`, and the tool surface is FastMCP.
+A digital twin of an edge-AI inference appliance: per-subsystem physics and
+recursive estimators feed a self-model capability layer that an LLM
+controller (typically a Claude session) queries over MCP. It is a
+simulation-based twin, a virtual model that runs in software with no hardware
+in the loop (see [LIMITATIONS.md](LIMITATIONS.md)). The runtime is asyncio,
+the build is `uv` + hatchling, the configuration is `pydantic-settings`, and
+the tool surface is FastMCP.
 
 ## Stack
 

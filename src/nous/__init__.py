@@ -1,4 +1,4 @@
-"""nous -- simulator for a man-portable AI inference appliance."""
+"""nous -- a digital twin of an edge-AI inference appliance."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 site_name: nous
-site_description: "Simulator for a man-portable AI inference appliance."
+site_description: "Digital twin of an edge-AI inference appliance: per-subsystem physics and recursive estimators feed a self-model an LLM controller queries over MCP."
 site_url: https://rmednitzer.github.io/nous/
 repo_url: https://github.com/rmednitzer/nous
 repo_name: rmednitzer/nous
