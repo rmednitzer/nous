@@ -18,11 +18,13 @@ land in the wiring PR with its own security note. The enforcer ships with no
 constraints pre-registered: it governs the seam, not which constraints are
 enforced. A call site registers its constraint and then checks against it.
 
-Fail-closed posture. Both shipped evaluators refuse on missing, non-numeric,
-or non-finite context (NaN or infinity) rather than waving the candidate
-through, and a `check` against an unregistered constraint id refuses as well.
-A safety check that cannot establish the evidence it needs denies the action;
-it never approves by default.
+Fail-closed posture. Both shipped evaluators refuse on missing, boolean,
+non-numeric, or non-finite context (NaN or infinity) rather than waving the
+candidate through. A `check` against an unregistered constraint id, or one
+whose evaluator raises, refuses as well, so `check` always returns a
+structured disposition and never propagates an exception. A safety check that
+cannot establish the evidence it needs denies the action; it never approves
+by default.
 """
 
 from __future__ import annotations
@@ -32,8 +34,11 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+import numpy as np
+
 __all__ = [
     "CLAMPED",
+    "ERRORED",
     "REFUSED",
     "UNREGISTERED",
     "Evaluator",
@@ -46,6 +51,7 @@ __all__ = [
 REFUSED = "refused"
 CLAMPED = "clamped"
 UNREGISTERED = "unregistered"
+ERRORED = "errored"
 
 
 @dataclass(frozen=True)
@@ -56,8 +62,9 @@ class SafetyResult:
     float when ``approved`` and not clamped, the clamped ceiling when
     ``was_clamped``. A fail-closed refusal echoes the original candidate.
     ``violation_type`` is ``None`` on a clean pass and one of the module
-    constants (``REFUSED`` / ``CLAMPED`` / ``UNREGISTERED``) when the
-    constraint fired. ``evidence`` carries the inputs and a ``detail`` string
+    constants (``REFUSED`` / ``CLAMPED`` / ``UNREGISTERED`` / ``ERRORED``)
+    when the constraint fired or its evaluator raised. ``evidence`` carries
+    the inputs and a ``detail`` string
     explaining the verdict, suitable for an audit line or a
     ``GuardDenied.reason``.
     """
@@ -145,13 +152,18 @@ def _coerce_pair(a: Any, b: Any) -> tuple[float, float] | str:
 
     Returns the parsed floats on success and a short reason string
     (``unknown`` / ``non-numeric`` / ``non-finite``) when either side is
-    absent, not a number, or not finite (NaN or infinity). A safety seam
-    treats an infinity as a broken estimator, not a valid measurement: an
-    infinite headroom must not approve and an infinite ceiling must not wave
-    an unbounded value through.
+    absent, a boolean, not a number, or not finite (NaN or infinity). Python
+    and NumPy booleans are rejected even though ``float(True)`` and
+    ``float(np.bool_(False))`` succeed: a boolean in a numeric safety context
+    is malformed, not a measurement of 1 or 0, and the simulator's estimator
+    paths deal in NumPy scalars. A safety seam treats an infinity as a broken
+    estimator, not a valid measurement: an infinite headroom must not approve
+    and an infinite ceiling must not wave an unbounded value through.
     """
     if a is None or b is None:
         return "unknown"
+    if isinstance(a, bool | np.bool_) or isinstance(b, bool | np.bool_):
+        return "non-numeric"
     try:
         fa, fb = float(a), float(b)
     except (TypeError, ValueError):
@@ -186,7 +198,9 @@ class SafetyEnforcer:
     ) -> SafetyResult:
         """Judge ``candidate`` against ``constraint_id`` and record the result.
 
-        An unregistered constraint refuses fail-closed. A refusal or a clamp
+        An unregistered constraint, or one whose evaluator raises, refuses
+        fail-closed so ``check`` always returns a structured disposition and
+        never propagates an exception to its caller. A refusal or a clamp
         increments the per-id and total violation counters; a clean pass does
         not.
         """
@@ -202,7 +216,20 @@ class SafetyEnforcer:
                 evidence=ev,
             )
         else:
-            result = replace(evaluator(candidate, ev), constraint_id=constraint_id)
+            try:
+                result = replace(evaluator(candidate, ev), constraint_id=constraint_id)
+            except Exception as exc:  # noqa: BLE001
+                message = " ".join(str(exc).split())[:200]
+                ev["detail"] = (
+                    f"evaluator raised {type(exc).__name__}: {message} (fail closed)"
+                )
+                result = SafetyResult(
+                    False,
+                    candidate,
+                    constraint_id=constraint_id,
+                    violation_type=ERRORED,
+                    evidence=ev,
+                )
         if not result.approved or result.was_clamped:
             self._violations[constraint_id] = self._violations.get(constraint_id, 0) + 1
         return result

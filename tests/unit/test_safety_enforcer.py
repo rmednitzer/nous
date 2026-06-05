@@ -10,13 +10,17 @@ lands.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Mapping
+from typing import Any
 
+import numpy as np
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
 from nous.safety import (
     CLAMPED,
+    ERRORED,
     REFUSED,
     UNREGISTERED,
     SafetyEnforcer,
@@ -72,6 +76,10 @@ def test_floor_threshold_refuses_below() -> None:
         (float("inf"), {"t": 5.0}),
         (float("-inf"), {"t": 5.0}),
         (5.0, {"t": float("inf")}),
+        (0.0, {"t": False}),
+        (True, {"t": 5.0}),
+        (0.0, {"t": np.bool_(False)}),
+        (np.bool_(True), {"t": 5.0}),
     ],
 )
 def test_floor_threshold_fails_closed(candidate: object, evidence: dict[str, object]) -> None:
@@ -107,6 +115,9 @@ def test_ceiling_clamp_clamps_over_ceiling() -> None:
         (float("inf"), {"cap": 60.0}),
         (40.0, {"cap": float("inf")}),
         (float("nan"), {"cap": 60.0}),
+        (40.0, {"cap": True}),
+        (False, {"cap": 60.0}),
+        (40.0, {"cap": np.bool_(True)}),
     ],
 )
 def test_ceiling_clamp_fails_closed(candidate: object, evidence: dict[str, object]) -> None:
@@ -141,6 +152,23 @@ def test_enforcer_unregistered_constraint_fails_closed() -> None:
     assert not result.approved
     assert result.violation_type == UNREGISTERED
     assert enforcer.violation_count("SC-99") == 1
+
+
+def test_enforcer_wraps_evaluator_exception_as_fail_closed() -> None:
+    enforcer = SafetyEnforcer()
+
+    def _boom(candidate: Any, evidence: Mapping[str, Any]) -> SafetyResult:
+        raise RuntimeError("bad evidence\nshape that is malformed")
+
+    enforcer.register("SC-X", _boom)
+    result = enforcer.check("SC-X", 1.0, evidence={"anything": 1})
+    assert not result.approved
+    assert result.violation_type == ERRORED
+    assert enforcer.violation_count("SC-X") == 1
+    detail = str(result.evidence["detail"])
+    assert "evaluator raised" in detail
+    assert "RuntimeError" in detail
+    assert "\n" not in detail  # normalized to a single audit-safe line
 
 
 def test_enforcer_counts_refusals_and_clamps_but_not_passes() -> None:
