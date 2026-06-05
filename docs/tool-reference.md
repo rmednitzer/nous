@@ -473,19 +473,6 @@ tool registry.
 ```json
 {
   "properties": {
-    "context": {
-      "anyOf": [
-        {
-          "additionalProperties": true,
-          "type": "object"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Context"
-    },
     "trigger": {
       "title": "Trigger",
       "type": "string"

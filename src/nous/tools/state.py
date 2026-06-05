@@ -11,9 +11,11 @@ injecting a scenario action through ``scenario_inject``.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from mcp.server.fastmcp import Context, FastMCP
+
+from ..state.machine import is_terminal
 
 if TYPE_CHECKING:
     from ..server import Nous, WrapFn
@@ -90,37 +92,46 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         return await wrap("state_history", {"limit": limit}, ctx, _work)
 
     @mcp.tool()
-    async def state_transition(
-        trigger: str,
-        context: dict[str, Any] | None = None,
-        ctx: Context | None = None,
-    ) -> str:
+    async def state_transition(trigger: str, ctx: Context | None = None) -> str:
         """Drive the mission-posture FSM through one explicit trigger (ADR 0031).
 
-        Fires ``trigger`` against the current FSM mode: ``ready`` leaves
-        BOOT for IDLE, then ``mission`` / ``relay`` / ``monitoring`` / ``c2``
-        go operational, and ``safe`` / ``shutdown`` are the failsafe exits.
-        Entries into an operational mode are safety-gated (SC-2 thermal
-        headroom, SC-8 power reserve); the engine merges its live safety
-        context under any caller-supplied ``context`` so the gates judge real
+        Fires ``trigger`` against the current FSM mode: ``ready`` leaves BOOT
+        for IDLE, then ``mission`` / ``relay`` / ``monitoring`` / ``c2`` go
+        operational, and ``safe`` is the recoverable failsafe hold. Entries
+        into an operational mode are safety-gated (SC-2 thermal headroom, SC-8
+        power reserve) against the engine's live context. The tool takes no
+        caller-supplied safety context on purpose, so a controller cannot
+        spoof the gate inputs: an operational entry always judges the real
         thermal and state-of-charge values.
 
-        Returns ``{"ok", "mode", "reason"}``. ``ok=false`` covers both an
-        unknown transition for the current mode and a guard refusal, so the
-        controller reads a single observable outcome instead of catching an
-        exception. Tier T2 (stateful): a successful call changes the device
-        posture and is audited like every other call.
+        The terminal triggers ``fault`` and ``shutdown`` are refused here.
+        They reach the reset-only FAULT / SHUTDOWN modes, which are the
+        province of the irreversible (T3) ``state_force_fault`` /
+        ``state_force_shutdown`` tools, not this reversible (T2) control
+        surface; refusing them keeps the T2 / T3 split intact under guarded
+        mode (where ``state_transition`` may be the only allowlisted write).
+
+        Returns a JSON object ``{"ok": bool, "mode": str, "reason": str}``.
+        ``ok`` is ``false`` for an unknown table edge, a refused terminal
+        trigger, or a guard refusal, so the controller reads one observable
+        outcome instead of catching an exception. Tier T2 (stateful): a
+        successful call changes the device posture and is audited.
         """
 
         async def _work() -> str:
-            ok, mode, reason = app.engine.request_transition(
-                trigger, context=context or None
-            )
+            destination = app.engine.fsm.would(trigger)
+            if destination is not None and is_terminal(destination):
+                return json.dumps(
+                    {
+                        "ok": False,
+                        "mode": app.engine.state.mode.value,
+                        "reason": (
+                            f"{trigger!r} reaches terminal {destination.value!r}; "
+                            "use the irreversible state_force_* tool"
+                        ),
+                    }
+                )
+            ok, mode, reason = app.engine.request_transition(trigger)
             return json.dumps({"ok": ok, "mode": mode.value, "reason": reason})
 
-        return await wrap(
-            "state_transition",
-            {"trigger": trigger, "context": dict(context or {})},
-            ctx,
-            _work,
-        )
+        return await wrap("state_transition", {"trigger": trigger}, ctx, _work)

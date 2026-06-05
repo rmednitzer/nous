@@ -22,7 +22,7 @@ Controller seams:
   fix is lost (lets a scenario express "the IMU is biased north at 0.5
   m/s while you're under cover").
 
-The full GNSS+IMU fusion filter is BL-026; this subsystem feeds the v0.1
+The full GNSS+IMU fusion filter is BL-061; this subsystem feeds the v0.1
 pass-through :class:`~nous.estimators.position.PositionKalman`.
 """
 

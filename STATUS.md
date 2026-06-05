@@ -136,10 +136,10 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 738 tests pass at HEAD: the 2026-06-06
+  feature branch before merge. 739 tests pass at HEAD: the 2026-06-06
   cadence audit ([`docs/audit-2026-06-06.md`](docs/audit-2026-06-06.md))
   measured 736 green at the start of the pass (correcting a stale `645`
-  this section had carried) and added two with the `state_transition`
+  this section had carried) and added three with the `state_transition`
   tool (ADR 0031); 580 at the 2026-06-01 daily-anchor audit
   ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md), BL-031 / ADR 0026).
 - `make docs-build` (`mkdocs build --strict`) is warning-free.

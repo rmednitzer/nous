@@ -29,14 +29,24 @@ with no registered tool able to advance it; the entire posture set
 ## Decision
 
 Register `state_transition` in `src/nous/tools/state.py` as a T2 tool that
-wraps `Engine.request_transition`. It accepts a `trigger` and an optional
-`context` map and returns `{ok, mode, reason}`; `ok=false` covers both an
-unknown table edge and a safety-gate refusal, so the controller reads one
-observable outcome instead of catching an exception. The engine merges its
-live safety context under any caller-supplied `context`, so the SC-2 thermal
-and SC-8 power gates judge real values on every operational entry.
+wraps `Engine.request_transition`. It accepts a `trigger` and returns
+`{ok, mode, reason}`; `ok=false` covers an unknown table edge, a refused
+terminal trigger, and a safety-gate refusal, so the controller reads one
+observable outcome instead of catching an exception.
 
-This is purely the missing tool-surface wiring. `policy.py` is unchanged
+Two deliberate restrictions keep the tool honest and within its tier. It
+exposes no caller-supplied safety context: `request_transition` merges a
+caller map *over* the live thermal and power readings, so accepting one would
+let a caller spoof the SC-2 / SC-8 gate inputs and enter an operational mode
+despite unsafe live state. And it refuses the terminal `fault` and `shutdown`
+triggers, whose destinations are the reset-only FAULT / SHUTDOWN modes: those
+belong to the irreversible (T3) `state_force_fault` / `state_force_shutdown`
+tools, so letting a T2 tool reach them would undercut the tier split (acute
+under guarded mode, where `state_transition` may be the only allowlisted
+write). The recoverable `safe` hold stays available, since SAFE is not
+terminal.
+
+Beyond those two guards this is the missing tool-surface wiring. `policy.py` is unchanged
 (`state_transition` was already in `_STATEFUL_TOOLS`), and the FSM, the
 `SafetyEnforcer`, and `request_transition` are untouched. ADR 0021 scopes
 tool wiring as low blast radius provided the tier is correct, which it is. The
@@ -47,8 +57,9 @@ keep in sync.
 ## Consequences
 
 A controller can drive the mission posture directly (`ready` to IDLE, then the
-gated `mission` / `relay` / `monitoring` / `c2`, and the ungated `safe` /
-`shutdown` failsafe exits) rather than constructing a scenario injection. The
+gated `mission` / `relay` / `monitoring` / `c2`, and the recoverable `safe`
+hold) rather than constructing a scenario injection. The terminal `fault` and
+`shutdown` transitions stay with the T3 force tools. The
 registered surface grows from thirty to thirty-one tools. Every call is
 audited like any other, guard refusals are recorded with their reason, and the
 hash-chain and daily-anchor properties are unaffected. The live device is no
