@@ -2,7 +2,7 @@
 
 **Module:** `src/nous/self_model/` (`assess.py`, `viability.py`, `explain.py`)
 
-**Backlog:** BL-018, BL-035, BL-050
+**Backlog:** BL-018, BL-035
 
 ## Inputs
 
