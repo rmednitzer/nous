@@ -32,7 +32,7 @@ those observations back into a calibrated belief state. A self-model layer
 aggregates those beliefs into capability claims the controller can reason
 about.
 
-The codebase is meant to be small, hand-written, and easy to inspect. It is
+The codebase is meant to be small and easy to inspect. It is
 not a wrapper around a commercial sim; it is a deliberate, opinionated
 reimplementation of just enough physics, control, and standards-interop to
 support useful conversations with a controller. Every numeric curve lives in
