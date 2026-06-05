@@ -26,7 +26,7 @@ this mapping until the L1 rollout (PRs #29..#37) merges to `main`.
 | --- | --- | --- |
 | power | `filtered` | Li-ion + Peukert + SoC Kalman; per-cell internal resistance and thermal derate from profile. |
 | apu | `filtered` | Solar MPPT, methanol fuel cell, vehicle tether, USB-C PD; per-source Kalman. |
-| state machine | `filtered` | Explicit transition table, ADR 0004. Includes SC-2 thermal headroom and low-power guards (ADR 0018). Strictly speaking not an estimator; included because its outputs are auditable. |
+| state machine | `filtered` | Explicit transition table, ADR 0004. Entry gates enforce SC-2 thermal headroom and SC-8 power reserve through a runtime enforcer (ADR 0018/0022); the engine auto-safes on tick when a constraint is violated (ADR 0027/0028). Strictly speaking not an estimator; included because its outputs are auditable. |
 | comms_state | `filtered` | Derived each tick from the live per-link envelope; aggregator drives the FSM `state.comms_state`. |
 | operator_state | `parametric` | Carried by the FSM; threshold logic over biometrics. Physiology grounding (BL-040) is planned. |
 | thermal | `filtered` | Two-state lumped model (junction + enclosure); per-channel Kalman with shrinking covariance (BL-005, BL-028). |

@@ -6,15 +6,17 @@
 
 ## Inputs
 
-- Junction temperature samples from `ThermalSubsystem.sensor_obs()`.
-- Ambient temperature samples.
-- Compute load from `ComputeSubsystem.sensor_obs()` (drives the
-  process model).
+- Junction and enclosure temperature samples from
+  `ThermalSubsystem.sensor_obs()`. The process model adds a fixed
+  per-second process variance on `predict`; it is not driven by compute
+  load.
 
 ## Outputs
 
-`Estimate` with `point = {junction_c, ambient_c, headroom_c}` and a
-3x3 covariance.
+`Estimate` with `point = {junction_c, enclosure_c}` and a matching
+two-entry diagonal covariance (one variance per channel, no
+cross-covariance). `ambient_c` and `headroom_c` are subsystem-level reads,
+not filter state. A full multi-state thermal filter is deferred to BL-028.
 
 ## SLA
 

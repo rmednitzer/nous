@@ -7,12 +7,9 @@ will use.
 ## Install + run
 
 ```bash
-# install once, in your home directory
-npx @modelcontextprotocol/inspector
-
 # from the nous repo, spawn nous and connect Inspector to it via stdio
 make install   # if you have not already
-NOUS_HOME=/tmp/nous-inspector mcp-inspector nous serve
+NOUS_HOME=/tmp/nous-inspector npx @modelcontextprotocol/inspector nous serve
 ```
 
 A browser tab opens. Switch transport to **stdio**, command to
@@ -24,15 +21,17 @@ A browser tab opens. Switch transport to **stdio**, command to
    and its input schema. Confirm the surface matches what you expected.
 2. **Call `device_info`.** Zero args; should return the active profile
    name, version, and configured policy mode.
-3. **Call `state_get`.** Returns the current FSM `Mode`, last transition
-   reason, and a timestamp.
+3. **Call `state_get`.** Returns the current FSM `mode`, `tick`, `ts_s`,
+   and the derived `operator_state` / `comms_state` (each with a reason).
+   The transition history is on `state_history`.
 4. **Call `power_status`.** Returns primary battery SoC, instantaneous
    load, and remaining-runtime estimate from the estimator.
 5. **Call `apu_status`.** Lists all auxiliary power inputs with their
    active/inactive state and current output (W).
 6. **Call `self_model_assess` with `{"question": "endurance"}`.** Returns
-   a structured capability estimate (point, p5/p50/p95, confidence,
-   drivers).
+   capability claims plus an `explanation` string. The calibrated
+   p5/p50/p95 quantiles and confidence arrive with the full self-model
+   layer (BL-018).
 
 Each call writes one record to `$NOUS_HOME/audit.jsonl`; tail it in
 another shell to watch the audit trail in real time::

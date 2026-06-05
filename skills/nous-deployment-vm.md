@@ -32,8 +32,9 @@ in `deploy/` is idempotent.
 ## Verify
 
 - `journalctl -u nous.service -f` follows the server.
-- `curl -s http://127.0.0.1:8088/sse` should return a streamable
-  response (HTTP transport only).
+- The streamable-HTTP MCP transport is mounted at the root (`/`), not
+  `/sse`. `curl -s http://127.0.0.1:8088/.well-known/oauth-authorization-server`
+  is the simplest unauthenticated reachability probe (HTTP transport only).
 - `tail -f $NOUS_HOME/audit.jsonl` shows audit lines as tools fire.
 - `device_info.audit.degraded` must be `false`. If it is `true`, the
   JSONL sink could not be opened; consult `skills/nous-troubleshooting.md`.

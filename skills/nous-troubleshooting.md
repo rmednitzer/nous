@@ -17,10 +17,14 @@ The runner caught an exception. The audit record is still written;
 the next-best signal is the prefix (`error <class>`). Check the
 underlying subsystem with its `*_status` read.
 
-## `inference_cloud` returns `CapExhausted`
+## The Anthropic daily cap is exhausted
 
-The Anthropic daily cap is exhausted. Fall back to `inference_local`.
-The cap rolls over at UTC midnight.
+`anthropic_cap_status` reports `exhausted: true` (and `remaining: 0`) once
+the daily cap is reached; the cloud path then fails closed with
+`CapExhausted`. Fall back to `inference_local`. The cap rolls over at UTC
+midnight. (The `inference_cloud` tool that consumes the cap is classified
+in `policy.py` but not yet registered; `anthropic_cap_status` is the signal
+to branch on today.)
 
 ## The audit log looks empty
 

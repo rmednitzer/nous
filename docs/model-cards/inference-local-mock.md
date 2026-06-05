@@ -1,6 +1,7 @@
 # Model card: Inference (local mock)
 
-**Module:** `src/nous/server.py::inference_local`
+**Module:** `src/nous/tools/inference.py::inference_local` (subsystem:
+`src/nous/subsystems/inference.py`)
 
 **Backlog:** BL-013, BL-043 (real local model in L3)
 
@@ -10,22 +11,26 @@
 
 ## Outputs
 
-A structured JSON response with `{model, prompt_len, response}`. The
-`response` echoes the first 160 characters of the prompt prefixed with
-`[local mock]`. The mock does *not* run a model.
+A structured JSON response. Alongside `{model, prompt_len}` the tool merges
+the subsystem result, so the full payload is `{model, prompt_len, n_tokens,
+latency_s, energy_j, rate_tok_per_s, saturated, response}`. The `response`
+echoes the first 160 characters of the prompt prefixed with
+`[nous-local-mock tokens=N]`. The mock does *not* run a model.
 
 ## SLA
 
-- Latency: fixed at a configurable simulator-time delay (default
-  20 ms wall, 200 ms simulated).
-- Energy: derived from the hardware profile's compute curve.
+- Latency: token-rate-driven, `n_tokens / tok_per_s_p50` from the profile's
+  local-inference curve (zero when the rate is zero); not a fixed delay.
+- Energy: derived from the profile's per-token energy figure
+  (`energy_j_per_tok`).
 
 ## Known failure modes
 
 - The mock is not a model. It cannot answer questions; it cannot
-  reason. Treat its outputs as deterministic placeholders. Calling
-  `inference_local` should be paired with `inference_cloud` for any
-  scenario that needs an actual response.
+  reason. Treat its outputs as deterministic placeholders. For a scenario
+  that needs an actual response, use the cloud path (the Anthropic client
+  gated by the daily cap; the `inference_cloud` tool is classified but not
+  yet registered, see STATUS L1).
 
 ## Replacement
 

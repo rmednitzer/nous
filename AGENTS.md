@@ -32,7 +32,8 @@ the tool surface is FastMCP.
 - [docs/architecture.md](docs/architecture.md) -- how the pieces fit together
 - [docs/backlog.md](docs/backlog.md) -- BL-NNN tracker (work is referenced by id)
 - [docs/adr/](docs/adr/) -- decision records, numbered, kept short
-- [src/nous/server.py](src/nous/server.py) -- tool surface and audited runner
+- [src/nous/tools/](src/nous/tools/) -- the MCP tool surface (per-capability modules, ADR 0021)
+- [src/nous/server.py](src/nous/server.py) -- FastMCP wiring and lifespan; [src/nous/runner.py](src/nous/runner.py) is the audited runner
 - [src/nous/engine.py](src/nous/engine.py) -- tick loop orchestration
 
 ## Conventions
@@ -102,9 +103,12 @@ the tool surface is FastMCP.
 ### Adding an MCP tool
 
 1. Decide the tier (default T0 unless the tool mutates state).
-2. Register it in `src/nous/server.py`. The handler must call
-   `app.run(tool=..., ctx=..., audit_args=..., policy_text=..., work=...)`.
-3. Update `docs/tool-reference.md` (or regenerate it with `make schema`).
+2. Register it in the matching `src/nous/tools/<capability>.py` module's
+   `register(mcp, app, wrap)` (ADR 0021). The handler wraps its work
+   coroutine with `await wrap(tool_name, args, ctx, work)` so the runner
+   records an audit line.
+3. Classify it in `src/nous/policy.py`, then regenerate
+   `docs/tool-reference.md` with `make schema`.
 
 ### Adding a scenario
 

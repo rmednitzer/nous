@@ -12,8 +12,10 @@
 
 ## Outputs
 
-`Estimate` with `point = {lat, lon, alt_m, vN, vE, vU}` and a 6x6
-covariance serialised to JSON.
+`Estimate` with `point = {lat, lon, alt_m, v_lat, v_lon, v_alt_m}` (the
+three velocity channels are degrees-per-second per axis) and a six-entry
+diagonal covariance keyed by the same names. The filter stays diagonal (no
+cross-covariance); a full 6x6 EKF with cross terms is deferred to BL-061.
 
 ## SLA
 

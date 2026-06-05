@@ -17,8 +17,10 @@ MISB decoder symmetry, N16 hypothesis-db hygiene doc, N17 bandit
 suppressions catalog), plus first implementation increments for
 the N8 ADR programme (ADR 0019 seed plus clock seams, ADR 0020
 subsystem-physics invariants). ADR 0021 (per-subsystem tool
-modules) and ADR 0022 (runtime safety enforcer) remain
-unimplemented; each is its own multi-PR programme. Live-VM
+modules) and ADR 0022 (runtime safety enforcer) were unimplemented
+at that revision; both have since landed (ADR 0021 across PRs
+#88-93, ADR 0022 in #94), with ADR 0027 (tick-driven auto-safing)
+and ADR 0028 (FSM failsafe reachability) following. Live-VM
 action (N2) unchanged. See
 [`docs/audit-2026-05-27b.md`](docs/audit-2026-05-27b.md) for
 the delta and [`docs/audit-2026-05-27.md`](docs/audit-2026-05-27.md)
@@ -81,8 +83,8 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0025` | stable (decisions, not implementations) |
-| `docs/stpa/01..09` | in-progress |
+| `docs/adr/0001` through `docs/adr/0028` | stable (decisions, not implementations) |
+| `docs/stpa/01..10` | in-progress |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
 
@@ -90,14 +92,14 @@ re-audit).
 
 | Component | State | Notes |
 |-----------|-------|-------|
-| `src/nous/server.py` (FastMCP wiring + tool surface) | in-progress | Thirty tools registered across device telemetry (T0), the ten subsystem reads (T0), self-model and estimators (T0), interop schema + codec (T0/T1), local inference + cap (T0/T1), scenarios and configuration (T2), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
+| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Thirty tools registered across device telemetry (T0), the ten subsystem reads (T0), self-model and estimators (T0), interop schema + codec (T0/T1), local inference + cap (T0/T1), scenarios and configuration (T2), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
 | `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). Changes require an ADR. |
 | `src/nous/audit_anchor.py` | in-progress | Daily anchor over the chain head (ADR 0026 / BL-031): `AnchorLog` appends one hash-linked anchor per UTC day, and `verify_anchors` (the `audit_anchor_verify` tool) cross-checks anchored heads against the chain across logrotate segments to catch tail truncation within the retention window. |
 | `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
-| `src/nous/safety/enforcer.py` | in-progress | Runtime safety-enforcer foundation (ADR 0022): `SafetyEnforcer.check` returns a structured `SafetyResult` (approved / clamped / evidence) and counts per-constraint and total violations; `floor_threshold` and `ceiling_clamp` cover the SC-2 refusal and throttle-clamp shapes. Generic seam, no constraints pre-registered; the audit mirror (`Tier.SAFETY`) and the first FSM caller land in the wiring PR. |
+| `src/nous/safety/enforcer.py` | in-progress | Runtime safety enforcer (ADR 0022): `SafetyEnforcer.check` returns a structured `SafetyResult` (approved / clamped / evidence) and counts per-constraint and total violations; `floor_threshold` and `ceiling_clamp` cover the SC-2 refusal and throttle-clamp shapes. The FSM now routes its entry gates through it (SC-2 thermal + SC-8 power, registered via `register_fsm_constraints`), the engine mirrors every check to the audit log under `Tier.SAFETY`, and the tick-driven auto-safing (ADR 0027/0028) drives the FSM toward safety on a violation. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. |
 | `src/nous/engine.py` | in-progress | Tick orchestration; all ten L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. |
 | `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |

@@ -2,10 +2,10 @@
 
 Generated from the FastMCP registry by
 `scripts/gen_tool_reference.py`. Hand-editing this file is
-discouraged: regenerate with `make tool-reference` or
-`uv run python scripts/gen_tool_reference.py`. The `--check`
-flag is wired into CI so a drift between source and docs fails the
-build.
+discouraged: regenerate with `make schema` or
+`uv run python scripts/gen_tool_reference.py`. The docs site
+regenerates this file at build time; run `make schema` to refresh
+the committed copy after changing a tool's signature or docstring.
 
 | Tool | Tier | Summary |
 |------|------|---------|
@@ -20,7 +20,7 @@ build.
 | `comms_status` | T0 | Comms subsystem: per-link envelope, live RSSI, loss, throughput, age. |
 | `compute_status` | T0 | Compute subsystem: load fraction, electrical draw, throttling. |
 | `device_health` | T0 | Engine snapshot: tick, ts_s, mode, operator/comms state. |
-| `device_info` | T0 | Report nous version, profile, transport, policy mode, audit and anchor paths. |
+| `device_info` | T0 | Report nous version, profile, transport, policy, audit/anchor paths, safety posture. |
 | `inference_local` | T1 | Local-path inference. |
 | `inference_status` | T0 | Inference subsystem totals: calls, tokens, joules, last latency. |
 | `interop_decode` | T1 | Decode a hex-encoded payload via the named adapter (BL-041 / T1). |
