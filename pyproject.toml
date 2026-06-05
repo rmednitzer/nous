@@ -123,7 +123,11 @@ module = [
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["nous.server"]
+# The FastMCP ``@mcp.tool()`` decorator erases parameter types and the
+# SDK ``Context`` is an unparameterised generic. ADR 0021 moves the tool
+# handlers from ``server.py`` into ``nous.tools.*``, so the relaxed
+# generics/decorator settings the tool surface needs follow them there.
+module = ["nous.server", "nous.tools.*"]
 disallow_untyped_decorators = false
 disallow_any_generics = false
 
