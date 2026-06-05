@@ -1,8 +1,11 @@
 """SQLite-backed persistence with WAL journalling.
 
-The simulator writes per-tick state transitions and one audit-mirror row
-per tool call. The default database lives at ``$NOUS_HOME/state.db`` and is
-opened with WAL so reads and writes do not block each other.
+The simulator writes per-tick state transitions to the live
+``state_transitions`` table. The ``audit_entries`` table is reserved schema,
+not a live mirror: the authoritative audit trail is the append-only JSONL sink
+(``nous.audit.AuditLogger``). See :class:`AuditEntry` and ADR 0002 (BL-065).
+The default database lives at ``$NOUS_HOME/state.db`` and is opened with WAL so
+reads and writes do not block each other.
 """
 
 from __future__ import annotations
@@ -37,6 +40,20 @@ class StateTransition(SQLModel, table=True):
 
 
 class AuditEntry(SQLModel, table=True):
+    """Reserved schema for a future SQLite mirror of the JSONL audit log.
+
+    Not live (BL-065): nothing in the engine or the audit path instantiates
+    ``AuditEntry``. The authoritative audit trail is the append-only JSONL sink
+    (``nous.audit.AuditLogger``), which ships off-host and carries the BL-016
+    hash chain and the BL-031 daily anchor; duplicating it into SQLite would
+    add a second tamper surface and a sync invariant for no current consumer
+    (the audit tools read the JSONL, and only ``state_transitions`` is queried
+    from SQLite). The Alembic baseline still creates the table so the schema is
+    ready; the mirror is wired later, carrying ``prev_hash`` / ``entry_hash``
+    so both surfaces verify, only if a controller needs SQL over the audit
+    (ADR 0002, 2026-06-05 update).
+    """
+
     __tablename__ = "audit_entries"
 
     id: int | None = Field(default=None, primary_key=True)
