@@ -12,12 +12,13 @@ The artefacts follow the canonical numbered layout:
 | [01-purpose.md](01-purpose.md) | Why we are running an STPA on the simulator. |
 | [02-system-boundary.md](02-system-boundary.md) | What is inside the system, what is outside. |
 | [03-losses.md](03-losses.md) | Top-level losses (L-1 .. L-4). |
-| [04-hazards.md](04-hazards.md) | Hazardous system states (H-1 .. H-7). |
+| [04-hazards.md](04-hazards.md) | Hazardous system states (H-1 .. H-8). |
 | [05-safety-constraints.md](05-safety-constraints.md) | Safety constraints derived from hazards. |
 | [06-control-structure.md](06-control-structure.md) | The control diagram (mermaid). |
 | [07-unsafe-control-actions.md](07-unsafe-control-actions.md) | UCA table per controller. |
 | [08-loss-scenarios.md](08-loss-scenarios.md) | Loss scenarios for the chosen UCAs. |
 | [09-derived-requirements.md](09-derived-requirements.md) | Requirements that flow back into the backlog. |
+| [10-fsm-constraints-mapping.md](10-fsm-constraints-mapping.md) | FSM transition to constraint to hazard traceability. |
 
 The STPA is treated as a *work in progress*; the v0.1 pass covers the
 top losses, hazards, control structure, and a first pass at unsafe
