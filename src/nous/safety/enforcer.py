@@ -19,10 +19,10 @@ constraints pre-registered: it governs the seam, not which constraints are
 enforced. A call site registers its constraint and then checks against it.
 
 Fail-closed posture. Both shipped evaluators refuse on missing, non-numeric,
-or NaN context rather than waving the candidate through, and a `check` against
-an unregistered constraint id refuses as well. A safety check that cannot
-establish the evidence it needs denies the action; it never approves by
-default.
+or non-finite context (NaN or infinity) rather than waving the candidate
+through, and a `check` against an unregistered constraint id refuses as well.
+A safety check that cannot establish the evidence it needs denies the action;
+it never approves by default.
 """
 
 from __future__ import annotations
@@ -52,8 +52,9 @@ UNREGISTERED = "unregistered"
 class SafetyResult:
     """The outcome of one constraint check.
 
-    ``value`` is the value the caller should use: the candidate when
-    ``approved`` and not clamped, the clamped value when ``was_clamped``.
+    ``value`` is the value the caller should use: the candidate as a finite
+    float when ``approved`` and not clamped, the clamped ceiling when
+    ``was_clamped``. A fail-closed refusal echoes the original candidate.
     ``violation_type`` is ``None`` on a clean pass and one of the module
     constants (``REFUSED`` / ``CLAMPED`` / ``UNREGISTERED``) when the
     constraint fired. ``evidence`` carries the inputs and a ``detail`` string
@@ -87,8 +88,11 @@ def floor_threshold(
 
     The SC-2 shape: a value must stay at or above a floor (thermal headroom
     at or above its threshold). Refuses fail-closed when either side is
-    absent, non-numeric, or NaN. The returned :class:`SafetyResult` leaves
-    ``constraint_id`` blank; :meth:`SafetyEnforcer.check` stamps it.
+    absent, non-numeric, or non-finite. On any path where coercion succeeded,
+    ``SafetyResult.value`` is the candidate as a finite float, so a downstream
+    caller never receives a numeric string. The returned
+    :class:`SafetyResult` leaves ``constraint_id`` blank;
+    :meth:`SafetyEnforcer.check` stamps it.
     """
 
     def _evaluate(candidate: Any, evidence: Mapping[str, Any]) -> SafetyResult:
@@ -100,8 +104,8 @@ def floor_threshold(
         value, floor = parsed
         if value < floor:
             ev["detail"] = f"{label} {value:.2f}{unit} below threshold {floor:.2f}{unit}"
-            return SafetyResult(False, candidate, violation_type=REFUSED, evidence=ev)
-        return SafetyResult(True, candidate, evidence=ev)
+            return SafetyResult(False, value, violation_type=REFUSED, evidence=ev)
+        return SafetyResult(True, value, evidence=ev)
 
     return _evaluate
 
@@ -114,7 +118,9 @@ def ceiling_clamp(
     The throttle shape: a value above its ceiling is reduced to the ceiling
     and returned as ``approved`` with ``was_clamped`` set, so the caller uses
     the safe value while the clamp is recorded as a constraint firing.
-    Refuses fail-closed when either side is absent, non-numeric, or NaN.
+    Refuses fail-closed when either side is absent, non-numeric, or
+    non-finite. On a clean pass ``SafetyResult.value`` is the candidate as a
+    finite float, matching the float returned on a clamp.
     """
 
     def _evaluate(candidate: Any, evidence: Mapping[str, Any]) -> SafetyResult:
@@ -129,7 +135,7 @@ def ceiling_clamp(
             return SafetyResult(
                 True, cap, was_clamped=True, violation_type=CLAMPED, evidence=ev
             )
-        return SafetyResult(True, candidate, evidence=ev)
+        return SafetyResult(True, value, evidence=ev)
 
     return _evaluate
 
@@ -138,8 +144,11 @@ def _coerce_pair(a: Any, b: Any) -> tuple[float, float] | str:
     """Coerce ``(a, b)`` to a finite-float pair, or return a fail-closed reason.
 
     Returns the parsed floats on success and a short reason string
-    (``unknown`` / ``non-numeric`` / ``NaN``) when either side is absent,
-    not a number, or NaN.
+    (``unknown`` / ``non-numeric`` / ``non-finite``) when either side is
+    absent, not a number, or not finite (NaN or infinity). A safety seam
+    treats an infinity as a broken estimator, not a valid measurement: an
+    infinite headroom must not approve and an infinite ceiling must not wave
+    an unbounded value through.
     """
     if a is None or b is None:
         return "unknown"
@@ -147,8 +156,8 @@ def _coerce_pair(a: Any, b: Any) -> tuple[float, float] | str:
         fa, fb = float(a), float(b)
     except (TypeError, ValueError):
         return "non-numeric"
-    if math.isnan(fa) or math.isnan(fb):
-        return "NaN"
+    if not math.isfinite(fa) or not math.isfinite(fb):
+        return "non-finite"
     return (fa, fb)
 
 

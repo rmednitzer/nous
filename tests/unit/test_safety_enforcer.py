@@ -69,6 +69,9 @@ def test_floor_threshold_refuses_below() -> None:
         (5.0, {"t": "cold"}),
         (float("nan"), {"t": 5.0}),
         (5.0, {"t": float("nan")}),
+        (float("inf"), {"t": 5.0}),
+        (float("-inf"), {"t": 5.0}),
+        (5.0, {"t": float("inf")}),
     ],
 )
 def test_floor_threshold_fails_closed(candidate: object, evidence: dict[str, object]) -> None:
@@ -94,10 +97,34 @@ def test_ceiling_clamp_clamps_over_ceiling() -> None:
     assert "clamped to" in str(result.evidence["detail"])
 
 
-def test_ceiling_clamp_fails_closed_on_missing_ceiling() -> None:
-    result = ceiling_clamp("cap")(90.0, {})
+@pytest.mark.parametrize(
+    ("candidate", "evidence"),
+    [
+        (90.0, {}),
+        (None, {"cap": 60.0}),
+        ("hot", {"cap": 60.0}),
+        (90.0, {"cap": "warm"}),
+        (float("inf"), {"cap": 60.0}),
+        (40.0, {"cap": float("inf")}),
+        (float("nan"), {"cap": 60.0}),
+    ],
+)
+def test_ceiling_clamp_fails_closed(candidate: object, evidence: dict[str, object]) -> None:
+    result = ceiling_clamp("cap")(candidate, evidence)
     assert not result.approved
     assert result.violation_type == REFUSED
+
+
+def test_evaluators_return_finite_float_value_for_numeric_string() -> None:
+    floored = floor_threshold("t")("9.0", {"t": 5.0})
+    assert floored.approved
+    assert isinstance(floored.value, float)
+    assert floored.value == 9.0
+
+    passed = ceiling_clamp("cap")("40.0", {"cap": 60.0})
+    assert passed.approved
+    assert isinstance(passed.value, float)
+    assert passed.value == 40.0
 
 
 def test_enforcer_stamps_constraint_id() -> None:
