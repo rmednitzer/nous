@@ -1,8 +1,9 @@
 # Model cards
 
 A model card documents what a model claims, what it costs, and where
-it breaks. The cards below cover the current estimators and the local
-inference mock. Each card answers the same questions:
+it breaks. The cards below cover the current estimators, the local
+inference mock, and the self-model capability layer. Each card answers
+the same questions:
 
 - **Inputs.** What the estimator consumes.
 - **Outputs.** What the estimator produces.
@@ -27,3 +28,4 @@ inference mock. Each card answers the same questions:
 | Biometrics Kalman | [estimator-biometrics-kalman.md](estimator-biometrics-kalman.md) |
 | Comms particle filter | [estimator-comms-particle.md](estimator-comms-particle.md) |
 | Inference local mock | [inference-local-mock.md](inference-local-mock.md) |
+| Self-model (capability assessment) | [self-model.md](self-model.md) |

@@ -71,6 +71,7 @@ nav:
       - Biometrics Kalman: model-cards/estimator-biometrics-kalman.md
       - Comms Particle: model-cards/estimator-comms-particle.md
       - Inference local mock: model-cards/inference-local-mock.md
+      - Self-model: model-cards/self-model.md
   - ADRs:
       - Index: adr/README.md
       - "0000 Template": adr/0000-template.md
