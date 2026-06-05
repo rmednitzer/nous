@@ -30,3 +30,4 @@
 | 0025 | [Tamper-evident audit hash chain](0025-tamper-evident-audit-hash-chain.md) | Accepted | 2026-06-01 |
 | 0026 | [Daily audit anchor](0026-daily-audit-anchor.md) | Accepted | 2026-06-04 |
 | 0027 | [Condition-driven auto-safing on tick](0027-condition-driven-auto-safing.md) | Accepted | 2026-06-05 |
+| 0028 | [FSM failsafe reachability, classification, and label-driven safing](0028-fsm-reachability-and-label-driven-safing.md) | Accepted | 2026-06-05 |

@@ -43,6 +43,7 @@ from .state.machine import (
     Mode,
     StateMachine,
     build_fsm_enforcer,
+    is_operational,
 )
 from .state.operator_state import OperatorState
 from .state.operator_state import derive as derive_operator
@@ -80,16 +81,12 @@ class EngineState:
     last_capabilities: dict[str, float] = field(default_factory=dict)
 
 
-# Modes the tick-driven auto-safing loop fires from (ADR 0027). Already-safed
-# and terminal modes are excluded so the loop only ever moves toward safety.
-_OPERATIONAL_MODES = frozenset(
-    {Mode.MISSION, Mode.RELAY, Mode.MONITORING, Mode.C2}
-)
-
-# Priority-ordered safing rules (ADR 0027): (constraint id, safety-context
-# candidate key, preferred safer trigger). Power before thermal: depletion is
-# the least recoverable hazard, and the load LOW_POWER sheds also relieves
-# heat. A mode without the preferred trigger falls back to ``degrade``.
+# Priority-ordered enforcer safing rules (ADR 0027): (constraint id,
+# safety-context candidate key, preferred safer trigger). Power before
+# thermal: depletion is the least recoverable hazard, and the load LOW_POWER
+# sheds also relieves heat. A mode without the preferred trigger falls back
+# to ``degrade``. Operator-incapacitation (ADR 0028) outranks both and the
+# comms-denied rule trails them; see ``_safing_decision``.
 _SAFING_RULES: tuple[tuple[str, str, str], ...] = (
     (SC_POWER_RESERVE, "soc_pct", "low_power"),
     (SC_THERMAL_HEADROOM, "thermal_headroom_c", "thermal_limit"),
@@ -357,41 +354,71 @@ class Engine:
             )
 
     def _auto_safe(self) -> None:
-        """Drive the FSM toward a safer mode when a constraint trips (ADR 0027).
+        """Drive the FSM toward a safer mode when a safety condition trips.
 
-        Evaluated each tick, from an operational mode only. The shared enforcer
-        judges the live reported-state safety context; the first violated
-        constraint, in priority order, fires one transition toward safety
-        (the mode's preferred safer trigger when it exists, else ``degrade``).
-        The move is one-way: recovery stays controller-gated, so there is no
-        oscillation to debounce.
+        Evaluated each tick, from an operational mode only (ADR 0027, ADR
+        0028). The highest-priority tripped condition fires one transition
+        toward safety: its preferred trigger when the table offers one from
+        the current mode, else ``degrade``. The move is one-way; recovery
+        stays controller-gated, so there is no oscillation to debounce.
         """
-        if self.state.mode not in _OPERATIONAL_MODES:
+        if not is_operational(self.state.mode):
             return
         ctx = self._safety_context()
+        decision = self._safing_decision(ctx)
+        if decision is None:
+            return
+        preferred, safety, reason = decision
+        trigger = preferred if self.fsm.can(preferred) else "degrade"
+        if not self.fsm.can(trigger):
+            return
+        prev = self.fsm.current
+        try:
+            new = self.fsm.transition(trigger, context=ctx)
+        except (GuardDenied, ValueError):
+            return
+        self._audit_auto_safe(trigger, prev, new, safety, reason)
+        self._record_transition(
+            prev,
+            trigger,
+            new,
+            reason=f"auto-safe: {safety['constraint_id']} -> {trigger}",
+        )
+        self.state.mode = new
+
+    def _safing_decision(
+        self, ctx: Mapping[str, Any]
+    ) -> tuple[str, dict[str, Any], str] | None:
+        """Highest-priority tripped safing condition, or ``None`` when safe.
+
+        Returns ``(preferred_trigger, safety_projection, reason)``. Operator
+        incapacitation outranks the device hazards (a full ``safe`` posture
+        when no one can supervise); then SC-8 power reserve and SC-2 thermal
+        headroom through the enforcer; then a fully denied comms link
+        degrades. The label-driven conditions read the derived state labels,
+        which are estimator-sourced by construction.
+        """
+        if self.state.operator_state is OperatorState.INCAPACITATED:
+            reason = self.state.operator_state_reason or "operator incapacitated"
+            return "safe", _label_safety("operator", reason, ctx), reason
         for constraint_id, candidate_key, preferred in _SAFING_RULES:
             result = self.safety.check(
                 constraint_id, ctx.get(candidate_key), evidence=ctx
             )
-            if result.approved:
-                continue
-            trigger = preferred if self.fsm.can(preferred) else "degrade"
-            if not self.fsm.can(trigger):
-                return
-            prev = self.fsm.current
-            try:
-                new = self.fsm.transition(trigger, context=ctx)
-            except (GuardDenied, ValueError):
-                return
-            self._audit_auto_safe(trigger, prev, new, result)
-            self._record_transition(
-                prev, trigger, new, reason=f"auto-safe: {constraint_id} -> {trigger}"
-            )
-            self.state.mode = new
-            return
+            if not result.approved:
+                return preferred, _safety_result_to_dict(result), result.reason
+        if self.state.comms_state is CommsState.DENIED:
+            reason = self.state.comms_state_reason or "comms denied"
+            return "degrade", _label_safety("comms", reason, ctx), reason
+        return None
 
     def _audit_auto_safe(
-        self, trigger: str, frm: Mode, to: Mode, result: SafetyResult
+        self,
+        trigger: str,
+        frm: Mode,
+        to: Mode,
+        safety: dict[str, Any],
+        reason: str,
     ) -> None:
         """Mirror one auto-safing decision to the audit log under Tier.SAFETY."""
         if self.audit is None:
@@ -404,12 +431,12 @@ class Engine:
                     "trigger": trigger,
                     "from": frm.value,
                     "to": to.value,
-                    "constraint_id": result.constraint_id,
+                    "constraint_id": safety.get("constraint_id", ""),
                 },
                 output=f"auto-safe {frm.value} -> {to.value} ({trigger})",
                 denied=True,
-                decision_reason=result.reason,
-                safety=_safety_result_to_dict(result),
+                decision_reason=reason,
+                safety=safety,
             )
         )
 
@@ -674,6 +701,28 @@ def _safety_result_to_dict(result: SafetyResult) -> dict[str, Any]:
         "violation_type": result.violation_type,
         "value": _json_safe(result.value),
         "evidence": {k: _json_safe(v) for k, v in evidence.items()},
+    }
+
+
+def _label_safety(
+    constraint_id: str, detail: str, evidence: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Projection for a label-driven safing decision (operator/comms; ADR 0028).
+
+    Mirrors the shape of :func:`_safety_result_to_dict` so every ``auto_safe``
+    audit record reads the same, even when the trigger is a derived state
+    label rather than an enforcer constraint. The evidence is redacted on the
+    same allowlist as the enforcer path.
+    """
+    redacted = {k: _json_safe(v) for k, v in redact(dict(evidence)).items()}
+    redacted["detail"] = detail
+    return {
+        "constraint_id": constraint_id,
+        "approved": False,
+        "was_clamped": False,
+        "violation_type": "refused",
+        "value": None,
+        "evidence": redacted,
     }
 
 

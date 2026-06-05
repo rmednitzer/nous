@@ -32,6 +32,9 @@ __all__ = [
     "Mode",
     "StateMachine",
     "build_fsm_enforcer",
+    "is_impaired",
+    "is_operational",
+    "is_terminal",
     "register_fsm_constraints",
 ]
 
@@ -78,13 +81,20 @@ _TRANSITIONS: dict[tuple[Mode, str], Mode] = {
     (Mode.MISSION, "thermal_limit"): Mode.THERMAL_LIMIT,
     (Mode.MISSION, "low_power"): Mode.LOW_POWER,
     (Mode.MISSION, "complete"): Mode.IDLE,
+    (Mode.MISSION, "safe"): Mode.SAFE,
     (Mode.MISSION, "fault"): Mode.FAULT,
     (Mode.RELAY, "degrade"): Mode.DEGRADED,
     (Mode.RELAY, "complete"): Mode.IDLE,
+    (Mode.RELAY, "safe"): Mode.SAFE,
+    (Mode.RELAY, "fault"): Mode.FAULT,
     (Mode.MONITORING, "degrade"): Mode.DEGRADED,
     (Mode.MONITORING, "complete"): Mode.IDLE,
+    (Mode.MONITORING, "safe"): Mode.SAFE,
+    (Mode.MONITORING, "fault"): Mode.FAULT,
     (Mode.C2, "degrade"): Mode.DEGRADED,
     (Mode.C2, "complete"): Mode.IDLE,
+    (Mode.C2, "safe"): Mode.SAFE,
+    (Mode.C2, "fault"): Mode.FAULT,
     (Mode.DEGRADED, "recover"): Mode.MISSION,
     (Mode.DEGRADED, "safe"): Mode.SAFE,
     (Mode.DEGRADED, "fault"): Mode.FAULT,
@@ -105,6 +115,35 @@ _TRANSITIONS: dict[tuple[Mode, str], Mode] = {
     (Mode.FAULT, "reset"): Mode.STOWED,
     (Mode.SHUTDOWN, "reset"): Mode.STOWED,
 }
+
+
+# Lightweight mode classification (ADR 0028). Operational modes run a
+# workload and are where auto-safing fires from; impaired modes are
+# safed-but-recoverable; terminal modes leave only via ``reset``. The rest
+# (STOWED, BOOT, IDLE, SAFE) are transitional or holding states that belong
+# to no bucket.
+_OPERATIONAL_MODES = frozenset(
+    {Mode.MISSION, Mode.RELAY, Mode.MONITORING, Mode.C2}
+)
+_IMPAIRED_MODES = frozenset(
+    {Mode.DEGRADED, Mode.THERMAL_LIMIT, Mode.LOW_POWER}
+)
+_TERMINAL_MODES = frozenset({Mode.SHUTDOWN, Mode.FAULT})
+
+
+def is_operational(mode: Mode) -> bool:
+    """True for a mode that runs a workload (MISSION/RELAY/MONITORING/C2)."""
+    return mode in _OPERATIONAL_MODES
+
+
+def is_impaired(mode: Mode) -> bool:
+    """True for a safed-but-recoverable mode (DEGRADED/THERMAL_LIMIT/LOW_POWER)."""
+    return mode in _IMPAIRED_MODES
+
+
+def is_terminal(mode: Mode) -> bool:
+    """True for a mode that leaves only via ``reset`` (SHUTDOWN/FAULT)."""
+    return mode in _TERMINAL_MODES
 
 
 SC_THERMAL_HEADROOM = "SC-2"

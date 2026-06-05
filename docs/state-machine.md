@@ -43,6 +43,7 @@ stateDiagram-v2
     mission --> thermal_limit: thermal_limit
     mission --> low_power: low_power
     mission --> idle: complete
+    mission --> safe: safe
     mission --> fault: fault
     degraded --> mission: recover
     degraded --> safe: safe
@@ -56,6 +57,11 @@ stateDiagram-v2
     fault --> stowed: reset
     shutdown --> stowed: reset
 ```
+
+For readability the diagram draws `mission`'s exits in full; `relay`,
+`monitoring`, and `c2` share the same `degrade`, `complete`, `safe`,
+`fault`, and `shutdown` exits (ADR 0028 added the `safe` and `fault` ones
+so every operational mode can reach the fail-safe state directly).
 
 ## Safety gates
 
@@ -96,16 +102,35 @@ debounce. Each auto-safing decision is recorded to `state_history` with an
 `auto-safe:` reason and mirrored to the audit log under `Tier.SAFETY`
 (tool `auto_safe`).
 
-The label-driven conditions (comms `DENIED`, operator `INCAPACITATED`)
-and the per-mode `thermal_limit`/`low_power` edges that would let
-`relay`/`monitoring`/`c2` reach the precise safer mode land with the
-reachability work, alongside direct `safe` from every operational mode.
+ADR 0028 adds the two label-driven conditions on top of the enforcer
+rules. An operator derived as `INCAPACITATED` takes the full `safe` posture
+and outranks the device hazards (when no one can supervise, the safest hold
+is right regardless of the pack or the junction); a fully denied comms link
+(`DENIED`) degrades. The full priority is operator, then power (SC-8), then
+thermal (SC-2), then comms. `relay`/`monitoring`/`c2` keep the `degrade`
+fallback for the enforcer rules rather than gaining their own
+`thermal_limit`/`low_power` edges; ADR 0028 records why.
+
+## Reachability and classification
+
+ADR 0028 makes the fail-safe state directly reachable from work: every
+operational mode gains a `safe` trigger to `safe`, and `relay`/`monitoring`/
+`c2` gain a `fault` trigger. The load-bearing invariant, checked
+exhaustively in `tests/unit/test_fsm_reachability.py`, is that every
+operational or impaired mode reaches `safe` in exactly one trigger, and
+none of the `safe` or `fault` edges are gated. `docs/stpa/10-fsm-constraints-mapping.md`
+traces each safety-relevant transition to its constraint and hazard.
+
+`state/machine.py` exposes `is_operational`, `is_impaired`, and
+`is_terminal` so the engine and the verification suite share one vocabulary
+for classifying a mode. Operational modes run a workload; impaired modes
+(`degraded`, `thermal_limit`, `low_power`) are safed but recoverable;
+terminal modes (`shutdown`, `fault`) leave only via `reset`.
 
 ## Vocabularies
 
 `OperatorState` and `CommsState` are derived from estimator state and are
-summary labels the controller reads (see ADR-0006). The tick-driven
-auto-safing (ADR 0027) does not consume them: it judges only SC-8 and SC-2
-from the numeric safety context. The label-driven auto-triggers (comms
-`DENIED`, operator `INCAPACITATED`) are deferred to the reachability work,
-which adds the direct `safe` edges they need.
+summary labels the controller reads (see ADR-0006). Auto-safing consumes
+two of their levels: `OperatorState.INCAPACITATED` and `CommsState.DENIED`
+drive the label-driven safing above. The other levels remain advisory
+labels the controller branches on.

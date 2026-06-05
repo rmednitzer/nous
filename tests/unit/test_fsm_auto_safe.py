@@ -20,7 +20,9 @@ from nous.audit import AuditLogger
 from nous.db import StateTransitionLog, init_db
 from nous.engine import Engine
 from nous.policy import Tier
-from nous.state.machine import Mode
+from nous.state.comms_state import CommsState
+from nous.state.machine import Mode, is_operational
+from nous.state.operator_state import OperatorState
 
 _OK_ENTRY = {
     "thermal_headroom_c": 30.0,
@@ -151,6 +153,48 @@ def test_auto_safe_recovery_is_controller_gated(tmp_nous_home: Path) -> None:
     ok, mode, _reason = eng.request_transition("recover")
     assert ok
     assert mode is Mode.MISSION
+
+
+def test_auto_safe_operator_incapacitated_enters_safe(tmp_nous_home: Path) -> None:
+    # ADR 0028: an incapacitated operator takes the full safe posture, using
+    # the direct safe edge the reachability work added.
+    eng = _engine_in("mission")
+    eng.state.operator_state = OperatorState.INCAPACITATED
+    eng._auto_safe()
+    assert eng.state.mode is Mode.SAFE
+
+
+def test_auto_safe_comms_denied_degrades(tmp_nous_home: Path) -> None:
+    eng = _engine_in("relay")
+    eng.state.comms_state = CommsState.DENIED
+    eng._auto_safe()
+    assert eng.state.mode is Mode.DEGRADED
+
+
+def test_auto_safe_operator_outranks_device_hazards(tmp_nous_home: Path) -> None:
+    # Incapacitated operator plus a critical pack: the operator condition
+    # wins and the device takes the full safe posture, not LOW_POWER.
+    eng = _engine_in("mission")
+    eng.state.operator_state = OperatorState.INCAPACITATED
+    eng.power.set_soc_pct(2.0)
+    eng._auto_safe()
+    assert eng.state.mode is Mode.SAFE
+
+
+@pytest.mark.parametrize("trigger", ["mission", "relay", "monitoring", "c2"])
+def test_auto_safe_converges_from_every_operational_mode(
+    tmp_nous_home: Path, trigger: str
+) -> None:
+    # From any operational mode a critical pack moves the FSM out of the
+    # operational set in one step, and a second evaluation is a no-op: the
+    # one-way loop reaches a fixed point.
+    eng = _engine_in(trigger)
+    eng.power.set_soc_pct(2.0)
+    eng._auto_safe()
+    assert not is_operational(eng.state.mode)
+    settled = eng.state.mode
+    eng._auto_safe()
+    assert eng.state.mode is settled
 
 
 def test_auto_safe_records_transition_reason(tmp_nous_home: Path, tmp_path: Path) -> None:
