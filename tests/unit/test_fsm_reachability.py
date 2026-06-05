@@ -25,15 +25,19 @@ from nous.state.machine import (
 
 
 def _reachable_from(start: Mode) -> set[Mode]:
-    """Breadth-first closure of modes reachable from ``start`` over the table."""
+    """Transitive closure of modes reachable from ``start`` over the table.
+
+    Traversal order is irrelevant to the closure, so this walks the frontier
+    as a LIFO stack.
+    """
     seen = {start}
-    queue = [start]
-    while queue:
-        current = queue.pop()
+    stack = [start]
+    while stack:
+        current = stack.pop()
         for (frm, _trigger), to in _TRANSITIONS.items():
             if frm == current and to not in seen:
                 seen.add(to)
-                queue.append(to)
+                stack.append(to)
     return seen
 
 

@@ -92,6 +92,12 @@ _SAFING_RULES: tuple[tuple[str, str, str], ...] = (
     (SC_THERMAL_HEADROOM, "thermal_headroom_c", "thermal_limit"),
 )
 
+# Constraint ids for the label-driven safing conditions (ADR 0028). The
+# ``label:`` namespace keeps them from being mistaken for the SC-* STPA
+# constraint ids that share the audit record's ``constraint_id`` field.
+_LABEL_OPERATOR = "label:operator-incapacitated"
+_LABEL_COMMS = "label:comms-denied"
+
 
 class Engine:
     """Tick-driven simulator orchestrator."""
@@ -400,7 +406,7 @@ class Engine:
         """
         if self.state.operator_state is OperatorState.INCAPACITATED:
             reason = self.state.operator_state_reason or "operator incapacitated"
-            return "safe", _label_safety("operator", reason, ctx), reason
+            return "safe", _label_safety(_LABEL_OPERATOR, reason, ctx), reason
         for constraint_id, candidate_key, preferred in _SAFING_RULES:
             result = self.safety.check(
                 constraint_id, ctx.get(candidate_key), evidence=ctx
@@ -409,7 +415,7 @@ class Engine:
                 return preferred, _safety_result_to_dict(result), result.reason
         if self.state.comms_state is CommsState.DENIED:
             reason = self.state.comms_state_reason or "comms denied"
-            return "degrade", _label_safety("comms", reason, ctx), reason
+            return "degrade", _label_safety(_LABEL_COMMS, reason, ctx), reason
         return None
 
     def _audit_auto_safe(
