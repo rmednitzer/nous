@@ -29,7 +29,7 @@ Last reviewed: 2026-05-23.
 | biometrics | `filtered` (HR / core temp / hydration / cognitive load with physiological clamps) | `filtered` (multi-channel Kalman; physiology grounding is BL-040) | [estimator](../model-cards/estimator-biometrics-kalman.md) | BL-011, BL-029, BL-040 |
 | comms | `filtered` (per-link envelopes drive FSM `state.comms_state` each tick) | `parametric` (per-link belief tracker; full transition particle filter is BL-030) | [estimator](../model-cards/estimator-comms-particle.md) | BL-012, BL-030, BL-048 |
 | inference | `parametric` (local-path with profile-derived latency / energy / capacity; cloud path deferred) | n/a | [local mock](../model-cards/inference-local-mock.md) | BL-013, BL-043 |
-| self model | `planned` (assess returns the engine's `last_capabilities` dict; layer wiring is BL-018) | n/a | `planned` | BL-018, BL-035 |
+| self model | `parametric` (assess / viability emit calibrated `p5`/`p50`/`p95` claims via Monte Carlo over the estimator posteriors; learned self-model is future) | n/a | `planned` | BL-018, BL-035 |
 
 ## Cross-cutting surfaces
 

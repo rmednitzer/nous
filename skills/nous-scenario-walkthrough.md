@@ -17,8 +17,8 @@ description: Run a scenario YAML end to end and interpret the engine snapshots.
 4. Sample `device_health`, `state_get`, and the relevant subsystem
    read tools at the cadence the scenario expects.
 5. When the scenario completes, call `self_model_assess` to summarise
-   capability outcomes (the layer wiring is BL-018; until then the
-   tool returns the engine's `last_capabilities` dict).
+   capability outcomes; it returns one claim per capability with calibrated
+   `p5`/`p50`/`p95` quantiles, a `confidence`, and the `drivers`.
 
 If the scenario stalls (no FSM transitions for many ticks), check
 `audit_summary` for refusals: the policy mode may be too tight, or

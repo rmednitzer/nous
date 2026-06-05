@@ -9,10 +9,12 @@ The self-model layer aggregates estimator state into capability claims
 with calibrated quantiles. Call `self_model_assess` with a question
 (or no question for the default summary).
 
-> The full wiring is BL-018 (planned). Today `self_model_assess`
-> returns the engine's `last_capabilities` dict (empty at boot) plus
-> a stub note. The fields below describe the contract that lands with
-> BL-018, not the current behaviour.
+> `self_model_assess` is wired (BL-018). It returns one claim per
+> capability today, each carrying a `point`, calibrated `p5`/`p50`/`p95`
+> quantiles (Monte Carlo over the estimator posteriors by default, BL-035),
+> a `confidence`, and the `drivers`, plus an `explanation` string. Read the
+> quantiles: a `confidence` near 0 or a collapsed band means low
+> information, not absence.
 
 ## Fields
 

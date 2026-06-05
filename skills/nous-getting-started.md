@@ -47,8 +47,10 @@ anything.
   joules, last latency) and the profile's nominal capacity.
 - `self_estimator_status` reports live covariances for every
   estimator that has landed.
-- `self_model_assess` returns capability claims (calibrated
-  quantiles arrive with the full self-model layer in L1; BL-018).
+- `self_model_assess` returns one claim per capability, each with a
+  `point`, calibrated `p5`/`p50`/`p95` quantiles, a `confidence`, and the
+  `drivers`. Read the `p5` band and `confidence` for viability and safety
+  decisions; do not treat a wide band as if it were the point estimate.
 
 ## Deployment posture
 

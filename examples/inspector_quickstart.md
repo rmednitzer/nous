@@ -29,9 +29,8 @@ A browser tab opens. Switch transport to **stdio**, command to
 5. **Call `apu_status`.** Lists all auxiliary power inputs with their
    active/inactive state and current output (W).
 6. **Call `self_model_assess` with `{"question": "endurance"}`.** Returns
-   capability claims plus an `explanation` string. The calibrated
-   p5/p50/p95 quantiles and confidence arrive with the full self-model
-   layer (BL-018).
+   one claim per capability (`point`, calibrated `p5`/`p50`/`p95`,
+   `confidence`, `drivers`) plus an `explanation` string.
 
 Each call writes one record to `$NOUS_HOME/audit.jsonl`; tail it in
 another shell to watch the audit trail in real time::
