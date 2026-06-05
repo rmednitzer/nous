@@ -34,6 +34,7 @@ stateDiagram-v2
     stowed --> boot: boot
     boot --> idle: ready
     boot --> fault: fault
+    boot --> shutdown: shutdown
     idle --> mission: mission
     idle --> relay: relay
     idle --> monitoring: monitoring
@@ -47,15 +48,19 @@ stateDiagram-v2
     mission --> idle: complete
     mission --> safe: safe
     mission --> fault: fault
+    mission --> shutdown: shutdown
     degraded --> idle: recover
     degraded --> safe: safe
     degraded --> fault: fault
+    degraded --> shutdown: shutdown
     thermal_limit --> idle: cool
     thermal_limit --> safe: safe
     thermal_limit --> fault: fault
+    thermal_limit --> shutdown: shutdown
     low_power --> idle: recover
     low_power --> safe: safe
     low_power --> fault: fault
+    low_power --> shutdown: shutdown
     safe --> idle: recover
     safe --> fault: fault
     safe --> shutdown: shutdown

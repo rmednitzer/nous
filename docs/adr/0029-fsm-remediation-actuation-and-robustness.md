@@ -109,7 +109,9 @@ also where actuation hangs, so a future entry action has one home.
 Harder: the FSM mode now has a side effect (load), so a test that drives a
 workload across an auto-safe must account for the cap; the recovery target
 change touches several tests and the showcase scenarios (regenerated). The
-compute subsystem gains a second ceiling.
+compute subsystem gains a second ceiling. The transition table grows from
+forty-five entries to forty-seven (the two new `IDLE` failsafe edges); ADR
+0030 later takes it to fifty.
 
 Accepted limitations (documented, not fixed here): the `device_info.safety`
 violation counter still aggregates entry-gate refusals and the per-tick
