@@ -107,8 +107,8 @@ Sparklines are over resampled buckets; high to the right is high value.
 | at_min | action | outcome |
 | ---: | --- | --- |
 | 0 | `state_transition` (trigger=monitoring) | applied: mode -> monitoring |
-| 5 | `inject_sensor_drift` (source=position, lat_bias_m=4.0) | skipped: action 'inject_sensor_drift' not yet wired (BL-014) |
-| 25 | `inject_sensor_drift` (source=position, lat_bias_m=0.0) | skipped: action 'inject_sensor_drift' not yet wired (BL-014) |
+| 5 | `inject_sensor_drift` (source=position, north_mps=0.1) | skipped: action 'inject_sensor_drift' not yet wired (BL-014) |
+| 25 | `inject_sensor_drift` (source=position, north_mps=0.0) | skipped: action 'inject_sensor_drift' not yet wired (BL-014) |
 | 55 | `state_transition` (trigger=complete) | applied: mode -> idle |
 
 ## Artefacts
