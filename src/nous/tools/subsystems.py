@@ -1,0 +1,326 @@
+"""Subsystem telemetry reads (ADR 0021).
+
+The eleven read-only (T0) subsystem status tools, grouped into one module per
+the capability-grouping option of ADR 0021's revisit trigger: they are uniform
+telemetry reads (truth plus calibrated estimate), so one ``subsystems`` module
+is more legible than ten one-tool files. Handler bodies and docstrings are
+byte-faithful to the inline ``server.py`` definitions they replace, so the
+registered tool surface does not change. (``inference_status`` stays with
+``inference_local`` in the inference module.)
+"""
+
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING
+
+from mcp.server.fastmcp import Context, FastMCP
+
+if TYPE_CHECKING:
+    from ..server import Nous, WrapFn
+
+
+def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
+    """Register the subsystem telemetry reads on ``mcp``."""
+
+    @mcp.tool()
+    async def power_status(ctx: Context | None = None) -> str:
+        """Battery state-of-charge, draw, projected endurance."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.power.truth())
+            estimate = app.engine.power_est.state()
+            payload = {
+                "soc_pct": round(truth["soc_pct"], 3),
+                "voltage_v": round(truth["voltage_v"], 3),
+                "current_a": round(truth["current_a"], 4),
+                "load_w": round(truth["load_w"], 3),
+                "charge_offered_w": round(truth["charge_offered_w"], 3),
+                "charge_accepted_w": round(truth["charge_accepted_w"], 3),
+                "remaining_wh": round(truth["remaining_wh"], 3),
+                "endurance_min_p50": (
+                    None
+                    if truth["endurance_min"] is None
+                    else round(truth["endurance_min"], 2)
+                ),
+                "flag": truth["flag"],
+                "estimate": {
+                    "soc_pct": round(estimate.point["soc_pct"], 3),
+                    "soc_pct_sigma": round(
+                        estimate.covariance["soc_pct"] ** 0.5, 4
+                    ),
+                    "voltage_v": round(estimate.point["voltage_v"], 3),
+                },
+            }
+            return json.dumps(payload)
+
+        return await wrap("power_status", {}, ctx, _work)
+
+    @mcp.tool()
+    async def apu_status(ctx: Context | None = None) -> str:
+        """Auxiliary-power-unit state (solar, fuel cell, vehicle, USB-C PD)."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.apu.truth())
+            estimate = app.engine.apu_est.state()
+            payload = {
+                "solar_w": round(truth["solar_w"], 3),
+                "fuelcell_w": round(truth["fuelcell_w"], 3),
+                "vehicle_w": round(truth["vehicle_w"], 3),
+                "usbc_w": round(truth["usbc_w"], 3),
+                "total_w": round(truth["total_w"], 3),
+                "fuelcell_fuel_g": round(truth["fuel_g"], 3),
+                "fuelcell_fuel_pct": round(truth["fuel_pct"], 3),
+                "vehicle_connected": truth["vehicle_connected"],
+                "usbc_connected": truth["usbc_connected"],
+                "usbc_profile_w": round(truth["usbc_profile_w"], 3),
+                "estimate": {
+                    "total_w": round(estimate.point["total_w"], 3),
+                    "total_w_sigma": round(
+                        estimate.covariance["total_w"] ** 0.5, 4
+                    ),
+                },
+            }
+            return json.dumps(payload)
+
+        return await wrap("apu_status", {}, ctx, _work)
+
+    @mcp.tool()
+    async def thermal_status(ctx: Context | None = None) -> str:
+        """Two-state thermal model (junction + enclosure + ambient)."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.thermal.truth())
+            estimate = app.engine.thermal_est.state()
+            payload = {
+                "junction_c": round(truth["junction_c"], 3),
+                "enclosure_c": round(truth["enclosure_c"], 3),
+                "ambient_c": round(truth["ambient_c"], 3),
+                "load_w": round(truth["load_w"], 3),
+                "headroom_c": round(truth["headroom_c"], 3),
+                "throttling": truth["throttling"],
+                "junction_temp_throttle": round(truth["junction_temp_throttle"], 3),
+                "junction_temp_max": round(truth["junction_temp_max"], 3),
+                "estimate": {
+                    "junction_c": round(estimate.point["junction_c"], 3),
+                    "junction_c_sigma": round(
+                        estimate.covariance["junction_c"] ** 0.5, 4
+                    ),
+                    "enclosure_c": round(estimate.point["enclosure_c"], 3),
+                    "enclosure_c_sigma": round(
+                        estimate.covariance["enclosure_c"] ** 0.5, 4
+                    ),
+                },
+            }
+            return json.dumps(payload)
+
+        return await wrap("thermal_status", {}, ctx, _work)
+
+    @mcp.tool()
+    async def compute_status(ctx: Context | None = None) -> str:
+        """Compute subsystem: load fraction, electrical draw, throttling."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.compute.truth())
+            estimate = app.engine.compute_est.state()
+            payload = {
+                "load_pct": round(truth["load_pct"], 3),
+                "requested_load_pct": round(truth["requested_load_pct"], 3),
+                "draw_w": round(truth["draw_w"], 3),
+                "draw_w_idle": round(truth["draw_w_idle"], 3),
+                "draw_w_load": round(truth["draw_w_load"], 3),
+                "throttled": truth["throttled"],
+                "saturated": truth["saturated"],
+                "tok_per_s_capacity": round(truth["tok_per_s_capacity"], 3),
+                "estimate": {
+                    "load_pct": round(estimate.point["load_pct"], 3),
+                    "load_pct_sigma": round(
+                        estimate.covariance["load_pct"] ** 0.5, 4
+                    ),
+                    "draw_w": round(estimate.point["draw_w"], 3),
+                    "draw_w_sigma": round(
+                        estimate.covariance["draw_w"] ** 0.5, 4
+                    ),
+                },
+            }
+            return json.dumps(payload)
+
+        return await wrap("compute_status", {}, ctx, _work)
+
+    @mcp.tool()
+    async def storage_status(ctx: Context | None = None) -> str:
+        """Storage subsystem: capacity, used, wear, write rate."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.storage.truth())
+            estimate = app.engine.storage_est.state()
+            payload = {
+                "capacity_gib": round(truth["capacity_gib"], 3),
+                "used_gib": round(truth["used_gib"], 3),
+                "free_gib": round(truth["free_gib"], 3),
+                "used_pct": round(truth["used_pct"], 3),
+                "wear_pct": round(truth["wear_pct"], 4),
+                "lifetime_physical_gib": round(truth["lifetime_physical_gib"], 3),
+                "write_rate_gib_per_s": round(truth["write_rate_gib_per_s"], 4),
+                "at_capacity": truth["at_capacity"],
+                "worn_out": truth["worn_out"],
+                "estimate": {
+                    "used_gib": round(estimate.point["used_gib"], 3),
+                    "used_gib_sigma": round(
+                        estimate.covariance["used_gib"] ** 0.5, 4
+                    ),
+                    "wear_pct": round(estimate.point["wear_pct"], 4),
+                    "wear_pct_sigma": round(
+                        estimate.covariance["wear_pct"] ** 0.5, 4
+                    ),
+                },
+            }
+            return json.dumps(payload)
+
+        return await wrap("storage_status", {}, ctx, _work)
+
+    @mcp.tool()
+    async def comms_state(ctx: Context | None = None) -> str:
+        """Comms-stack summary (per ADR-0006)."""
+
+        async def _work() -> str:
+            label, reason = app.engine.comms.derive_state()
+            links = [link.model_dump() for link in app.engine.comms.link_estimates()]
+            return json.dumps(
+                {
+                    "state": label.value,
+                    "reason": reason,
+                    "links": links,
+                }
+            )
+
+        return await wrap("comms_state", {}, ctx, _work)
+
+    @mcp.tool()
+    async def comms_status(ctx: Context | None = None) -> str:
+        """Comms subsystem: per-link envelope, live RSSI, loss, throughput, age."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.comms.truth())
+            label, reason = app.engine.comms.derive_state()
+            payload = {
+                "state": label.value,
+                "reason": reason,
+                "link_count": len(truth["links"]),
+                "links": truth["links"],
+            }
+            return json.dumps(payload)
+
+        return await wrap("comms_status", {}, ctx, _work)
+
+    @mcp.tool()
+    async def position_status(ctx: Context | None = None) -> str:
+        """Position subsystem: lat/lon/alt ground truth, fix state, drift."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.position.truth())
+            estimate = app.engine.position_est.state()
+            payload = {
+                "lat": round(truth["lat"], 6),
+                "lon": round(truth["lon"], 6),
+                "alt_m": round(truth["alt_m"], 3),
+                "speed_mps": round(truth["speed_mps"], 3),
+                "heading_deg": round(truth["heading_deg"], 3),
+                "vertical_mps": round(truth["vertical_mps"], 3),
+                "has_fix": truth["has_fix"],
+                "dead_reckoning_s": round(truth["dead_reckoning_s"], 3),
+                "fix_rate_hz": round(truth["fix_rate_hz"], 3),
+                "estimate": {
+                    "lat": round(estimate.point.get("lat", 0.0), 6),
+                    "lon": round(estimate.point.get("lon", 0.0), 6),
+                    "alt_m": round(estimate.point.get("alt_m", 0.0), 3),
+                    "lat_sigma": round(
+                        estimate.covariance.get("lat", 0.0) ** 0.5, 8
+                    ),
+                    "lon_sigma": round(
+                        estimate.covariance.get("lon", 0.0) ** 0.5, 8
+                    ),
+                    "alt_sigma_m": round(
+                        estimate.covariance.get("alt_m", 0.0) ** 0.5, 4
+                    ),
+                    "rejected_updates": app.engine.position_est.rejected_updates,
+                },
+            }
+            return json.dumps(payload)
+
+        return await wrap("position_status", {}, ctx, _work)
+
+    @mcp.tool()
+    async def sensors_status(ctx: Context | None = None) -> str:
+        """Environmental sensor pack: ambient temp, humidity, baro pressure."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.sensors.truth())
+            estimate = app.engine.sensors_est.state()
+            payload = {
+                "temp_c": round(truth["temp_c"], 3),
+                "humidity_pct": round(truth["humidity_pct"], 3),
+                "baro_kpa": round(truth["baro_kpa"], 3),
+                "estimate": {
+                    "temp_c": round(estimate.point.get("temp_c", 0.0), 3),
+                    "temp_c_sigma": round(
+                        estimate.covariance.get("temp_c", 0.0) ** 0.5, 4
+                    ),
+                    "humidity_pct": round(
+                        estimate.point.get("humidity_pct", 0.0), 3
+                    ),
+                    "humidity_pct_sigma": round(
+                        estimate.covariance.get("humidity_pct", 0.0) ** 0.5, 4
+                    ),
+                    "baro_kpa": round(estimate.point.get("baro_kpa", 0.0), 3),
+                    "baro_kpa_sigma": round(
+                        estimate.covariance.get("baro_kpa", 0.0) ** 0.5, 4
+                    ),
+                    "rejected_updates": app.engine.sensors_est.rejected_updates,
+                },
+            }
+            return json.dumps(payload)
+
+        return await wrap("sensors_status", {}, ctx, _work)
+
+    @mcp.tool()
+    async def biometrics_status(ctx: Context | None = None) -> str:
+        """Operator biometrics: heart rate, core temp, hydration, cognitive load."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.biometrics.truth())
+            estimate = app.engine.biometrics_est.state()
+            payload = {
+                "heart_rate_bpm": round(truth["heart_rate_bpm"], 2),
+                "core_temp_c": round(truth["core_temp_c"], 3),
+                "hydration_pct": round(truth["hydration_pct"], 2),
+                "cognitive_load": round(truth["cognitive_load"], 3),
+                "estimate": {
+                    "heart_rate_bpm": round(
+                        estimate.point.get("heart_rate_bpm", 0.0), 2
+                    ),
+                    "heart_rate_bpm_sigma": round(
+                        estimate.covariance.get("heart_rate_bpm", 0.0) ** 0.5, 3
+                    ),
+                    "core_temp_c": round(estimate.point.get("core_temp_c", 0.0), 3),
+                    "core_temp_c_sigma": round(
+                        estimate.covariance.get("core_temp_c", 0.0) ** 0.5, 4
+                    ),
+                    "hydration_pct": round(
+                        estimate.point.get("hydration_pct", 0.0), 2
+                    ),
+                    "hydration_pct_sigma": round(
+                        estimate.covariance.get("hydration_pct", 0.0) ** 0.5, 3
+                    ),
+                    "cognitive_load": round(
+                        estimate.point.get("cognitive_load", 0.0), 3
+                    ),
+                    "cognitive_load_sigma": round(
+                        estimate.covariance.get("cognitive_load", 0.0) ** 0.5, 4
+                    ),
+                    "rejected_updates": app.engine.biometrics_est.rejected_updates,
+                },
+            }
+            return json.dumps(payload)
+
+        return await wrap("biometrics_status", {}, ctx, _work)
