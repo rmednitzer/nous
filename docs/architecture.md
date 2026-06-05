@@ -54,11 +54,13 @@ return body
 
 ## External surfaces
 
-- **MCP tools** -- the seventeen-tool surface is documented in
-  [tool-reference.md](tool-reference.md). The development line has the
-  full L1 read surface (one read tool per subsystem plus estimator
-  summary); mutating tools (scenario load / inject, comms send, state
-  transition) are queued for BL-014 and BL-022.
+- **MCP tools** -- the thirty-tool surface is documented in
+  [tool-reference.md](tool-reference.md). It carries the full L1 read
+  surface (one read tool per subsystem plus estimator summary) plus the
+  mutating tools `scenario_load` / `scenario_inject` / `profile_reload`
+  (T2) and `audit_resync` (T2). A few names stay classified-but-unwired
+  in `policy.py` (e.g. `comms_send`, `state_transition`, `inference_cloud`)
+  pending their subsystems.
 - **OAuth issuer** -- file-backed, single-client by default. The
   Caddyfile template gates `/authorize` and `/.well-known/oauth-*` on
   the operator's CIDR plus the Anthropic ranges.
@@ -84,7 +86,8 @@ See [LIMITATIONS.md](https://github.com/rmednitzer/nous/blob/main/LIMITATIONS.md
   into `Engine.__init__`, ship a model card under
   `docs/model-cards/`. See [AGENTS.md](https://github.com/rmednitzer/nous/blob/main/AGENTS.md#canonical-recipes).
 - A new estimator: pair it with the subsystem and add a model card.
-- A new MCP tool: register it in `server.py`, classify it in
-  `policy.py`, regenerate `tool-reference.md` with `make schema`.
+- A new MCP tool: register it in the relevant `src/nous/tools/` module
+  (ADR 0021), classify it in `policy.py`, regenerate `tool-reference.md`
+  with `make schema`.
 - A new adapter: implement the `Adapter` Protocol, document its
   conformance posture under `docs/conformance/`.

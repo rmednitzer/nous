@@ -164,11 +164,28 @@ def test_auto_safe_operator_incapacitated_enters_safe(tmp_nous_home: Path) -> No
     assert eng.state.mode is Mode.SAFE
 
 
-def test_auto_safe_comms_denied_degrades(tmp_nous_home: Path) -> None:
-    eng = _engine_in("relay")
+@pytest.mark.parametrize("trigger", ["relay", "c2"])
+def test_auto_safe_comms_denied_degrades_link_modes(
+    tmp_nous_home: Path, trigger: str
+) -> None:
+    eng = _engine_in(trigger)
     eng.state.comms_state = CommsState.DENIED
     eng._auto_safe()
     assert eng.state.mode is Mode.DEGRADED
+
+
+@pytest.mark.parametrize("trigger", ["mission", "monitoring"])
+def test_auto_safe_comms_denied_ignored_outside_link_modes(
+    tmp_nous_home: Path, trigger: str
+) -> None:
+    # ADR 0028 (narrowed): comms-denied only safes the link-bearing modes.
+    # A mission or monitoring run that does not depend on comms is not
+    # degraded by a dead link.
+    eng = _engine_in(trigger)
+    eng.state.comms_state = CommsState.DENIED
+    eng._auto_safe()
+    assert eng.state.mode is not Mode.DEGRADED
+    assert is_operational(eng.state.mode)
 
 
 def test_auto_safe_operator_outranks_device_hazards(tmp_nous_home: Path) -> None:

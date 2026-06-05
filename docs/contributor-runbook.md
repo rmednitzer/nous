@@ -115,9 +115,10 @@ template: same six categories, same prioritisation rubric, same closing
 The first check is the architecture document against the live engine.
 [`docs/architecture.md`](architecture.md) describes a tick that fans
 out across every subsystem and refreshes the self-model. The current
-[`src/nous/engine.py`](https://github.com/rmednitzer/nous/blob/main/src/nous/engine.py) wires power and APU only.
-When the gap widens, either land the wiring or land an explicit
-`capability_matrix` / `fidelity_level` field on `device_info` so a
+[`src/nous/engine.py`](https://github.com/rmednitzer/nous/blob/main/src/nous/engine.py) matches that:
+the tick fans out across all ten subsystems and refreshes the self-model.
+If a gap reopens as fidelity grows, either land the wiring or land an
+explicit `capability_matrix` / `fidelity_level` field on `device_info` so a
 controller can gate behaviour by fidelity. Either way, the review must
 either confirm the docs match the code or file a finding.
 
@@ -359,11 +360,13 @@ T3. T1 is reserved for reversible mutations (e.g. set-then-undo). The
 classification goes in [`src/nous/policy.py`](https://github.com/rmednitzer/nous/blob/main/src/nous/policy.py) at
 registration; conservative defaults err high.
 
-Register the tool in [`src/nous/server.py`](https://github.com/rmednitzer/nous/blob/main/src/nous/server.py).
-The handler must call `app.run(tool=..., ctx=..., audit_args=...,
-policy_text=..., work=...)` so the runner records an audit line. The
-handler should never write to disk directly and should never call
-the Anthropic client without going through
+Register the tool in the matching per-capability module under
+[`src/nous/tools/`](https://github.com/rmednitzer/nous/blob/main/src/nous/tools)
+(ADR 0021); `server.py` only calls each module's `register(mcp, app, wrap)`.
+The handler wraps its work coroutine with `await wrap(tool_name, args, ctx,
+work)` so the runner records an audit line. The handler should never write
+to disk directly and should never call the Anthropic client without going
+through
 [`src/nous/anthropic_client.py`](https://github.com/rmednitzer/nous/blob/main/src/nous/anthropic_client.py).
 
 Update [`docs/tool-reference.md`](tool-reference.md) (or run

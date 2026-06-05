@@ -52,9 +52,9 @@ Sparklines are over resampled buckets; high to the right is high value.
 | tick | t (s) | mode | SoC % | APU W | fuel % |
 | ---: | ---: | --- | ---: | ---: | ---: |
 | 1 | 60 | `c2` | 99.976 | 0.000 | 100.000 |
-| 12 | 720 | `c2` | 99.708 | 0.000 | 100.000 |
-| 24 | 1440 | `c2` | 99.415 | 0.000 | 100.000 |
-| 36 | 2160 | `c2` | 99.123 | 0.000 | 100.000 |
+| 12 | 720 | `degraded` | 99.708 | 0.000 | 100.000 |
+| 24 | 1440 | `degraded` | 99.415 | 0.000 | 100.000 |
+| 36 | 2160 | `degraded` | 99.123 | 0.000 | 100.000 |
 | 48 | 2880 | `degraded` | 98.830 | 0.000 | 100.000 |
 | 60 | 3600 | `mission` | 98.537 | 0.000 | 100.000 |
 | 72 | 4320 | `mission` | 98.243 | 0.000 | 100.000 |
@@ -124,7 +124,7 @@ Sparklines are over resampled buckets; high to the right is high value.
 | 18 | `inject_comms_loss` (link_id=lte, loss_pct=0) | skipped: action 'inject_comms_loss' not yet wired (BL-014) |
 | 35 | `inject_comms_loss` (link_id=lte, loss_pct=100) | skipped: action 'inject_comms_loss' not yet wired (BL-014) |
 | 37 | `inference_request` (prompt=fallback, path=auto) | skipped: action 'inference_request' not yet wired (BL-014) |
-| 40 | `state_transition` (trigger=degrade) | applied: mode -> degraded |
+| 40 | `state_transition` (trigger=degrade) | refused: no transition from 'degraded' on trigger 'degrade' |
 | 45 | `inference_request` (prompt=still local?, path=auto) | skipped: action 'inference_request' not yet wired (BL-014) |
 | 55 | `inject_comms_loss` (link_id=lte, loss_pct=0) | skipped: action 'inject_comms_loss' not yet wired (BL-014) |
 | 56 | `state_transition` (trigger=recover, context={'thermal_headroom_c': 25, 'thermal_headroom_threshold_c': 5}) | applied: mode -> mission |

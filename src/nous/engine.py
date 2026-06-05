@@ -98,6 +98,12 @@ _SAFING_RULES: tuple[tuple[str, str, str], ...] = (
 _LABEL_OPERATOR = "label:operator-incapacitated"
 _LABEL_COMMS = "label:comms-denied"
 
+# Modes whose function depends on a live comms link. Only these auto-safe on
+# a denied link (ADR 0028, narrowed to the approved "link modes" scope): a
+# MISSION or MONITORING run that does not need comms is not degraded by a
+# dead link.
+_LINK_MODES = frozenset({Mode.RELAY, Mode.C2})
+
 
 class Engine:
     """Tick-driven simulator orchestrator."""
@@ -400,9 +406,10 @@ class Engine:
         Returns ``(preferred_trigger, safety_projection, reason)``. Operator
         incapacitation outranks the device hazards (a full ``safe`` posture
         when no one can supervise); then SC-8 power reserve and SC-2 thermal
-        headroom through the enforcer; then a fully denied comms link
-        degrades. The label-driven conditions read the derived state labels,
-        which are estimator-sourced by construction.
+        headroom through the enforcer; then a fully denied comms link degrades
+        the link-bearing modes (``RELAY``/``C2``), whose function depends on
+        it. The label-driven conditions read the derived state labels, which
+        are estimator-sourced by construction.
         """
         if self.state.operator_state is OperatorState.INCAPACITATED:
             reason = self.state.operator_state_reason or "operator incapacitated"
@@ -413,7 +420,10 @@ class Engine:
             )
             if not result.approved:
                 return preferred, _safety_result_to_dict(result), result.reason
-        if self.state.comms_state is CommsState.DENIED:
+        if (
+            self.state.mode in _LINK_MODES
+            and self.state.comms_state is CommsState.DENIED
+        ):
             reason = self.state.comms_state_reason or "comms denied"
             return "degrade", _label_safety(_LABEL_COMMS, reason, ctx), reason
         return None

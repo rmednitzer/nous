@@ -49,10 +49,13 @@ behaviours need an external model.
 
 ## L4. Anthropic call cap
 
-**State.** Every Anthropic call from `inference_cloud` is counted against a
-daily cap stored in `$NOUS_HOME/.anthropic_daily_count`. The default cap is
-100 calls per UTC day. Once exhausted, `inference_cloud` refuses until the
-counter rolls over.
+**State.** The Anthropic daily cap is implemented in `anthropic_client.py`
+and counted against `$NOUS_HOME/.anthropic_daily_count`; the default cap is
+100 calls per UTC day, and once exhausted the client fails closed with
+`CapExhausted` until the counter rolls over. The cap state is exposed today
+through the `anthropic_cap_status` tool (T0); the `inference_cloud` tool that
+will consume the cap is classified in `policy.py` but not yet registered (the
+cloud inference path is deferred, see STATUS L1).
 
 **Implication.** A scenario that depends on more than 100 cloud inferences
 per day will stop producing cloud outputs. The local mock (`inference_local`)
@@ -119,8 +122,10 @@ calibrated for Li-ion only.
 
 ## L9. Mocked local inference
 
-**State.** `inference_local` runs a mock that returns a fixed structured
-response after a configurable latency. No actual model executes.
+**State.** `inference_local` runs a mock: it returns a synthetic response
+that echoes the prompt head, with latency, energy, and token-rate figures
+derived from the profile's local-inference curve (latency is
+`n_tokens / tok_per_s_p50`, not a fixed delay). No actual model executes.
 
 **Implication.** Latency, energy, and thermal contribution numbers reported
 by the inference subsystem are *derived from the profile YAML*, not measured

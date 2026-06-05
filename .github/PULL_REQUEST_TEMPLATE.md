@@ -17,7 +17,7 @@
 
 ## Checklist
 
-- [ ] Follows [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md)
+- [ ] Follows [AGENTS.md](../AGENTS.md) and [CLAUDE.md](../CLAUDE.md)
 - [ ] `make check` passes (ruff, mypy --strict, pytest)
 - [ ] `make policy` is clean (no em-dashes in Markdown)
 - [ ] High blast radius surfaces are unchanged, or an ADR accompanies the change

@@ -12,8 +12,8 @@ anything.
 
 ## First five calls
 
-1. `device_info` -- learn the version, profile, policy mode, and
-   audit path.
+1. `device_info` -- learn the version, profile, policy mode, audit
+   path, and the safety posture (per-constraint violation counts).
 2. `device_health` -- a snapshot of the engine: tick, simulated
    timestamp, FSM mode.
 3. `state_get` -- the current FSM mode.
@@ -47,26 +47,34 @@ anything.
   joules, last latency) and the profile's nominal capacity.
 - `self_estimator_status` reports live covariances for every
   estimator that has landed.
-- `self_model_assess` returns capability claims (calibrated
-  quantiles arrive with the full self-model layer in L1; BL-018).
+- `self_model_assess` returns one claim per capability, each with a
+  `point`, calibrated `p5`/`p50`/`p95` quantiles, a `confidence`, and the
+  `drivers`. Read the `p5` band and `confidence` for viability and safety
+  decisions; do not treat a wide band as if it were the point estimate.
 
 ## Deployment posture
 
 The live VM tracks `origin/main`; the development line may be ahead
-of `main` and therefore ahead of the live MCP. If the seventeen-tool
-surface above is not all reachable, the live host is on an older
+of `main` and therefore ahead of the live MCP. If the read surface
+above is not all reachable, the live host is on an older
 revision (see [`docs/audit-2026-05-23.md`](../docs/audit-2026-05-23.md)
 §4 for the most recent live-MCP probe).
 
 ## Talking to a model
 
-- `inference_local` for the deterministic mock (no Anthropic call).
-- `inference_cloud` (L2) for a real Claude call. Treat untrusted
-  content as user-slot input.
+- `inference_local` for the deterministic mock (no Anthropic call). It is
+  the only inference tool registered today.
+- `anthropic_cap_status` reports whether a cloud call would be admitted
+  (key configured and cap not exhausted). The cloud-call tool
+  (`inference_cloud`) is classified but not yet registered.
 
 ## Caveats
 
 - Tool outputs are bounded; the audit log records hashes only.
-- The Anthropic daily cap can refuse a cloud call. Fall back to
-  `inference_local`.
+- The FSM can auto-safe on a tick: from an operational mode, a violated
+  safety constraint (thermal SC-2, power SC-8) or an incapacitated operator
+  drives the device toward a safer mode on its own, mirrored to the audit
+  log under `Tier.SAFETY`. Watch `state_get` and `device_info.safety`.
+- `anthropic_cap_status` shows `exhausted` when the daily cap is reached;
+  `inference_local` is the fallback.
 - See `LIMITATIONS.md` for the scope boundaries.

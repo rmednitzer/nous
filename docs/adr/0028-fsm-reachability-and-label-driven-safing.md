@@ -47,9 +47,11 @@ Extend the auto-safing loop with the two label-driven conditions ADR 0027
 deferred. An operator derived as `INCAPACITATED` takes the full `safe`
 posture, and it outranks the device hazards: when no one can supervise, the
 safest hold is the right one regardless of the pack or the junction. A fully
-denied comms link (`CommsState.DENIED`) degrades. The SC-8 and SC-2 enforcer
-rules keep their place between the two, so the priority is operator, then
-power, then thermal, then comms. The label conditions read the derived state
+denied comms link (`CommsState.DENIED`) degrades the link-bearing modes
+(`RELAY`/`C2`), whose function depends on it; a `MISSION` or `MONITORING` run
+that does not need comms is left alone. The SC-8 and SC-2 enforcer rules keep
+their place between the two, so the priority is operator, then power, then
+thermal, then comms. The label conditions read the derived state
 labels, which are estimator-sourced by construction, and each fires through
 the same one-way, audited path as the enforcer rules.
 
@@ -77,7 +79,7 @@ gives a conformity reviewer a mechanical join from transition to hazard. The
 classification helpers give the rest of the codebase a single vocabulary for
 "is this mode operating."
 
-Harder: the transition table grows from thirty-six entries to forty-three.
+Harder: the transition table grows from thirty-eight entries to forty-five.
 That is still inside the one-screen budget ADR 0004 set and well under the
 ~50-mode revisit trigger (which counts modes, not transitions; the mode
 count is unchanged at thirteen). The auto-safing priority list now has four

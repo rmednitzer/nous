@@ -26,7 +26,7 @@ this mapping until the L1 rollout (PRs #29..#37) merges to `main`.
 | --- | --- | --- |
 | power | `filtered` | Li-ion + Peukert + SoC Kalman; per-cell internal resistance and thermal derate from profile. |
 | apu | `filtered` | Solar MPPT, methanol fuel cell, vehicle tether, USB-C PD; per-source Kalman. |
-| state machine | `filtered` | Explicit transition table, ADR 0004. Includes SC-2 thermal headroom and low-power guards (ADR 0018). Strictly speaking not an estimator; included because its outputs are auditable. |
+| state machine | `filtered` | Explicit transition table, ADR 0004. Entry gates enforce SC-2 thermal headroom and SC-8 power reserve through a runtime enforcer (ADR 0018/0022); the engine auto-safes on tick when a constraint is violated (ADR 0027/0028). Strictly speaking not an estimator; included because its outputs are auditable. |
 | comms_state | `filtered` | Derived each tick from the live per-link envelope; aggregator drives the FSM `state.comms_state`. |
 | operator_state | `parametric` | Carried by the FSM; threshold logic over biometrics. Physiology grounding (BL-040) is planned. |
 | thermal | `filtered` | Two-state lumped model (junction + enclosure); per-channel Kalman with shrinking covariance (BL-005, BL-028). |
@@ -37,7 +37,7 @@ this mapping until the L1 rollout (PRs #29..#37) merges to `main`.
 | biometrics | `filtered` | Heart rate, core temperature, hydration, cognitive load with physiological clamps. Multi-channel Kalman (BL-011, BL-029). Physiology grounding (BL-040) is planned. |
 | comms | `parametric` | Per-link envelopes drive FSM state each tick; per-link belief tracker. Full transition particle filter (BL-030) is planned. |
 | inference | `parametric` | Local-path with profile-derived latency / energy / capacity; cloud path is BL-013 follow-up, real local model is BL-043. |
-| self model | `planned` | Capability claims wired in BL-018. |
+| self model | `parametric` | Calibrated `p5`/`p50`/`p95` capability claims via Monte Carlo over the estimator posteriors (BL-018/BL-035); learned self-model is future. |
 
 ## How badges roll up
 

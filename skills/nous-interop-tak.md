@@ -16,8 +16,8 @@ The conformance posture is documented in
 1. Build a payload with `{uid, lat, lon, ts_s}` (the `ts_s` is the
    source estimate timestamp; the encoder refuses to emit if it is
    older than `max_age_s`, default 60 s).
-2. Call `interop_encode` (L2; BL-014 wires this) with `adapter="cot"`
-   and the payload.
+2. Call `interop_encode` (T1, wired per BL-041) with `adapter="cot"`
+   and the payload; `interop_decode` round-trips it back.
 3. Pipe the bytes to the TAK server's TCP listener.
 
 ## What is supported

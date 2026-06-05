@@ -25,16 +25,23 @@ stateDiagram-v2
     MISSION --> THERMAL_LIMIT: thermal_limit
     MISSION --> LOW_POWER: low_power
     MISSION --> IDLE: complete
+    MISSION --> SAFE: safe
     MISSION --> FAULT: fault
     MISSION --> SHUTDOWN: shutdown
     RELAY --> DEGRADED: degrade
     RELAY --> IDLE: complete
+    RELAY --> SAFE: safe
+    RELAY --> FAULT: fault
     RELAY --> SHUTDOWN: shutdown
     MONITORING --> DEGRADED: degrade
     MONITORING --> IDLE: complete
+    MONITORING --> SAFE: safe
+    MONITORING --> FAULT: fault
     MONITORING --> SHUTDOWN: shutdown
     C2 --> DEGRADED: degrade
     C2 --> IDLE: complete
+    C2 --> SAFE: safe
+    C2 --> FAULT: fault
     C2 --> SHUTDOWN: shutdown
     DEGRADED --> MISSION: recover
     DEGRADED --> SAFE: safe
@@ -59,33 +66,37 @@ stateDiagram-v2
 | `boot` | `STOWED -> BOOT` | controller |
 | `ready` | `BOOT -> IDLE` | controller |
 | `mission`, `relay`, `monitoring`, `c2` | `IDLE -> <mode>` | controller |
-| `degrade` | `<active mode> -> DEGRADED` | controller or, when wired, the state machine itself (BL-022) |
-| `thermal_limit` | `MISSION -> THERMAL_LIMIT` | controller (DR-2 will let the FSM raise this itself when the thermal estimator lands) |
-| `low_power` | `MISSION -> LOW_POWER` | controller (DR-2, again) |
-| `cool`, `recover`, `safe` | exits from degraded postures | controller |
+| `degrade` | `<active mode> -> DEGRADED` | controller, or the engine's auto-safing loop (ADR 0027/0028) |
+| `thermal_limit` | `MISSION -> THERMAL_LIMIT` | controller, or auto-safing on an SC-2 violation |
+| `low_power` | `MISSION -> LOW_POWER` | controller, or auto-safing on an SC-8 violation |
+| `safe` | `<active mode> / <impaired mode> -> SAFE` | controller, or auto-safing on an incapacitated operator |
+| `cool`, `recover` | recovery exits from impaired postures | controller (gated, never auto-initiated) |
 | `complete` | `<active mode> -> IDLE` | controller |
 | `shutdown` | `<most modes> -> SHUTDOWN` | controller |
 | `reset` | `FAULT -> STOWED`, `SHUTDOWN -> STOWED` | controller |
 | `fault` | `<most modes> -> FAULT` | engine or controller |
 
-## Guards and what it does not do today
+## Guards and auto-safing
 
-The FSM refuses unsafe transitions when the controller provides the
-relevant safety context. ADR 0018 wires two guards:
+Entering an operational mode is safety-gated. Every transition into
+`MISSION`/`RELAY`/`MONITORING`/`C2` (and the `recover`/`cool` paths back
+into them) is gated on two STPA constraints, routed through a runtime
+`SafetyEnforcer` (ADR 0018/0022): SC-2 refuses when reported thermal
+headroom is below the profile threshold, and SC-8 refuses when reported
+state-of-charge is below the critical reserve. Gates fail closed on missing
+context. `Engine.request_transition` populates the context from live
+subsystem state; a refusal raises `GuardDenied`, is recorded on
+`StateMachine.refusals()`, and increments the per-constraint violation
+counter `device_info` surfaces.
 
-- `IDLE -> MISSION`, `DEGRADED -> recover`, `THERMAL_LIMIT -> cool`
-  refuse when `thermal_headroom_c < thermal_headroom_threshold_c`
-  (SC-2 from the STPA artefacts).
-- `LOW_POWER -> recover` refuses when `soc_pct < soc_pct_critical`.
-
-`Engine.request_transition` populates the safety context from live
-subsystem state, so a controller calling the FSM through the engine
-sees the guards in action. A guard refusal raises `GuardDenied` and
-is recorded on `StateMachine.refusals()` for the audit log.
-
-The FSM still does not *initiate* transitions on its own (it raises
-`thermal_limit` and `low_power` only when a controller or the engine
-asks it to). DR-2 tracks that follow-up under BL-022.
+The FSM now also initiates transitions on its own. Each tick, from an
+operational mode, `Engine._auto_safe` drives the device toward a safer mode
+when a constraint is violated mid-run (ADR 0027/0028): SC-8 fires
+`low_power`, SC-2 fires `thermal_limit`, an incapacitated operator fires
+`safe`, and a denied comms link degrades the link-bearing modes `RELAY`/`C2`
+(falling back to `degrade` where a mode lacks the precise safer edge).
+Auto-safing is one-way; recovery stays a controller call. Every auto-safing
+decision is mirrored to the audit log under `Tier.SAFETY`.
 
 The audit log records every transition. The trigger names are stable
 across versions; the schema is captured in `docs/state-machine.md`

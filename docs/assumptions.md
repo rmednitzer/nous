@@ -171,10 +171,12 @@ aggregates those beliefs into capability claims.
 - Every estimator is 1-D or per-channel diagonal. There is no
   cross-channel covariance, so a correlated drift in two related
   measurements is not captured.
-- ``self_model/assess.py`` and ``self_model/viability.py`` are the L2
-  remaining gap (STATUS.md). The placeholders return capability
-  dictionaries rather than misleading numeric zeros, but a controller
-  should treat self-model output as ``[planned]`` until BL-018 closes.
+- ``self_model/assess.py`` and ``self_model/viability.py`` are wired
+  (BL-018): they aggregate estimator posteriors into capability claims with
+  calibrated ``p5``/``p50``/``p95`` quantiles (Monte Carlo by default,
+  BL-035) and a confidence. The remaining gap is a *learned* self-model;
+  the current claims are model-derived, so treat a low ``confidence`` or a
+  collapsed band as low information rather than a precise answer.
 
 ## Scenarios
 

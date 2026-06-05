@@ -6,6 +6,61 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (framing: simulation-based digital twin)
+
+- The project describes itself consistently as a *simulation-based* digital
+  twin of an edge-AI inference appliance: a model driven by per-subsystem
+  physics and recursive estimators, not a hardware-linked twin. README, the
+  docs site, and the governance files lead with that framing so the scope
+  stays honest about what the artefact is and is not.
+
+### Added (safety: FSM hardening, ADR 0022 / 0027 / 0028)
+
+- Runtime safety enforcer (ADR 0022). `src/nous/safety/enforcer.py` turns an
+  STPA constraint into an observable runtime artefact: every check returns a
+  structured `SafetyResult` (approved, value, was_clamped, violation_type,
+  evidence), and the enforcer keeps per-constraint and total violation
+  counters. The FSM entry gates route through it: SC-2 (thermal headroom)
+  and SC-8 (power reserve) refuse a transition into any operational mode
+  (MISSION/RELAY/MONITORING/C2), failing closed on missing context. A new
+  audit-only `Tier.SAFETY` classification and an optional `safety` field on
+  the audit record mirror every check; `device_info` surfaces the violation
+  posture. SC-8 and hazard H-8 were added to the STPA artefacts.
+- Condition-driven auto-safing (ADR 0027). `Engine.tick` drives the FSM
+  toward a safer mode when a constraint is violated mid-run, closing the
+  "sustains" half of H-2/H-8 that the entry gate alone could not cover. The
+  move is one-way (recovery stays controller-gated, so there is no
+  oscillation to debounce); every auto-safing decision is mirrored under
+  `Tier.SAFETY` and recorded with an `auto-safe:` reason.
+- FSM failsafe reachability and label-driven safing (ADR 0028). Every
+  operational mode gains a direct `safe` edge and RELAY/MONITORING/C2 gain a
+  `fault` edge, so every operational or impaired mode reaches SAFE in one
+  trigger; the invariant is checked exhaustively in
+  `tests/unit/test_fsm_reachability.py`. Mode classification helpers
+  (`is_operational`/`is_impaired`/`is_terminal`) land in `state/machine.py`.
+  Auto-safing gains the label-driven conditions: operator `INCAPACITATED`
+  takes the full `safe` posture (outranking the device hazards) and comms
+  `DENIED` degrades the link-bearing modes (`RELAY`/`C2`).
+  `docs/stpa/10-fsm-constraints-mapping.md` traces every safety-relevant
+  transition to its constraint and hazard.
+
+### Changed (server: per-subsystem tool modules, ADR 0021)
+
+- The MCP tool handlers moved out of `server.py` into per-capability modules
+  under `src/nous/tools/` (meta, audit, state, subsystems, self_model,
+  inference, interop, scenarios). Each exposes a `register(mcp, app, wrap)`
+  seam; handler bodies and the registered tool surface are byte-faithful, so
+  the move is behaviour-preserving. `server.py` is now engine/FastMCP wiring
+  plus the eight `register` calls.
+
+### Added (audit: daily anchor, ADR 0026)
+
+- The audit hash chain gains a daily anchor (ADR 0026, BL-031): the chain
+  head is anchored once per UTC day, so tail truncation (which the chain
+  alone cannot detect) becomes detectable across days. `device_info` reports
+  the anchor path and degraded state, and an `audit_anchor_verify` (T0) tool
+  exposes the check to a controller.
+
 ### Added (audit: tamper-evident hash chain)
 
 - The audit JSONL is now a per-record hash chain (ADR 0025, BL-016).

@@ -12,8 +12,10 @@
 
 ## Outputs
 
-`Estimate` with `point = {soc_pct, voltage_v, current_a}` and a 3x3
-covariance.
+`Estimate` with `point = {soc_pct, voltage_v, current_a}` and a two-entry
+diagonal covariance over `soc_pct` and `voltage_v`. `current_a` is the
+last observed value passed through verbatim: it is not filtered and has no
+covariance entry.
 
 ## SLA
 
