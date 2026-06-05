@@ -17,7 +17,7 @@ import anyio
 from mcp.server.fastmcp import Context, FastMCP
 from starlette.applications import Starlette
 
-from .audit import AuditLogger, verify_chain
+from .audit import AuditLogger
 from .audit_anchor import AnchorLog
 from .config import Settings, get_settings
 from .db import StateTransitionLog, init_db
@@ -25,7 +25,7 @@ from .engine import Engine
 from .policy import PolicyMode
 from .runner import run as audited_run
 from .tick import tick_loop
-from .tools import meta
+from .tools import audit, meta, state
 
 __all__ = [
     "Nous",
@@ -203,178 +203,9 @@ def build_app(settings: Settings | None = None) -> Nous:
 
     meta.register(mcp, app, _wrap)
 
-    @mcp.tool()
-    async def audit_summary(ctx: Context | None = None) -> str:
-        """Read-only view of the audit handler's state.
+    audit.register(mcp, app, _wrap)
 
-        Surfaces the full audit-handler picture: file path, degraded
-        flag and reason, cumulative ``fsync_failures``, cumulative
-        ``writes_total``, ``last_write_ts_s`` (unix timestamp of the
-        most recent durable write; ``None`` if no writes yet), and
-        the ``also_stderr`` echo flag. A controller comparing
-        ``writes_total`` against the tick cadence can detect a
-        silently-dropping handler that ``device_info.audit.degraded``
-        would not catch (the handler accepted the write but the
-        underlying fsync failed; the counter contract gates the
-        increment on durability per PR #60 review).
-
-        Closes the registration gap in ``policy.py`` (``audit_summary``
-        was classified T0 but never wired). Tier T0 (read-only): the
-        ``AuditLogger.summary()`` method itself does not mutate
-        handler state. The surrounding ``_wrap`` audited-runner
-        call still writes one audit record (as every tool call
-        does, per ADR 0001); the snapshot returned here is captured
-        before that wrap record lands, so the response shows the
-        pre-call state. Successive ``audit_summary`` calls therefore
-        increase ``writes_total`` by one per call in the live
-        audit log, even though each response is "one behind."
-        """
-
-        async def _work() -> str:
-            return json.dumps(app.audit.summary(), indent=2)
-
-        return await _wrap("audit_summary", {}, ctx, _work)
-
-    @mcp.tool()
-    async def audit_resync(ctx: Context | None = None) -> str:
-        """Re-open the audit sink in place (closes AUDIT-2026-05-23 N2).
-
-        Use after an operator has remediated the underlying cause of a
-        degraded audit sink (typically: filesystem permissions or
-        mount, ``ReadWritePaths=`` drift on the systemd unit, the
-        audit file being moved out from under the handler). The tool
-        attempts to re-open ``device_info.audit.path``; on success the
-        ``audit.degraded`` flag clears without a service restart.
-
-        Tier T2 (stateful): mutates the in-process audit handler.
-        ``fsync_failures`` is the cumulative counter and is not
-        reset, so the operator can still see the loss window.
-        """
-
-        async def _work() -> str:
-            return json.dumps(app.audit.resync(), indent=2)
-
-        return await _wrap("audit_resync", {}, ctx, _work)
-
-    @mcp.tool()
-    async def audit_verify(ctx: Context | None = None) -> str:
-        """Verify the audit hash chain on disk (BL-016, ADR 0025).
-
-        Walks ``device_info.audit.path`` and recomputes the chain: each
-        line commits to its predecessor through ``prev_hash`` /
-        ``entry_hash``, so a mutated record or a mid-stream deletion
-        breaks a link the walk reports at ``first_break_line``. The
-        response carries ``ok`` (linkage intact), ``from_genesis`` (the
-        log roots at genesis; false for a post-rotation continuation
-        segment, which is still ``ok``), the line counts (``lines`` /
-        ``chained`` / ``legacy``), the verified ``head``, and the break
-        ``reason`` when ``ok`` is false. Pre-chain lines are counted as
-        ``legacy`` and skipped, so a log that straddles the upgrade still
-        verifies.
-
-        Tier T0 (read-only): the verifier only reads the file. It does
-        not detect truncation, which the BL-031 daily anchor closes.
-        """
-
-        async def _work() -> str:
-            return json.dumps(verify_chain(app.audit.path), indent=2)
-
-        return await _wrap("audit_verify", {}, ctx, _work)
-
-    @mcp.tool()
-    async def audit_anchor_verify(ctx: Context | None = None) -> str:
-        """Cross-check the daily audit anchors against the chain (BL-031, ADR 0026).
-
-        The BL-016 hash chain (``audit_verify``) catches mutation and
-        mid-stream deletion but not tail truncation: dropping the most
-        recent records leaves a shorter, still-consistent chain. The daily
-        anchor closes that gap by pinning the chain head once per UTC day in
-        a separate append-only file (``device_info.audit.anchor_path``). This
-        tool reconstructs the audit chain across logrotate segments and
-        confirms every anchored head is still present; a missing anchored
-        head means the trail was truncated below the anchor, reported in
-        ``reason`` and ``first_break``. ``unverifiable`` counts anchors that
-        predate the oldest retained segment (rotated out, not a break).
-
-        Tier T0 (read-only): reads the audit and anchor files; mutates
-        nothing.
-        """
-
-        async def _work() -> str:
-            from .audit_anchor import verify_anchors
-
-            return json.dumps(verify_anchors(app.audit.path, app.anchor.path), indent=2)
-
-        return await _wrap("audit_anchor_verify", {}, ctx, _work)
-
-    @mcp.tool()
-    async def state_get(ctx: Context | None = None) -> str:
-        """Current FSM mode plus the labels a controller queries together.
-
-        Closes AUDIT-2026-05-24 N3 (minimal payload). The shape stays
-        narrow on purpose (FSM-adjacent fields only); a controller that
-        needs subsystem-level detail uses ``device_health`` instead.
-        """
-
-        async def _work() -> str:
-            state = app.engine.state
-            return json.dumps(
-                {
-                    "mode": state.mode.value,
-                    "tick": state.tick,
-                    "ts_s": state.ts_s,
-                    "operator_state": state.operator_state.value,
-                    "operator_state_reason": state.operator_state_reason,
-                    "comms_state": state.comms_state.value,
-                    "comms_state_reason": state.comms_state_reason,
-                }
-            )
-
-        return await _wrap("state_get", {}, ctx, _work)
-
-    @mcp.tool()
-    async def state_history(limit: int = 16, ctx: Context | None = None) -> str:
-        """Recent FSM transitions (oldest first; up to ``limit`` rows).
-
-        Prefers the SQLite ``state_transitions`` table when available so
-        history survives a restart; falls back to the in-memory FSM
-        history when the DB is unreachable (kept consistent with the
-        audit logger's "best effort" posture).
-        """
-
-        async def _work() -> str:
-            n = max(1, min(limit, 256))
-            db_rows = app.transition_log.tail(n)
-            if db_rows:
-                rows = [
-                    {
-                        "from": r.from_mode,
-                        "trigger": r.trigger,
-                        "to": r.to_mode,
-                        "reason": r.reason,
-                        "ts": r.ts.isoformat(),
-                        "source": "sqlite",
-                    }
-                    for r in db_rows
-                ]
-            else:
-                hist = app.engine.fsm.history()[-n:]
-                rows = [
-                    {
-                        "from": f.value,
-                        "trigger": t,
-                        "to": n2.value,
-                        "reason": "",
-                        "ts": "",
-                        "source": "memory",
-                    }
-                    for (f, t, n2) in hist
-                ]
-            return json.dumps(rows, indent=2)
-
-        return await _wrap(
-            "state_history", {"limit": limit}, ctx, _work
-        )
+    state.register(mcp, app, _wrap)
 
     @mcp.tool()
     async def power_status(ctx: Context | None = None) -> str:
