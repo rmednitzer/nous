@@ -195,6 +195,17 @@ def test_tick_survives_malformed_reserve_and_safes(tmp_nous_home: Path) -> None:
     assert eng.state.mode is Mode.LOW_POWER
 
 
+def test_tick_survives_non_mapping_power_section(tmp_nous_home: Path) -> None:
+    # Defence in depth: a directly-built profile with a non-mapping power
+    # section bypasses load-time validation. The context omits the reserve and
+    # SC-8 fails closed rather than raising AttributeError in the tick loop.
+    eng = _engine_in("mission")
+    eng.profile = {**dict(eng.profile), "power": [1, 2]}
+    assert "soc_pct_critical" not in eng._safety_context()
+    eng.tick()
+    assert eng.state.mode is Mode.LOW_POWER
+
+
 # --- Failsafe from IDLE, deepening, and bounded history --------------------
 
 

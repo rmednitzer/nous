@@ -81,18 +81,27 @@ class ProfileModel(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _safety_thresholds_numeric(cls, data: Any) -> Any:
-        """Refuse a malformed safety threshold at load (ADR 0029).
+    def _safety_sections_wellformed(cls, data: Any) -> Any:
+        """Refuse a malformed safety section or threshold at load (ADR 0029).
 
-        The SC-8 reserve and SC-2 headroom thresholds must be finite numbers.
-        Validating them here means a bad ``profile_reload`` is rejected before
-        any subsystem is rebuilt, so the previous good profile stays live and
-        the tick loop never meets a non-numeric reserve.
+        The SC-8 / SC-2 gates read the ``power`` and ``thermal`` sections; a
+        non-mapping section (e.g. ``power: []``) crashes subsystem construction
+        and ``_safety_context``, and a non-numeric threshold crashes the tick
+        loop. Both are reachable through ``profile_reload``. Validating them
+        here means a bad reload is rejected before any subsystem is rebuilt, so
+        the previous good profile stays live and the tick loop never meets a
+        malformed reserve.
         """
         if isinstance(data, Mapping):
             for section, key in _SAFETY_NUMERIC_FIELDS:
                 block = data.get(section)
-                if isinstance(block, Mapping) and key in block:
+                if block is None:
+                    continue
+                if not isinstance(block, Mapping):
+                    raise ValueError(
+                        f"profile section {section!r} must be a mapping"
+                    )
+                if key in block:
                     _require_finite_number(block[key], f"{section}.{key}")
         return data
 
@@ -593,21 +602,25 @@ class Engine:
 
         The thermal and SoC readings are subsystem properties (always finite
         floats). The SoC critical reserve is read from the profile dict, so it
-        is coerced defensively: a non-numeric value (which ``ProfileModel``
-        rejects at load, but a directly-constructed profile could still carry)
-        is omitted rather than crashing the tick loop. With the key absent the
-        SC-8 floor has no threshold and fails closed, so a malformed reserve
-        refuses operational entry and auto-safes instead of raising.
+        is coerced defensively: a non-numeric value, or a ``power`` section that
+        is not a mapping at all (both of which ``ProfileModel`` rejects at load,
+        but a directly-constructed profile could still carry), omits the key
+        rather than crashing the tick loop. With the key absent the SC-8 floor
+        has no threshold and fails closed, so a malformed reserve refuses
+        operational entry and auto-safes instead of raising.
         """
-        power_cfg = self.profile.get("power") or {}
+        power_cfg = self.profile.get("power")
+        if power_cfg is None:
+            power_cfg = {}
         ctx: dict[str, Any] = {
             "thermal_headroom_c": float(self.thermal.headroom_c),
             "thermal_headroom_threshold_c": float(self.thermal.headroom_threshold_c),
             "soc_pct": float(self.power.soc_pct),
         }
-        reserve = _coerce_finite(power_cfg.get("soc_pct_critical_threshold", 5.0))
-        if reserve is not None:
-            ctx["soc_pct_critical"] = reserve
+        if isinstance(power_cfg, Mapping):
+            reserve = _coerce_finite(power_cfg.get("soc_pct_critical_threshold", 5.0))
+            if reserve is not None:
+                ctx["soc_pct_critical"] = reserve
         return ctx
 
     def tick(self) -> TickContext:
@@ -906,6 +919,11 @@ def _load_profile(name: str) -> Mapping[str, Any]:
     try:
         ProfileModel.model_validate(data)
     except ValidationError as exc:
+        detail = "; ".join(
+            str(err.get("msg", "")).strip() for err in exc.errors()
+        ).strip()
         msg = f"profile YAML failed schema validation: {root}"
+        if detail:
+            msg = f"{msg}: {detail}"
         raise ValueError(msg) from exc
     return data

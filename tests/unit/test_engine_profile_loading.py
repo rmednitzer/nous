@@ -54,3 +54,27 @@ def test_load_profile_returns_valid_profile(fake_profiles_dir: Path) -> None:
 
     loaded = engine._load_profile("ok")
     assert loaded["name"] == "ok"
+
+
+def test_load_profile_surfaces_invalid_field_name(fake_profiles_dir: Path) -> None:
+    # ADR 0029: the controller doing profile_reload must see which field was
+    # invalid, so the underlying validation detail is surfaced, not discarded.
+    (fake_profiles_dir / "bad-reserve.yaml").write_text(
+        "name: bad\npower:\n  soc_pct_critical_threshold: oops\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="soc_pct_critical_threshold"):
+        engine._load_profile("bad-reserve")
+
+
+def test_load_profile_rejects_non_mapping_safety_section(fake_profiles_dir: Path) -> None:
+    # A non-mapping safety section (here a list) would crash subsystem
+    # construction and the tick loop; it must be refused at load instead.
+    (fake_profiles_dir / "bad-power.yaml").write_text(
+        "name: bad\npower:\n  - 1\n  - 2\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"power.*must be a mapping"):
+        engine._load_profile("bad-power")
