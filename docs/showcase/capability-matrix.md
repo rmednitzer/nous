@@ -22,7 +22,7 @@ Last reviewed: 2026-05-23.
 | apu | `filtered` (solar MPPT, methanol FC, vehicle, USB-C PD) | `filtered` (per-source Kalman) | [subsystem](../model-cards/subsystem-apu.md), [estimator](../model-cards/estimator-apu.md) | BL-005a |
 | pmu / pdu | `planned` (lifts off PowerSubsystem) | `planned` | `planned` | BL-005b |
 | thermal | `filtered` (two-state lumped: junction + enclosure, profile-driven) | `filtered` (per-channel Kalman with shrinking covariance) | [estimator](../model-cards/estimator-thermal-kalman.md) | BL-005, BL-028 |
-| compute | `filtered` (load fraction, profile-driven draw curve, thermal-throttle clip) | `filtered` (per-channel Kalman over load and draw) | `planned` | BL-007, BL-031a |
+| compute | `filtered` (load fraction, profile-driven draw curve, thermal-throttle clip) | `filtered` (per-channel Kalman over load and draw) | [estimator](../model-cards/estimator-compute-kalman.md) | BL-007, BL-031a |
 | storage | `filtered` (NAND wear, capacity accounting, write amplification) | `filtered` (per-channel Kalman over used and wear) | `planned` | BL-008 |
 | sensors | `filtered` (temp / humidity / baro; authoritative ambient source) | `filtered` (multi-channel Kalman with bounds validation) | `planned` | BL-009 |
 | position | `filtered` (lat / lon / alt dead-reckoning + GNSS fix gating + IMU drift) | `parametric` (v0.1 EKF passthrough with NaN/Inf validation; full constant-velocity EKF is BL-026) | [estimator](../model-cards/estimator-position-ekf.md) | BL-010, BL-026 |

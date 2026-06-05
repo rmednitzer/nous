@@ -21,6 +21,7 @@ inference mock. Each card answers the same questions:
 | Power SoC | [estimator-power-soc.md](estimator-power-soc.md) |
 | APU per-source Kalman | [estimator-apu.md](estimator-apu.md) |
 | Thermal Kalman | [estimator-thermal-kalman.md](estimator-thermal-kalman.md) |
+| Compute Kalman | [estimator-compute-kalman.md](estimator-compute-kalman.md) |
 | Biometrics Kalman | [estimator-biometrics-kalman.md](estimator-biometrics-kalman.md) |
 | Comms particle filter | [estimator-comms-particle.md](estimator-comms-particle.md) |
 | Inference local mock | [inference-local-mock.md](inference-local-mock.md) |
