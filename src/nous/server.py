@@ -17,7 +17,6 @@ import anyio
 from mcp.server.fastmcp import Context, FastMCP
 from starlette.applications import Starlette
 
-from . import __version__
 from .audit import AuditLogger, verify_chain
 from .audit_anchor import AnchorLog
 from .config import Settings, get_settings
@@ -26,9 +25,11 @@ from .engine import Engine
 from .policy import PolicyMode
 from .runner import run as audited_run
 from .tick import tick_loop
+from .tools import meta
 
 __all__ = [
     "Nous",
+    "WrapFn",
     "attach_tick_lifespan",
     "build_app",
     "build_server",
@@ -37,6 +38,7 @@ __all__ = [
 
 
 Work = Callable[[], Awaitable[str]]
+WrapFn = Callable[[str, dict[str, Any], Context | None, Work], Awaitable[str]]
 
 
 def _ctx_ids(ctx: Context | None) -> tuple[str, str]:
@@ -199,37 +201,7 @@ def build_app(settings: Settings | None = None) -> Nous:
             app.anchor.maybe_anchor(app.audit.path)
         return result
 
-    @mcp.tool()
-    async def device_info(ctx: Context | None = None) -> str:
-        """Report nous version, profile, transport, policy mode, audit and anchor paths."""
-
-        async def _work() -> str:
-            info = {
-                "name": "nous",
-                "version": __version__,
-                "profile": cfg.profile,
-                "transport": cfg.transport,
-                "policy": cfg.policy,
-                "tick_hz": cfg.tick_hz,
-                "audit": {
-                    "path": app.audit.path,
-                    "degraded": app.audit.degraded,
-                    "anchor_path": app.anchor.path,
-                    "anchor_degraded": app.anchor.degraded,
-                },
-            }
-            return json.dumps(info, indent=2)
-
-        return await _wrap("device_info", {}, ctx, _work)
-
-    @mcp.tool()
-    async def device_health(ctx: Context | None = None) -> str:
-        """Engine snapshot: tick, ts_s, mode, operator/comms state."""
-
-        async def _work() -> str:
-            return json.dumps(app.engine.snapshot(), indent=2)
-
-        return await _wrap("device_health", {}, ctx, _work)
+    meta.register(mcp, app, _wrap)
 
     @mcp.tool()
     async def audit_summary(ctx: Context | None = None) -> str:
