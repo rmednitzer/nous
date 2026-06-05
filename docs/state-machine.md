@@ -57,14 +57,24 @@ stateDiagram-v2
     shutdown --> stowed: reset
 ```
 
-## Guards
+## Safety gates
 
-ADR 0018 attaches transition guards to four `(mode, trigger)` pairs:
-`IDLE -> mission`, `DEGRADED -> recover`, `THERMAL_LIMIT -> cool` (all
-gated on thermal headroom), and `LOW_POWER -> recover` (gated on SoC).
-A guard returning false raises `GuardDenied` and the refusal is logged
-on `StateMachine.refusals()` for the audit trail. `Engine.request_transition`
-fills the safety context from live subsystem state.
+Entering an operational mode is safety-gated. `_SAFETY_GATES` in
+`src/nous/state/machine.py` maps each transition into `mission`, `relay`,
+`monitoring`, or `c2` (and the `recover`/`cool` paths back into them) to two
+STPA constraints: SC-2 floors thermal headroom at the profile threshold, and
+SC-8 floors state-of-charge at the profile's critical reserve. Both fail
+closed when the context is missing, so a sleeping controller cannot brick its
+way into an operational mode.
+
+The machine routes every gate through a `SafetyEnforcer` (ADR 0022). A
+refused gate raises `GuardDenied` carrying the enforcer's structured reason,
+the refusal is recorded on `StateMachine.refusals()`, and the enforcer
+increments a per-constraint violation counter that `device_info` surfaces
+under `safety`. `Engine.request_transition` fills the safety context from
+live subsystem state and mirrors each check to the audit log under
+`Tier.SAFETY`, so an after-action review can pull every safety event by tier
+and group it by `constraint_id`.
 
 ## Vocabularies
 

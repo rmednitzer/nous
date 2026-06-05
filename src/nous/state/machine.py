@@ -6,23 +6,34 @@ trigger is a hard error rather than a silent no-op. See ADR-0004 for why
 the project rolls its own FSM instead of pulling in ``transitions`` or
 ``automat``.
 
-Transitions can carry a precondition guard. Guards take the proposed
-``(from_mode, to_mode)`` pair plus a context mapping supplied by the
-controller and return ``(ok, reason)``. A guard that returns ``False``
-turns the transition into a hard refusal (``GuardDenied``), preserving
-the UCAs in ``docs/stpa/07-unsafe-control-actions.md`` -- in particular
-SC-2 (no ``MISSION`` while thermal headroom is exhausted) and the
-``low_power`` UCA (must fire before SoC reaches zero).
+A transition into an operational mode is safety-gated. ``_SAFETY_GATES``
+maps such a transition to the STPA constraints it must satisfy (SC-2
+thermal headroom, SC-8 power reserve); each gate names the context key the
+constraint judges. The machine routes every gate through a
+:class:`~nous.safety.SafetyEnforcer` (ADR 0022), so a refused gate raises
+``GuardDenied`` carrying the enforcer's structured reason and the enforcer
+records the violation for ``device_info`` to surface. A gate whose context
+is missing fails closed, preserving the UCAs in
+``docs/stpa/07-unsafe-control-actions.md``.
 """
 
 from __future__ import annotations
 
-import math
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Any
+from typing import Any, NamedTuple
 
-__all__ = ["GuardDenied", "Mode", "StateMachine"]
+from ..safety import SafetyEnforcer, SafetyResult, floor_threshold
+
+__all__ = [
+    "SC_POWER_RESERVE",
+    "SC_THERMAL_HEADROOM",
+    "GuardDenied",
+    "Mode",
+    "StateMachine",
+    "build_fsm_enforcer",
+    "register_fsm_constraints",
+]
 
 
 class Mode(StrEnum):
@@ -96,76 +107,78 @@ _TRANSITIONS: dict[tuple[Mode, str], Mode] = {
 }
 
 
-Guard = Callable[[Mode, str, Mode, Mapping[str, Any]], tuple[bool, str]]
+SC_THERMAL_HEADROOM = "SC-2"
+SC_POWER_RESERVE = "SC-8"
 
 
-def _guard_mission_requires_thermal_headroom(
-    _frm: Mode, _trigger: str, _to: Mode, ctx: Mapping[str, Any]
-) -> tuple[bool, str]:
-    """SC-2: refuse MISSION when thermal headroom is exhausted.
+class _SafetyGate(NamedTuple):
+    """One constraint a transition must satisfy, and the context key it judges."""
 
-    The controller is expected to pass ``thermal_headroom_c`` and
-    ``thermal_headroom_threshold_c`` in the context. Missing context is
-    treated as "unknown" and the transition is refused -- a guarded FSM
-    fails closed.
-    """
-    headroom = ctx.get("thermal_headroom_c")
-    threshold = ctx.get("thermal_headroom_threshold_c")
-    if headroom is None or threshold is None:
-        return False, "thermal headroom unknown (SC-2 requires explicit context)"
-    try:
-        h = float(headroom)
-        t = float(threshold)
-    except (TypeError, ValueError):
-        return False, "thermal headroom context is non-numeric"
-    if math.isnan(h) or math.isnan(t):
-        return False, "thermal headroom context is NaN"
-    if h < t:
-        return False, f"thermal headroom {h:.2f}C below threshold {t:.2f}C"
-    return True, ""
+    constraint_id: str
+    candidate_key: str
 
 
-def _guard_safe_requires_no_low_power_blockers(
-    _frm: Mode, _trigger: str, _to: Mode, ctx: Mapping[str, Any]
-) -> tuple[bool, str]:
-    """UCA: ``trigger=low_power`` issued too late (after SoC=0).
+_GATE_THERMAL = _SafetyGate(SC_THERMAL_HEADROOM, "thermal_headroom_c")
+_GATE_POWER = _SafetyGate(SC_POWER_RESERVE, "soc_pct")
 
-    If the controller is asking to leave LOW_POWER via ``recover`` while
-    SoC is still under the critical threshold, refuse. Acts as a guardrail
-    on top of SC-2's spirit -- the FSM does not let the operator hand-wave
-    the device back into MISSION on a dying pack.
-    """
-    soc = ctx.get("soc_pct")
-    critical = ctx.get("soc_pct_critical")
-    if soc is None or critical is None:
-        return True, "no SoC context supplied; passing"
-    try:
-        s = float(soc)
-        c = float(critical)
-    except (TypeError, ValueError):
-        return False, "SoC context is non-numeric"
-    if math.isnan(s) or math.isnan(c):
-        return False, "SoC context is NaN"
-    if s < c:
-        return False, f"SoC {s:.1f}% below critical {c:.1f}%"
-    return True, ""
-
-
-_GUARDS: dict[tuple[Mode, str], Guard] = {
-    (Mode.IDLE, "mission"): _guard_mission_requires_thermal_headroom,
-    (Mode.DEGRADED, "recover"): _guard_mission_requires_thermal_headroom,
-    (Mode.THERMAL_LIMIT, "cool"): _guard_mission_requires_thermal_headroom,
-    (Mode.LOW_POWER, "recover"): _guard_safe_requires_no_low_power_blockers,
+# Entering an operational mode (MISSION / RELAY / MONITORING / C2, and the
+# recover/cool paths back into them) requires both thermal headroom (SC-2)
+# and battery reserve (SC-8). Gates are checked in order, so the first
+# unsatisfied constraint is the one the refusal names.
+_SAFETY_GATES: dict[tuple[Mode, str], tuple[_SafetyGate, ...]] = {
+    (Mode.IDLE, "mission"): (_GATE_THERMAL, _GATE_POWER),
+    (Mode.IDLE, "relay"): (_GATE_THERMAL, _GATE_POWER),
+    (Mode.IDLE, "monitoring"): (_GATE_THERMAL, _GATE_POWER),
+    (Mode.IDLE, "c2"): (_GATE_THERMAL, _GATE_POWER),
+    (Mode.DEGRADED, "recover"): (_GATE_THERMAL, _GATE_POWER),
+    (Mode.THERMAL_LIMIT, "cool"): (_GATE_THERMAL, _GATE_POWER),
+    (Mode.LOW_POWER, "recover"): (_GATE_THERMAL, _GATE_POWER),
 }
 
 
-class StateMachine:
-    """Explicit-table FSM over :class:`Mode` with optional transition guards."""
+def register_fsm_constraints(enforcer: SafetyEnforcer) -> None:
+    """Register the FSM's safety-gate evaluators on ``enforcer``.
 
-    def __init__(self, start: Mode = Mode.STOWED) -> None:
+    SC-2 floors thermal headroom at the profile threshold; SC-8 floors
+    state-of-charge at the profile's critical reserve. Both fail closed on
+    missing, non-numeric, or non-finite context (ADR 0018, ADR 0022).
+    """
+    enforcer.register(
+        SC_THERMAL_HEADROOM,
+        floor_threshold(
+            "thermal_headroom_threshold_c", label="thermal headroom", unit="C"
+        ),
+    )
+    enforcer.register(
+        SC_POWER_RESERVE,
+        floor_threshold("soc_pct_critical", label="SoC", unit="%"),
+    )
+
+
+def build_fsm_enforcer() -> SafetyEnforcer:
+    """A :class:`~nous.safety.SafetyEnforcer` with the FSM safety gates registered."""
+    enforcer = SafetyEnforcer()
+    register_fsm_constraints(enforcer)
+    return enforcer
+
+
+class StateMachine:
+    """Explicit-table FSM over :class:`Mode` with enforcer-routed safety gates.
+
+    ``checker`` is the :class:`~nous.safety.SafetyEnforcer` the safety gates
+    evaluate through. The engine injects its shared enforcer so the violation
+    counters surface through ``device_info``; a bare machine builds its own so
+    it stays self-protecting (and fail-closed) when used without the engine.
+    """
+
+    def __init__(
+        self, start: Mode = Mode.STOWED, *, checker: SafetyEnforcer | None = None
+    ) -> None:
         self._current = start
+        self._checker = checker if checker is not None else build_fsm_enforcer()
         self._history: list[tuple[Mode, str, Mode]] = []
         self._refusals: list[tuple[Mode, str, Mode, str]] = []
+        self._last_checks: list[SafetyResult] = []
 
     @property
     def current(self) -> Mode:
@@ -184,7 +197,11 @@ class StateMachine:
         """Move to the next state for ``trigger``.
 
         Raises :class:`ValueError` on an unknown table entry and
-        :class:`GuardDenied` when a guard refuses the transition.
+        :class:`GuardDenied` when a safety gate refuses the transition. Each
+        gate is evaluated through the injected
+        :class:`~nous.safety.SafetyEnforcer`; the results of the most recent
+        attempt are available via :meth:`last_safety_checks` for the audit
+        trail.
         """
         key = (self._current, trigger)
         if key not in _TRANSITIONS:
@@ -192,12 +209,16 @@ class StateMachine:
                 f"no transition from {self._current.value!r} on trigger {trigger!r}"
             )
         nxt = _TRANSITIONS[key]
-        guard = _GUARDS.get(key)
-        if guard is not None:
-            ok, reason = guard(self._current, trigger, nxt, context or {})
-            if not ok:
-                self._refusals.append((self._current, trigger, nxt, reason))
-                raise GuardDenied(self._current, trigger, nxt, reason)
+        ctx = context or {}
+        self._last_checks = []
+        for gate in _SAFETY_GATES.get(key, ()):
+            result = self._checker.check(
+                gate.constraint_id, ctx.get(gate.candidate_key), evidence=ctx
+            )
+            self._last_checks.append(result)
+            if not result.approved:
+                self._refusals.append((self._current, trigger, nxt, result.reason))
+                raise GuardDenied(self._current, trigger, nxt, result.reason)
         self._history.append((self._current, trigger, nxt))
         self._current = nxt
         return nxt
@@ -208,6 +229,15 @@ class StateMachine:
     def refusals(self) -> list[tuple[Mode, str, Mode, str]]:
         """Return guard-refused transitions for the audit log."""
         return list(self._refusals)
+
+    def last_safety_checks(self) -> list[SafetyResult]:
+        """SafetyResults from the most recent ``transition`` attempt.
+
+        Empty for an ungated transition or one that raised ``ValueError``
+        before reaching the gate loop. The engine mirrors these to the audit
+        log under ``Tier.SAFETY`` (ADR 0022).
+        """
+        return list(self._last_checks)
 
     def reset(self, mode: Mode = Mode.STOWED) -> None:
         """Force the FSM back to ``mode`` without traversing transitions.

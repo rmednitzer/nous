@@ -1,8 +1,8 @@
 """State machine transition table breadth and contract.
 
 Closes ``AUDIT.md`` H1 for the state-machine half. The existing
-``test_state_machine_guards.py`` covers SC-2 (thermal-headroom guard)
-and SC-5 (low-power recovery guard) plus the unknown-trigger refusal.
+``test_state_machine_guards.py`` covers SC-2 (thermal-headroom gate)
+and SC-8 (power-reserve gate) plus the unknown-trigger refusal.
 This file covers the transition table itself: every documented
 transition lands on its declared target, ``can()`` and ``would()``
 agree with ``transition()``, history records every successful
@@ -25,27 +25,26 @@ from nous.state.machine import (
 )
 
 # Guarded transitions need a passing context so the table breadth test
-# is not blocked by SC-2 / SC-5. Real-world callers always pass a
-# context with these signals; the guards exist to refuse when the
+# is not blocked by SC-2 / SC-8. Real-world callers always pass a
+# context with these signals; the gates exist to refuse when the
 # context says the device is unsafe, not when it is absent (the
 # unknown-context case is covered by ``test_state_machine_guards``).
+# Every transition into an operational mode is gated on both thermal
+# headroom and power reserve, so each entry supplies both.
+_OK_CONTEXT: dict[str, float] = {
+    "thermal_headroom_c": 20.0,
+    "thermal_headroom_threshold_c": 5.0,
+    "soc_pct": 50.0,
+    "soc_pct_critical": 5.0,
+}
 _GUARDED_TRANSITIONS: dict[tuple[Mode, str], dict[str, float]] = {
-    (Mode.IDLE, "mission"): {
-        "thermal_headroom_c": 20.0,
-        "thermal_headroom_threshold_c": 5.0,
-    },
-    (Mode.DEGRADED, "recover"): {
-        "thermal_headroom_c": 20.0,
-        "thermal_headroom_threshold_c": 5.0,
-    },
-    (Mode.THERMAL_LIMIT, "cool"): {
-        "thermal_headroom_c": 20.0,
-        "thermal_headroom_threshold_c": 5.0,
-    },
-    (Mode.LOW_POWER, "recover"): {
-        "soc_pct": 50.0,
-        "soc_pct_critical": 5.0,
-    },
+    (Mode.IDLE, "mission"): _OK_CONTEXT,
+    (Mode.IDLE, "relay"): _OK_CONTEXT,
+    (Mode.IDLE, "monitoring"): _OK_CONTEXT,
+    (Mode.IDLE, "c2"): _OK_CONTEXT,
+    (Mode.DEGRADED, "recover"): _OK_CONTEXT,
+    (Mode.THERMAL_LIMIT, "cool"): _OK_CONTEXT,
+    (Mode.LOW_POWER, "recover"): _OK_CONTEXT,
 }
 
 

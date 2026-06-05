@@ -4,6 +4,7 @@
 - **Date:** 2026-05-21
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0004, ADR 0009
+- **Refined by:** ADR 0022 (the guard predicates now route through the runtime `SafetyEnforcer`; the per-transition table is `_SAFETY_GATES`, and SC-8 power reserve joins SC-2 on every operational-mode entry)
 
 ## Context
 

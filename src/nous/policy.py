@@ -12,6 +12,14 @@ Tiers:
 * T1  REVERSIBLE    (trivially undone)
 * T2  STATEFUL      (observable side effect)
 * T3  IRREVERSIBLE  (rollback expensive or impossible)
+* T4  SAFETY        (audit classification for a runtime safety check; ADR 0022)
+
+``SAFETY`` is not a tool authority. No tool is classified into it and
+``classify`` never returns it; it exists so a ``SafetyEnforcer`` check
+(ADR 0022) can be mirrored to the audit log as its own event without being
+conflated with an ordinary read. It sits at the end of the enum so the
+ordered comparisons in :func:`decide` (``tier >= Tier.STATEFUL``) keep
+their meaning for the four tool tiers.
 """
 
 from __future__ import annotations
@@ -36,6 +44,7 @@ class Tier(IntEnum):
     REVERSIBLE = 1
     STATEFUL = 2
     IRREVERSIBLE = 3
+    SAFETY = 4
 
 
 class PolicyMode(StrEnum):

@@ -150,6 +150,13 @@ class AuditRecord(BaseModel):
     request_id: str = ""
     client_id: str = ""
     extra: dict[str, Any] = Field(default_factory=dict)
+    # Runtime safety disposition (ADR 0022). Present only on a record that
+    # mirrors a ``SafetyEnforcer`` check (``tier == Tier.SAFETY``): the
+    # constraint id, the verdict, and the evidence behind it. Optional and
+    # defaulting to ``None`` keeps the addition additive under the ADR 0012
+    # schema rule, so a verifier that predates the field still parses the
+    # line and the hash chain still recomputes.
+    safety: dict[str, Any] | None = None
     # Hash chain (ADR 0025 / BL-016). Stamped by ``AuditLogger.write``;
     # empty on a record that is constructed but not written through the
     # logger, and on every line written before the chain shipped.
@@ -171,6 +178,7 @@ class AuditRecord(BaseModel):
         request_id: str = "",
         client_id: str = "",
         extra: Mapping[str, Any] | None = None,
+        safety: Mapping[str, Any] | None = None,
     ) -> AuditRecord:
         return cls(
             tool=tool,
@@ -185,6 +193,7 @@ class AuditRecord(BaseModel):
             request_id=request_id,
             client_id=client_id,
             extra=dict(extra) if extra else {},
+            safety=dict(safety) if safety else None,
         )
 
 

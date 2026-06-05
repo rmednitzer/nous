@@ -20,6 +20,7 @@ import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from .audit import AuditLogger, AuditRecord
 from .clocks import Clock, MonotonicClock
 from .config import Settings, get_settings
 from .db import StateTransitionLog
@@ -32,8 +33,10 @@ from .estimators.power import PowerEstimator
 from .estimators.sensors import EnvironmentalKalman
 from .estimators.storage import StorageKalman
 from .estimators.thermal import ThermalKalman
+from .policy import Tier
+from .safety import SafetyResult
 from .state.comms_state import CommsState
-from .state.machine import GuardDenied, Mode, StateMachine
+from .state.machine import GuardDenied, Mode, StateMachine, build_fsm_enforcer
 from .state.operator_state import OperatorState
 from .state.operator_state import derive as derive_operator
 from .subsystems.apu import ApuSubsystem
@@ -82,11 +85,14 @@ class Engine:
         *,
         seed: int | None = None,
         clock: Clock | None = None,
+        audit: AuditLogger | None = None,
     ) -> None:
         self.settings: Settings = settings or get_settings()
         self.profile: Mapping[str, Any] = profile or _load_profile(self.settings.profile)
         self.scenario: Mapping[str, Any] | None = scenario
-        self.fsm = StateMachine()
+        self.audit = audit
+        self.safety = build_fsm_enforcer()
+        self.fsm = StateMachine(checker=self.safety)
         self.state = EngineState(mode=self.fsm.current)
         self.transition_log = transition_log or StateTransitionLog(None)
         self._started = False
@@ -286,15 +292,46 @@ class Engine:
         try:
             new = self.fsm.transition(trigger, context=ctx)
         except GuardDenied as exc:
+            self._audit_safety_checks(trigger, prev, exc.to)
             self._record_transition(
                 prev, trigger, exc.to, reason=f"refused: {exc.reason}", denied=True
             )
             return False, self.fsm.current, exc.reason
         except ValueError as exc:
             return False, self.fsm.current, str(exc)
+        self._audit_safety_checks(trigger, prev, new)
         self._record_transition(prev, trigger, new, reason="controller")
         self.state.mode = new
         return True, new, ""
+
+    def _audit_safety_checks(self, trigger: str, frm: Mode, to: Mode) -> None:
+        """Mirror each SafetyResult from the last transition to the audit log.
+
+        One ``Tier.SAFETY`` record per gate the FSM evaluated (ADR 0022), so a
+        controller can pull every safety event by tier and group by
+        ``constraint_id`` without scraping refusal strings. Best-effort: the
+        audit sink swallows its own errors, and the pure-Python engine attaches
+        no sink, so this is a no-op there.
+        """
+        if self.audit is None:
+            return
+        for result in self.fsm.last_safety_checks():
+            self.audit.write(
+                AuditRecord.from_output(
+                    tool="state_transition",
+                    tier=int(Tier.SAFETY),
+                    args={
+                        "trigger": trigger,
+                        "from": frm.value,
+                        "to": to.value,
+                        "constraint_id": result.constraint_id,
+                    },
+                    output=result.reason,
+                    denied=not result.approved,
+                    decision_reason=result.reason,
+                    safety=_safety_result_to_dict(result),
+                )
+            )
 
     def _record_transition(
         self,
@@ -514,6 +551,30 @@ class Engine:
                 "cognitive_load": round(self.biometrics.cognitive_load, 3),
             },
         }
+
+
+def _json_safe(value: Any) -> Any:
+    """Coerce one evidence value to a JSON-serialisable scalar for the audit line."""
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, (int, float, str)):
+        return value
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _safety_result_to_dict(result: SafetyResult) -> dict[str, Any]:
+    """Project a :class:`SafetyResult` onto the audit record's ``safety`` field."""
+    return {
+        "constraint_id": result.constraint_id,
+        "approved": result.approved,
+        "was_clamped": result.was_clamped,
+        "violation_type": result.violation_type,
+        "value": _json_safe(result.value),
+        "evidence": {k: _json_safe(v) for k, v in result.evidence.items()},
+    }
 
 
 def _load_profile(name: str) -> Mapping[str, Any]:
