@@ -1,6 +1,6 @@
 """Subsystem telemetry reads (ADR 0021).
 
-The eleven read-only (T0) subsystem status tools, grouped into one module per
+The ten read-only (T0) subsystem status tools, grouped into one module per
 the capability-grouping option of ADR 0021's revisit trigger: they are uniform
 telemetry reads (truth plus calibrated estimate), so one ``subsystems`` module
 is more legible than ten one-tool files. Handler bodies and docstrings are
