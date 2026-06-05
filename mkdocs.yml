@@ -61,6 +61,10 @@ nav:
       - Index: model-cards/README.md
       - Power subsystem: model-cards/subsystem-power.md
       - APU subsystem: model-cards/subsystem-apu.md
+      - Thermal subsystem: model-cards/subsystem-thermal.md
+      - Compute subsystem: model-cards/subsystem-compute.md
+      - Storage subsystem: model-cards/subsystem-storage.md
+      - Environmental sensor subsystem: model-cards/subsystem-sensors.md
       - Position EKF: model-cards/estimator-position-ekf.md
       - Power SoC: model-cards/estimator-power-soc.md
       - APU per-source: model-cards/estimator-apu.md

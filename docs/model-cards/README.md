@@ -15,6 +15,10 @@ the same questions:
 |-------------------|------|
 | Power subsystem (Li-ion battery) | [subsystem-power.md](subsystem-power.md) |
 | APU subsystem (solar + fuel cell + vehicle + USB-C PD) | [subsystem-apu.md](subsystem-apu.md) |
+| Thermal subsystem (two-state lumped model) | [subsystem-thermal.md](subsystem-thermal.md) |
+| Compute subsystem (load curve + draw) | [subsystem-compute.md](subsystem-compute.md) |
+| Storage subsystem (NAND wear + capacity) | [subsystem-storage.md](subsystem-storage.md) |
+| Environmental sensor subsystem (ambient ground truth) | [subsystem-sensors.md](subsystem-sensors.md) |
 
 | Estimator / Model | Card |
 |-------------------|------|
