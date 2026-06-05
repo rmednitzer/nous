@@ -4,7 +4,7 @@ Per-subsystem, per-estimator view of what is real today and what is
 not. The badges are defined in [Fidelity](fidelity.md). Each row
 points at the backlog item that is expected to raise the badge.
 
-Last reviewed: 2026-05-23.
+Last reviewed: 2026-06-05.
 
 > **Deployment note.** The badges below reflect `origin/main` at
 > revision `43d0db2` (post PR #42). The catch-up train (PR #38) brought
@@ -40,7 +40,7 @@ Last reviewed: 2026-05-23.
 | OAuth issuer | `filtered` for single-client lockdown; `planned` for L3 multi-tenant | BL-019, BL-059. File-store lock and refresh-family revocation still open (AUDIT-2026-05-23 H6, H7). |
 | anthropic client (daily cap + prompt cache) | `filtered` | Flush-before-unlock race closed (AUDIT C1); test coverage in `tests/unit/test_anthropic_client.py`. BL-021 surfacing still planned. |
 | interop adapters (CoT, MISB, NMEA, STANAG, SensorThings, MQTT) | `parametric` | Encoders emit standards-shaped output with timestamp freshness checks; conformance is self-declared and uncertified (`docs/conformance/`). |
-| scenario injectors | `planned` | The scenario YAML loads, but the v0.1 injectors do not yet mutate engine state. BL-014. |
+| scenario injectors | `in-progress` | The scenario YAML loader and injectors are wired (BL-014): `apply_injection` drives the engine for ten injector kinds, surfaced by the `scenario_load` / `scenario_inject` MCP tools. |
 | deterministic replay | `planned` | A `SimClock` with seed control would unlock replay; not yet scoped. |
 
 ## How to read this page

@@ -1,6 +1,7 @@
-"""Biometrics Kalman filter -- stub.
+"""Biometrics Kalman filter (v0.1; the full filter is BL-029).
 
-The full implementation lands with BL-029. This v0.1 build validates
+The v0.1 build is a live multi-channel filter, badged `filtered`, not a
+stub. The full implementation lands with BL-029. This v0.1 build validates
 its inputs against physiologically plausible bounds. An out-of-range
 observation is logged via :attr:`rejected_updates` but does not poison
 the central estimate; predict-only behaviour then widens the covariance

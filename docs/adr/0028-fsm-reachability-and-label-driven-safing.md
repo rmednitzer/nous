@@ -4,6 +4,7 @@
 - **Date:** 2026-06-05
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0004, ADR 0018, ADR 0022, ADR 0027
+- **Refined by:** ADR 0029 (recovery retargeted to IDLE), ADR 0030 (fault reachability from every powered mode)
 
 ## Context
 
