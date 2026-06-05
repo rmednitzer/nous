@@ -279,7 +279,8 @@ Local inference and cloud cap (T0/T1):
 
 Posture control (T2):
   state_transition (drive the FSM: ready -> idle, then mission / relay /
-  monitoring / c2, or safe / shutdown)
+  monitoring / c2, or the recoverable safe hold; terminal fault / shutdown
+  are reserved for the T3 force tools)
 
 Scenarios and configuration (T2):
   scenario_load / scenario_inject / profile_reload
