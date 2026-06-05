@@ -6,7 +6,7 @@ that matter when the contributor is a Claude session.
 
 ## Quick context
 
-`nous` is a digital twin of an edge-AI inference appliance, a simulation-based
+`nous` is a simulation-based digital twin of an edge-AI inference appliance, a
 model rather than a hardware-linked twin. The tick loop in
 `src/nous/engine.py` drives subsystem physics; estimators produce calibrated
 beliefs; a self-model layer aggregates them into capability claims; the MCP

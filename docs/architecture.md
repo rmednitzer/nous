@@ -1,9 +1,9 @@
 # Architecture
 
-`nous` is a digital twin of an edge-AI inference appliance (a
-simulation-based model), built around a tick-driven engine that orchestrates
-subsystem physics, estimator updates, and self-model claims. A FastMCP server
-sits on top, exposing the engine to a controller. The deployment
+`nous` is a simulation-based digital twin of an edge-AI inference appliance,
+built around a tick-driven engine that orchestrates subsystem physics,
+estimator updates, and self-model claims. A FastMCP server sits on top,
+exposing the engine to a controller. The deployment
 target is a single VM.
 
 ## Layers
