@@ -11,8 +11,8 @@ appliance: how full the drive is (`used_gib`) and how worn the NAND is
 (`wear_pct`). Wear is driven by *physical* writes, which the profile inflates
 from logical writes via `write_amplification`. The wear curve is linear:
 `wear_pct = wear_pct_initial + 100 * lifetime_physical_gib / tbw_gib`, clipped
-to [0, 100]. The endurance budget defaults to a generic "0.3 drive-writes-per-
-day over 5 years" rating (`capacity_gib * 600`) when `tbw_gib` is unset, so a
+to [0, 100]. The endurance budget defaults to a generic "0.3 drive-writes-per-day
+over 5 years" rating (`capacity_gib * 600`) when `tbw_gib` is unset, so a
 heavy ingest workload visibly shrinks remaining drive life.
 
 ## Inputs
