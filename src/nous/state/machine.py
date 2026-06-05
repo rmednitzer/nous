@@ -203,6 +203,7 @@ class StateMachine:
         attempt are available via :meth:`last_safety_checks` for the audit
         trail.
         """
+        self._last_checks = []
         key = (self._current, trigger)
         if key not in _TRANSITIONS:
             raise ValueError(
@@ -210,7 +211,6 @@ class StateMachine:
             )
         nxt = _TRANSITIONS[key]
         ctx = context or {}
-        self._last_checks = []
         for gate in _SAFETY_GATES.get(key, ()):
             result = self._checker.check(
                 gate.constraint_id, ctx.get(gate.candidate_key), evidence=ctx

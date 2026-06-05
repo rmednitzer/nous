@@ -9,4 +9,4 @@
 | SC-5 | `inference_cloud` must fail closed with `CapExhausted` when the daily cap is reached, surfacing the failure to the controller. | H-5 |
 | SC-6 | The audit log must be rotated by `logrotate` with `postrotate chattr +a` (or equivalent). The audit handler must use `WatchedFileHandler` so rotation does not break the descriptor. | H-6 |
 | SC-7 | The OAuth issuer must default to `single_client=true`. Disabling single-client lockdown requires an ADR. | H-7 |
-| SC-8 | The state machine must refuse a transition into an operational mode (`MISSION`/`RELAY`/`MONITORING`/`C2`) when the power estimator reports `soc_pct` below `soc_pct_critical_threshold`. The threshold lives in the hardware profile. | H-8 |
+| SC-8 | The state machine must refuse a transition into an operational mode (`MISSION`/`RELAY`/`MONITORING`/`C2`) when the power estimator reports `soc_pct` below the critical reserve. The threshold lives in the hardware profile (`power.soc_pct_critical_threshold`) and reaches the gate as the `soc_pct_critical` safety-context signal. | H-8 |

@@ -116,6 +116,20 @@ def test_operational_entry_admitted_with_headroom_and_reserve(trigger: str) -> N
     assert fsm.current is target
 
 
+def test_last_safety_checks_cleared_after_unknown_trigger() -> None:
+    # A gated attempt populates last_safety_checks; a subsequent unknown
+    # trigger raises ValueError before the gate loop and must not leave the
+    # prior results behind for the engine's audit mirror to read.
+    fsm = StateMachine()
+    _boot(fsm)
+    with pytest.raises(GuardDenied):
+        fsm.transition("mission", context=_ctx(thermal_headroom_c=1.0))
+    assert fsm.last_safety_checks()
+    with pytest.raises(ValueError, match="no transition"):
+        fsm.transition("there_is_no_such_trigger")
+    assert fsm.last_safety_checks() == []
+
+
 def test_guard_refusals_are_recorded() -> None:
     fsm = StateMachine()
     _boot(fsm)

@@ -20,7 +20,7 @@ import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from .audit import AuditLogger, AuditRecord
+from .audit import AuditLogger, AuditRecord, redact
 from .clocks import Clock, MonotonicClock
 from .config import Settings, get_settings
 from .db import StateTransitionLog
@@ -554,26 +554,45 @@ class Engine:
 
 
 def _json_safe(value: Any) -> Any:
-    """Coerce one evidence value to a JSON-serialisable scalar for the audit line."""
+    """Coerce one evidence value to a strict-JSON scalar for the audit line.
+
+    Non-finite floats (NaN, +/-inf) are emitted as their string form rather
+    than passed through: the audit log is shipped off-host and replayed by
+    strict and cross-language verifiers, and ``NaN``/``Infinity`` are not
+    valid JSON. A non-finite candidate already fails its gate closed; this
+    only governs how the evidence is recorded.
+    """
     if isinstance(value, bool) or value is None:
         return value
-    if isinstance(value, (int, float, str)):
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else str(value)
+    if isinstance(value, str):
         return value
     try:
-        return float(value)
+        coerced = float(value)
     except (TypeError, ValueError):
         return str(value)
+    return coerced if math.isfinite(coerced) else str(coerced)
 
 
 def _safety_result_to_dict(result: SafetyResult) -> dict[str, Any]:
-    """Project a :class:`SafetyResult` onto the audit record's ``safety`` field."""
+    """Project a :class:`SafetyResult` onto the audit record's ``safety`` field.
+
+    The evidence passes through :func:`nous.audit.redact` before it is
+    recorded, the same allowlist the runner applies to tool arguments, so a
+    caller-supplied context key cannot smuggle a secret (or a giant string)
+    into the safety record that ``request_transition`` mirrors.
+    """
+    evidence = redact(dict(result.evidence))
     return {
         "constraint_id": result.constraint_id,
         "approved": result.approved,
         "was_clamped": result.was_clamped,
         "violation_type": result.violation_type,
         "value": _json_safe(result.value),
-        "evidence": {k: _json_safe(v) for k, v in result.evidence.items()},
+        "evidence": {k: _json_safe(v) for k, v in evidence.items()},
     }
 
 

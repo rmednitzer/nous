@@ -103,6 +103,30 @@ def test_safety_records_preserve_audit_chain(tmp_nous_home: Path) -> None:
     assert report["chained"] >= 3
 
 
+def test_safety_evidence_is_sanitised(tmp_nous_home: Path) -> None:
+    # Non-finite context is stringified (strict JSON for off-host verifiers)
+    # and secret-like keys are redacted, the same allowlist the runner applies
+    # to tool args. A non-finite candidate also fails the gate closed.
+    eng, log_path = _idle_engine(tmp_nous_home)
+    ok, _, _ = eng.request_transition(
+        "mission",
+        context={
+            "thermal_headroom_c": float("nan"),
+            "thermal_headroom_threshold_c": 5.0,
+            "authorization": "Bearer super-secret",
+        },
+    )
+    assert not ok
+    raw = Path(log_path).read_text(encoding="utf-8")
+    # No bare NaN/Infinity tokens: every audit line must parse as strict JSON.
+    assert "NaN" not in raw
+    assert "Infinity" not in raw
+    records = _safety_records(log_path)
+    evidence = records[0]["safety"]["evidence"]  # type: ignore[index]
+    assert evidence["thermal_headroom_c"] == "nan"
+    assert evidence["authorization"] == "<REDACTED>"
+
+
 def test_pure_python_engine_has_no_audit_sink(tmp_nous_home: Path) -> None:
     # Without an AuditLogger the safety mirror is a no-op; the gate logic
     # and the posture counter still work (the SQLite transition log and the
