@@ -27,6 +27,16 @@ def test_unknown_tool_falls_back_to_stateful_additive_surface() -> None:
     assert tier is Tier.STATEFUL
 
 
+def test_safety_tier_is_terminal_and_audit_only() -> None:
+    # ADR 0022: SAFETY is an audit classification, not a tool authority.
+    # It must sit above the four tool tiers so decide()'s ordered
+    # comparisons keep their meaning, and classify must never return it.
+    assert int(Tier.SAFETY) == 4
+    assert Tier.SAFETY > Tier.IRREVERSIBLE
+    tier, _ = classify("never_seen_before", {})
+    assert tier is not Tier.SAFETY
+
+
 def test_unknown_tool_refused_under_guarded_without_allow() -> None:
     tier, _ = classify("never_seen_before", {})
     decision = decide(tier, PolicyMode.GUARDED, probe="never_seen_before")

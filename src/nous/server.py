@@ -68,7 +68,7 @@ class Nous:
             db_engine = None
         self.transition_log = StateTransitionLog(db_engine)
         self.engine = Engine(
-            settings=settings, transition_log=self.transition_log
+            settings=settings, transition_log=self.transition_log, audit=self.audit
         )
         self.engine.start()
 

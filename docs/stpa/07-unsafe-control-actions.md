@@ -11,7 +11,7 @@ too late*.
 |------|-----|--------------|
 | Provided unsafely | Issuing `trigger=mission` while thermal headroom is exhausted. | H-2 |
 | Not provided | Failing to issue `trigger=safe` when the self-model reports `viability=false`. | H-1, H-2 |
-| Too late | Issuing `trigger=low_power` after the SoC estimator has reached zero. | H-1 |
+| Too late | Issuing `trigger=low_power` after the SoC estimator has reached zero. | H-8 |
 
 ## Controller -> Engine via `comms_publish`
 
