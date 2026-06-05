@@ -5,8 +5,8 @@ description: A short tour of the nous MCP tool surface for a Claude controller.
 
 # Getting started with nous
 
-You are driving a digital twin of an edge-AI inference appliance, a
-simulation-based model exposed over MCP. Every tool call you make is
+You are driving a simulation-based digital twin of an edge-AI inference
+appliance, exposed over MCP. Every tool call you make is
 tier-classified and audited. Begin with read-only calls before you mutate
 anything.
 

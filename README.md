@@ -8,10 +8,10 @@
 
 ## What this is
 
-`nous` is a digital twin of an edge-AI inference appliance: the man-portable,
-backpack-class kind of device that supports a single operator working in
-disconnected or contested environments. It is a *simulation-based* twin, a
-virtual model that runs the appliance's physics in software. There is no
+`nous` is a simulation-based digital twin of an edge-AI inference appliance:
+the man-portable, backpack-class kind of device that supports a single
+operator working in disconnected or contested environments. It runs the
+appliance's physics as a virtual model in software. There is no
 hardware in the loop and no live telemetry feed, so in the digital-twin
 taxonomy it is a digital *model*, not a unit bidirectionally synced to a
 physical device (see [LIMITATIONS.md](LIMITATIONS.md)). The modelled appliance
