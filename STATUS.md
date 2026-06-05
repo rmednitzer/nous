@@ -26,7 +26,7 @@ for the prior baseline.
 
 Deployment-side status note: the L1 subsystem rollout has been on
 `origin/main` since PR #38, so the auto-update timer lands the
-nineteen-tool surface on the live VM on the next poll after
+current thirty-tool surface on the live VM on the next poll after
 `origin/main` advances (no-op when the remote HEAD is unchanged).
 Eight audit findings have closed since the 2026-05-23 baseline and
 the post-baseline §10 re-audit: **C3** (FastMCP lifespan ticks the
@@ -130,9 +130,10 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 597 tests pass at HEAD (580 at the
-  2026-06-01 cadence audit, [`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md);
-  BL-031 / ADR 0026 added the daily-anchor suite).
+  feature branch before merge. 606 tests pass at HEAD (the ADR 0021
+  tier-classifier coverage check adds the most recent 2; 580 at the
+  2026-06-01 cadence audit, [`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md),
+  where BL-031 / ADR 0026 added the daily-anchor suite).
 - `make docs-build` (`mkdocs build --strict`) is warning-free.
 - `make policy` (em-dash + private-repo greps via
   `scripts/policy_checks.sh`) is enforced in CI as the `policy` job
