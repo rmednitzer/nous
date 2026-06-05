@@ -23,8 +23,8 @@ Last reviewed: 2026-05-23.
 | pmu / pdu | `planned` (lifts off PowerSubsystem) | `planned` | `planned` | BL-005b |
 | thermal | `filtered` (two-state lumped: junction + enclosure, profile-driven) | `filtered` (per-channel Kalman with shrinking covariance) | [estimator](../model-cards/estimator-thermal-kalman.md) | BL-005, BL-028 |
 | compute | `filtered` (load fraction, profile-driven draw curve, thermal-throttle clip) | `filtered` (per-channel Kalman over load and draw) | [estimator](../model-cards/estimator-compute-kalman.md) | BL-007, BL-031a |
-| storage | `filtered` (NAND wear, capacity accounting, write amplification) | `filtered` (per-channel Kalman over used and wear) | `planned` | BL-008 |
-| sensors | `filtered` (temp / humidity / baro; authoritative ambient source) | `filtered` (multi-channel Kalman with bounds validation) | `planned` | BL-009 |
+| storage | `filtered` (NAND wear, capacity accounting, write amplification) | `filtered` (per-channel Kalman over used and wear) | [estimator](../model-cards/estimator-storage-kalman.md) | BL-008 |
+| sensors | `filtered` (temp / humidity / baro; authoritative ambient source) | `filtered` (multi-channel Kalman with bounds validation) | [estimator](../model-cards/estimator-sensors-kalman.md) | BL-009 |
 | position | `filtered` (lat / lon / alt dead-reckoning + GNSS fix gating + IMU drift) | `parametric` (v0.1 EKF passthrough with NaN/Inf validation; full constant-velocity EKF is BL-026) | [estimator](../model-cards/estimator-position-ekf.md) | BL-010, BL-026 |
 | biometrics | `filtered` (HR / core temp / hydration / cognitive load with physiological clamps) | `filtered` (multi-channel Kalman; physiology grounding is BL-040) | [estimator](../model-cards/estimator-biometrics-kalman.md) | BL-011, BL-029, BL-040 |
 | comms | `filtered` (per-link envelopes drive FSM `state.comms_state` each tick) | `parametric` (per-link belief tracker; full transition particle filter is BL-030) | [estimator](../model-cards/estimator-comms-particle.md) | BL-012, BL-030, BL-048 |
