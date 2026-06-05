@@ -1,7 +1,7 @@
 # Modelling assumptions and simplifications
 
-> **Fidelity disclaimer.** `nous` is a simulator for a man-portable AI
-> inference appliance. It does not drive real hardware and is not
+> **Fidelity disclaimer.** `nous` is a simulation-based digital twin of an
+> edge-AI inference appliance. It does not drive real hardware and is not
 > suitable for safety-of-flight, mission-licensing, or certification
 > decisions. The simplifications documented below introduce modelling
 > errors that the codebase does not bound. Any use of `nous` in a

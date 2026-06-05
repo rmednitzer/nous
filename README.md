@@ -8,24 +8,29 @@
 
 ## What this is
 
-`nous` is a simulator for a man-portable AI inference appliance, the kind of
-device you might wear as a backpack to support a single operator working in
-disconnected or contested environments. The simulated appliance pairs a
-Jetson-class compute module with battery, solar/fuel-cell auxiliary power, a
-thermal envelope, environmental and biometric sensors, multi-mode radios, and
-a local-plus-cloud inference path. The simulator runs the device end-to-end
-as a tick-driven asynchronous system that exposes itself to a controller (a
-Claude session or any MCP client) through the Model Context Protocol.
+`nous` is a digital twin of an edge-AI inference appliance: the man-portable,
+backpack-class kind of device that supports a single operator working in
+disconnected or contested environments. It is a *simulation-based* twin, a
+virtual model that runs the appliance's physics in software. There is no
+hardware in the loop and no live telemetry feed, so in the digital-twin
+taxonomy it is a digital *model*, not a unit bidirectionally synced to a
+physical device (see [LIMITATIONS.md](LIMITATIONS.md)). The modelled appliance
+pairs a Jetson-class compute module with battery, solar/fuel-cell auxiliary
+power, a thermal envelope, environmental and biometric sensors, multi-mode
+radios, and a local-plus-cloud inference path. The twin runs the device
+end-to-end as a tick-driven asynchronous system that exposes itself to a
+controller (a Claude session or any MCP client) through the Model Context
+Protocol.
 
-The point of the simulator is to make the *behaviour* of a backpack inference
-unit legible: which capabilities are intact right now, which have degraded,
-how long the device can sustain a given workload, and what an estimator can
-honestly say about the operator and the environment. To that end every
-subsystem has a parametric physics model, a sensor model that emits noisy
-observations, and a recursive estimator (Kalman, EKF, UKF, or particle filter
-as appropriate) that turns those observations back into a calibrated belief
-state. A self-model layer aggregates those beliefs into capability claims the
-controller can reason about.
+The point is to make the *behaviour* of an edge-AI unit legible: which
+capabilities are intact right now, which have degraded, how long the device
+can sustain a given workload, and what an estimator can honestly say about the
+operator and the environment. To that end every subsystem has a parametric
+physics model, a sensor model that emits noisy observations, and a recursive
+estimator (Kalman, EKF, UKF, or particle filter as appropriate) that turns
+those observations back into a calibrated belief state. A self-model layer
+aggregates those beliefs into capability claims the controller can reason
+about.
 
 The codebase is meant to be small, hand-written, and easy to inspect. It is
 not a wrapper around a commercial sim; it is a deliberate, opinionated
@@ -34,7 +39,7 @@ support useful conversations with a controller. Every numeric curve lives in
 a hardware profile YAML so the same engine can be retargeted to a new device
 (Jetson AGX Orin 64GB is the reference profile). NATO and open-standard
 adapters (CoT/TAK, SensorThings, MISB KLV, NMEA 0183, STANAG 4774, MQTT)
-provide the seams for plugging the simulated unit into mission stacks.
+provide the seams for plugging the modelled unit into mission stacks.
 
 ## Status
 
@@ -44,8 +49,9 @@ place. The L1 subsystem rollout (power, APU, thermal, compute,
 inference, storage, comms, position, sensors, biometrics) and their
 estimators are landed on the development line with passing tests; the
 interop adapters (CoT, SensorThings, MISB KLV, NMEA, STANAG, MQTT) now
-emit standards-shaped output. The self-model layer is still a typed
-placeholder. See [STATUS.md](STATUS.md) for the phase table and the
+emit standards-shaped output. The self-model layer aggregates the live
+estimators into calibrated capability claims (BL-018, BL-035). See
+[STATUS.md](STATUS.md) for the phase table and the
 per-component maturity ledger, [LIMITATIONS.md](LIMITATIONS.md) for the
 explicit gaps, [docs/backlog.md](docs/backlog.md) for the line-item
 tracker, and [docs/audit-2026-05-24.md](docs/audit-2026-05-24.md) for
@@ -75,8 +81,9 @@ examples/        a self-driving demo, an inspector quickstart
 
 ## Capabilities
 
-- Tick-loop physics simulation of a backpack inference appliance, with
-  subsystem models for compute, power, auxiliary power (battery, solar, fuel
+- Tick-loop physics simulation of an edge-AI inference appliance
+  (man-portable, backpack-class), with subsystem models for compute, power,
+  auxiliary power (battery, solar, fuel
   cell), thermal, storage, sensors, position, biometrics, comms, and
   inference, all driven by a single hardware-profile YAML.
 - Hand-rolled finite-state machine over the mission posture (stowed, boot,
@@ -95,7 +102,7 @@ examples/        a self-driving demo, an inspector quickstart
   SensorThings, MISB KLV, NMEA 0183, STANAG 4774/4778, and MQTT.
 - A VM deployment bundle (Ubuntu 26.04 LTS + systemd + Caddy + logrotate;
   also works on 24.04) and an `examples/self_driving_demo.py` for running
-  the simulator with a Claude session as the controller.
+  the twin with a Claude session as the controller.
 
 ## Install
 
@@ -135,7 +142,7 @@ tour.
 
 - [STATUS.md](STATUS.md) -- maturity by phase and per-document state
 - [LIMITATIONS.md](LIMITATIONS.md) -- explicit boundaries (no mesh/DTN, single
-  operator, simulator only, etc.)
+  operator, no hardware in the loop, etc.)
 - [docs/backlog.md](docs/backlog.md) -- BL-NNN line-item tracker
 - [docs/adr/](docs/adr/) -- numbered architecture decision records
 - [docs/stpa/](docs/stpa/) -- STPA-Pro safety analysis artefacts

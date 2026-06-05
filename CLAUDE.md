@@ -6,7 +6,8 @@ that matter when the contributor is a Claude session.
 
 ## Quick context
 
-`nous` simulates a backpack-class AI inference appliance. The tick loop in
+`nous` is a digital twin of an edge-AI inference appliance, a simulation-based
+model rather than a hardware-linked twin. The tick loop in
 `src/nous/engine.py` drives subsystem physics; estimators produce calibrated
 beliefs; a self-model layer aggregates them into capability claims; the MCP
 tool surface in `src/nous/server.py` exposes everything to a controller.
@@ -40,8 +41,8 @@ short, action-oriented, and accurate:
 
 ## Repo purpose
 
-The point of the simulator is to make the behaviour of a backpack
-inference appliance legible to a controller: which capabilities are intact
+The point of the twin is to make the behaviour of an edge-AI inference
+appliance legible to a controller: which capabilities are intact
 right now, which have degraded, how long the device can sustain a given
 workload, and what an estimator can honestly say about the operator and
 the environment. Code that obscures that picture is worse than code that

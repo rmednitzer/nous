@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "nous"
 version = "0.1.0"
-description = "Simulator for a man-portable AI inference appliance: tick-loop physics, subsystem estimators, self-model capability layer, MCP tool surface."
+description = "Simulation-based digital twin of an edge-AI inference appliance: per-subsystem physics and recursive estimators feed a self-model an LLM controller queries over MCP."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
@@ -14,6 +14,7 @@ authors = [{ name = "rmednitzer" }]
 keywords = [
     "mcp",
     "model-context-protocol",
+    "digital-twin",
     "simulator",
     "edge-ai",
     "jetson",

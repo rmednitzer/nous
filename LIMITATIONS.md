@@ -18,19 +18,23 @@ without a vendored copy.
 **Tracking.** Locked when [STATUS.md](STATUS.md) flips to phase L3 and the
 1.0 release notes ship (`docs/releasing.md`).
 
-## L2. Simulator only
+## L2. Model-only digital twin (no hardware in the loop)
 
-**State.** `nous` simulates a backpack inference appliance. It does not
-control a physical device, and the v0.1 codebase does not even build with
-the hardware drivers required to do so.
+**State.** `nous` is a simulation-based digital twin: it models an edge-AI
+inference appliance in software but is not coupled to a physical unit. It
+does not control real hardware, ingests no live device telemetry, and the
+v0.1 codebase does not even build with the hardware drivers required to do
+so. In the digital-twin taxonomy it is a digital *model* (no automated
+physical / digital data exchange), not a digital *shadow* (a one-way live
+feed) or a bidirectionally-synced twin.
 
 **Implication.** Anything that looks like a real-time output (CoT message,
-MQTT publish, MISB KLV frame) is a *simulated* output produced from
-simulated subsystem state. Do not connect a simulator instance to a
-production C2 or TAK server without an explicit posture review.
+MQTT publish, MISB KLV frame) is a *modelled* output produced from simulated
+subsystem state. Do not connect an instance to a production C2 or TAK server
+without an explicit posture review.
 
 **Tracking.** Out of scope for the project. A future sibling repo would be
-needed to drive real hardware.
+needed to drive real hardware and close the loop into a hardware-synced twin.
 
 ## L3. Single operator
 
