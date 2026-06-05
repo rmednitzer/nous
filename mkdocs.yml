@@ -65,6 +65,7 @@ nav:
       - Power SoC: model-cards/estimator-power-soc.md
       - APU per-source: model-cards/estimator-apu.md
       - Thermal Kalman: model-cards/estimator-thermal-kalman.md
+      - Compute Kalman: model-cards/estimator-compute-kalman.md
       - Biometrics Kalman: model-cards/estimator-biometrics-kalman.md
       - Comms Particle: model-cards/estimator-comms-particle.md
       - Inference local mock: model-cards/inference-local-mock.md
