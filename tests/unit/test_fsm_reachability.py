@@ -1,12 +1,14 @@
-"""FSM reachability and structural invariants (ADR 0028).
+"""FSM reachability and structural invariants (ADR 0028, ADR 0030).
 
 The hand-rolled transition table is small and finite, so these checks are
 exhaustive walks rather than sampled properties. They pin the safety
 structure the reachability work guarantees: every mode is reachable, a
 fail-safe (`SAFE`) and a clean stop (`SHUTDOWN`) are reachable from every
-operating or impaired mode, every entry into an operational mode is gated,
-and the classification buckets stay disjoint. A regression that strands a
-mode or lands an unguarded path into an operational mode fails here.
+operating or impaired mode, the terminal `FAULT` is one `fault` trigger from
+every powered mode, the `safe`/`fault` failsafe edges are never gated, every
+entry into an operational mode is gated, and the classification buckets stay
+disjoint. A regression that strands a mode, gates a failsafe exit, or lands an
+unguarded path into an operational mode fails here.
 """
 
 from __future__ import annotations
@@ -59,10 +61,28 @@ def test_shutdown_reachable_from_every_operating_or_impaired_mode() -> None:
         assert Mode.SHUTDOWN in _reachable_from(mode)
 
 
-def test_fault_reachable_from_every_operational_mode() -> None:
-    for mode in _OPERATIONAL_MODES:
-        assert (mode, "fault") in _TRANSITIONS
+# Powered modes: everywhere the device is on and could detect a hardware
+# fault. STOWED is powered off; SHUTDOWN and FAULT are terminal.
+_POWERED_MODES = set(Mode) - _TERMINAL_MODES - {Mode.STOWED}
+
+
+def test_fault_reachable_in_one_trigger_from_every_powered_mode() -> None:
+    # A hardware fault is mode-independent and unrecoverable, so FAULT must be
+    # one `fault` trigger from anywhere the device is powered, not stranded one
+    # rung short behind a gated recovery (ADR 0030).
+    for mode in _POWERED_MODES:
+        assert (mode, "fault") in _TRANSITIONS, f"{mode.value} cannot fault directly"
         assert _TRANSITIONS[(mode, "fault")] is Mode.FAULT
+
+
+def test_failsafe_edges_are_never_gated() -> None:
+    # `safe` and `fault` are the failsafe exits; gating one could refuse the
+    # device its safe posture or its fault stop, so none may carry a gate.
+    for frm, trigger in _TRANSITIONS:
+        if trigger in ("safe", "fault"):
+            assert (frm, trigger) not in _SAFETY_GATES, (
+                f"failsafe edge {frm.value} -{trigger}-> must not be gated"
+            )
 
 
 def test_every_entry_into_an_operational_mode_is_gated() -> None:

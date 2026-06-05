@@ -52,9 +52,12 @@ stateDiagram-v2
     degraded --> fault: fault
     thermal_limit --> idle: cool
     thermal_limit --> safe: safe
+    thermal_limit --> fault: fault
     low_power --> idle: recover
     low_power --> safe: safe
+    low_power --> fault: fault
     safe --> idle: recover
+    safe --> fault: fault
     safe --> shutdown: shutdown
     fault --> stowed: reset
     shutdown --> stowed: reset
@@ -68,7 +71,12 @@ so every operational mode can reach the fail-safe state directly). The
 `idle`, not back in the prior operational mode (ADR 0029): the controller
 re-selects the mode it wants, re-gated. `idle` also gains direct `safe` and
 `fault` edges so the failsafe and fault states are reachable from the holding
-state.
+state. ADR 0030 completes the `fault`-trigger exits: every powered mode
+(`thermal_limit`, `low_power`, and `safe` included) reaches the terminal
+`fault` mode in one `fault` trigger, because a hardware fault is
+mode-independent and must never be refused. The
+operational modes do not connect to each other directly: a mode switch goes
+through `idle` (via `complete`) so the new operational entry is re-gated.
 
 ## Safety gates
 
@@ -142,12 +150,17 @@ records why.
 ## Reachability and classification
 
 ADR 0028 makes the fail-safe state directly reachable from work: every
-operational mode gains a `safe` trigger to `safe`, and `relay`/`monitoring`/
-`c2` gain a `fault` trigger. The load-bearing invariant, checked
-exhaustively in `tests/unit/test_fsm_reachability.py`, is that every
-operational or impaired mode reaches `safe` in exactly one trigger, and
-none of the `safe` or `fault` edges are gated. `docs/stpa/10-fsm-constraints-mapping.md`
-traces each safety-relevant transition to its constraint and hazard.
+operational mode gains a `safe` trigger into the `safe` mode, and
+`relay`/`monitoring`/`c2` gain a `fault` trigger. ADR 0030 completes the
+`fault`-trigger exits so the terminal `fault` mode is one `fault` trigger from
+every *powered* mode, not just the operational ones (`thermal_limit`,
+`low_power`, and `safe` gained the edge). The load-bearing invariants, checked
+exhaustively in `tests/unit/test_fsm_reachability.py`, are that every
+operational or impaired mode reaches the `safe` mode in exactly one `safe`
+trigger, every powered mode reaches the terminal `fault` mode in exactly one
+`fault` trigger, and none of the `safe`/`fault` failsafe edges are gated.
+`docs/stpa/10-fsm-constraints-mapping.md` traces each safety-relevant
+transition to its constraint and hazard.
 
 `state/machine.py` exposes `is_operational`, `is_impaired`, and
 `is_terminal` so the engine and the verification suite share one vocabulary

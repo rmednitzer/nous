@@ -82,7 +82,11 @@ test_fsm_reachability.py` walks the table and fails the build if any breaks.
 The load-bearing one is that every operational or impaired mode reaches
 `SAFE` in exactly one `safe` trigger, so the fail-safe posture is never more
 than a step away from anywhere the device is doing work or already impaired.
-`SHUTDOWN` is reachable from every operating or impaired mode, every
-operational mode can `fault`, and the terminal modes (`SHUTDOWN`, `FAULT`)
-leave only via `reset`. None of the `safe` or `fault` edges are gated: a
-path to the fail-safe state must never be refused.
+The companion invariant (ADR 0030) is that the terminal `FAULT` is reachable
+in exactly one `fault` trigger from every *powered* mode (`BOOT`, `IDLE`, the
+operational modes, the impaired modes, and `SAFE`), because a hardware fault is
+mode-independent and unrecoverable and must never be refused or stranded one
+rung short of the terminal. `SHUTDOWN` is reachable from every operating or
+impaired mode, and the terminal modes (`SHUTDOWN`, `FAULT`) leave only via
+`reset`. None of the `safe` or `fault` failsafe edges are gated: a path to the
+fail-safe or fault state must never be refused.

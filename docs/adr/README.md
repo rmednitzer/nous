@@ -32,3 +32,4 @@
 | 0027 | [Condition-driven auto-safing on tick](0027-condition-driven-auto-safing.md) | Accepted | 2026-06-05 |
 | 0028 | [FSM failsafe reachability, classification, and label-driven safing](0028-fsm-reachability-and-label-driven-safing.md) | Accepted | 2026-06-05 |
 | 0029 | [FSM remediation -- actuation, neutral recovery, and fail-closed robustness](0029-fsm-remediation-actuation-and-robustness.md) | Accepted | 2026-06-05 |
+| 0030 | [FSM completeness -- uniform fault reachability from every powered mode](0030-fsm-fault-reachability-completeness.md) | Accepted | 2026-06-05 |
