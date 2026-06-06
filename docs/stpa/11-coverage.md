@@ -40,7 +40,7 @@ requirement(s) that mitigate it. UCA ids are defined in
 | H-5 cap exhaustion, no fallback | L-2 | SC-5 | UCA-3a | LS-3 | DR-5, DR-8 | enforced |
 | H-6 audit append-only broken | L-4 | SC-6 | (LS-4, deployment fault) | LS-4 | DR-6, DR-12 | enforced |
 | H-7 OAuth admits an extra client | L-2, L-3 | SC-7 | (LS-5, config fault) | LS-5 | DR-9 (enforced), DR-7 (review) | partial |
-| H-8 unsafe power mode entry / sustain | L-2 | SC-8 | UCA-1c, UCA-6a | LS-3 | DR-11, DR-13, DR-14 | enforced |
+| H-8 unsafe power mode entry / sustain | L-2 | SC-8 | UCA-1c, UCA-6a | LS-6 | DR-11, DR-13, DR-14 | enforced |
 
 Every hazard has at least one enforced derived requirement. H-7 is the only row
 with a residual review item (DR-7), detailed below; its admission control
