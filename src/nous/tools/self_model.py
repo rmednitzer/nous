@@ -128,7 +128,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
 
     @mcp.tool()
     async def self_model_situation(ctx: Context | None = None) -> str:
-        """Fused situational read: capabilities + provenance + posture + recommendations."""
+        """Fused situational read: capabilities, provenance, posture, safety, recommendations."""
 
         async def _work() -> str:
             from ..self_model.situation import situation

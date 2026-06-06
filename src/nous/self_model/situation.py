@@ -11,10 +11,13 @@ violation counts, and a short ranked list of degraded-mode recommendations.
 ``situation`` builds on ``assess`` rather than recomputing the quantile mapping,
 so the headline numbers match ``self_model_assess`` exactly.
 
-Two honesty notes shape the output. ``age_s`` is the literal estimator clock lag
-(sim-now minus the estimate's last-update timestamp): under live ticking every
-estimator updates each tick, so it sits near zero and only grows when an
-estimator stalls, which is the case a controller must see. The live trust signal
+Two honesty notes shape the output. ``age_s`` is the estimator clock lag
+measured against the freshest estimator clock (the max ``ts_s`` across the
+estimators), not the engine clock: ``profile_reload`` rebuilds estimators on a
+fresh timebase while the engine clock keeps counting, so an engine-clock
+reference would report a constant false staleness after a reload. Against the
+estimator timebase it sits near zero under live ticking and grows only when one
+estimator lags the others, which is the case a controller must see. The live trust signal
 stays the covariance-derived ``confidence`` carried on each claim; both are
 surfaced so a stale claim is distinguishable from a merely uncertain one. The
 recommendations are advisory heuristics, ranked to mirror the engine's own
@@ -37,8 +40,7 @@ from .assess import assess
 
 if TYPE_CHECKING:
     from ..engine import Engine
-    from ..estimators.base import Estimator
-    from ..types import Capability
+    from ..types import Capability, Estimate
 
 __all__ = [
     "CapabilitySituation",
@@ -130,13 +132,18 @@ def situation(engine: Engine, *, seed: int = 0) -> Situation:
     of degraded-mode recommendations.
     """
     a = assess("situation", engine=engine, seed=seed)
-    est_map = _estimator_map(engine)
+    states = _estimator_states(engine)
+    # The staleness reference is the freshest estimator clock, not the engine
+    # clock: profile_reload rebuilds estimators on a fresh timebase while the
+    # engine clock keeps counting, so an engine-clock reference would report a
+    # constant false staleness after a reload.
+    now = max((s.ts_s for s in states.values()), default=float(engine.state.ts_s))
     caps: list[CapabilitySituation] = []
     by_name: dict[str, CapabilitySituation] = {}
     for cap in (a.endurance, a.thermal_headroom, a.inference_capacity):
         if cap is None:
             continue
-        cs = _capability_situation(cap, engine, est_map)
+        cs = _capability_situation(cap, engine, states, now)
         caps.append(cs)
         by_name[cs.name] = cs
 
@@ -150,12 +157,15 @@ def situation(engine: Engine, *, seed: int = 0) -> Situation:
     )
 
 
-def _estimator_map(engine: Engine) -> dict[str, Estimator]:
-    return {name: getattr(engine, attr) for name, attr in _ESTIMATOR_ATTRS.items()}
+def _estimator_states(engine: Engine) -> dict[str, Estimate]:
+    return {
+        name: getattr(engine, attr).state()
+        for name, attr in _ESTIMATOR_ATTRS.items()
+    }
 
 
 def _capability_situation(
-    cap: Capability, engine: Engine, est_map: dict[str, Estimator]
+    cap: Capability, engine: Engine, states: dict[str, Estimate], now: float
 ) -> CapabilitySituation:
     return CapabilitySituation(
         name=cap.name,
@@ -166,22 +176,20 @@ def _capability_situation(
         confidence=cap.confidence,
         units=cap.units,
         status=_status(cap, engine),
-        provenance=_provenance(cap, engine, est_map),
+        provenance=_provenance(cap, states, now),
     )
 
 
 def _provenance(
-    cap: Capability, engine: Engine, est_map: dict[str, Estimator]
+    cap: Capability, states: dict[str, Estimate], now: float
 ) -> list[DriverProvenance]:
-    now = float(engine.state.ts_s)
     out: list[DriverProvenance] = []
     for driver in cap.drivers:
-        est = est_map.get(driver)
-        if est is None:
+        st = states.get(driver)
+        if st is None:
             continue
-        state = est.state()
-        age = max(0.0, now - float(state.ts_s))
-        out.append(DriverProvenance(source=state.source, age_s=round(age, 3)))
+        age = max(0.0, now - float(st.ts_s))
+        out.append(DriverProvenance(source=st.source, age_s=round(age, 3)))
     return out
 
 

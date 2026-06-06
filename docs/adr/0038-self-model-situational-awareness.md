@@ -20,8 +20,10 @@ posture, and what to do when a claim has degraded. BL-061 is that synthesis.
 The four elements BL-061 names already have their raw materials in place.
 Confidence bands are the assess quantiles. Source provenance is
 `Capability.drivers` (the subsystems behind a claim) plus each driving
-estimator's `Estimate.source`. Staleness is `engine.state.ts_s` minus the
-estimator's `Estimate.ts_s`. Degraded-mode recommendations are derivable from
+estimator's `Estimate.source`. Staleness is the gap between the freshest
+estimator clock and each estimator's `Estimate.ts_s` (measured against the
+estimators, not the engine clock, so it survives a `profile_reload` that
+rebuilds estimators on a fresh timebase). Degraded-mode recommendations are derivable from
 the same live state the engine's own auto-safing reads (ADR 0027, ADR 0028):
 the FSM mode, the operator and comms labels, the compute throttle flag, and
 which capability bands have squeezed against their thresholds. The gap is a

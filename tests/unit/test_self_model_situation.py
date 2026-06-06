@@ -63,6 +63,19 @@ def test_provenance_age_is_zero_under_live_ticking(engine: Engine) -> None:
     assert max(ages) == pytest.approx(0.0, abs=1e-6)
 
 
+def test_provenance_age_survives_profile_reload(engine: Engine) -> None:
+    """profile_reload rebuilds estimators on a fresh timebase while preserving the
+    engine clock; staleness must stay measured against the estimator clock so it
+    reads ~0 rather than jumping to the pre-reload elapsed time."""
+    for _ in range(5):
+        engine.tick()
+    engine.reload_profile()
+    s = situation(engine)
+    ages = [p.age_s for c in s.capabilities for p in c.provenance]
+    assert ages
+    assert max(ages) == pytest.approx(0.0, abs=1e-6)
+
+
 def test_posture_reports_mode_and_labels(engine: Engine) -> None:
     s = situation(engine)
     assert s.posture.mode == engine.state.mode.value
