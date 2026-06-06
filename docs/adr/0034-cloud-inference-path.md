@@ -40,11 +40,15 @@ the tool layer rather than only in the library). The response carries `path`,
 
 The change touches no boundary surface. The cap and prompt-cache discipline in
 `anthropic_client.py` are reused unchanged, and `policy.py` already classifies
-`inference_cloud` as T2, so no policy edit is needed. The system slot defaults
-to a short, stable, trusted instruction (stable so prompt-cache hits survive);
-the operator `prompt` is the untrusted slot, consistent with the client's slot
-discipline. `max_tokens` is clamped to a ceiling because a cloud token is a real
-cost, while the daily cap remains the spend ceiling.
+`inference_cloud` as T2, so no policy edit is needed. The system slot is fixed
+to a short, stable, trusted instruction (stable so prompt-cache hits survive,
+fixed so caller-supplied content cannot reach the trusted slot); the operator
+`prompt` is the untrusted user slot, consistent with the client's slot
+discipline. The tool exposes no `system` parameter for exactly this reason: a
+caller-overridable system slot would let an injected operator prompt elevate
+untrusted text into the trusted role instruction. `max_tokens` is clamped to a
+ceiling because a cloud token is a real cost, while the daily cap remains the
+spend ceiling.
 
 Two scope lines are drawn deliberately. First, `inference_request` (also
 classified T2) stays deferred: the ladder inside `inference_cloud` already does

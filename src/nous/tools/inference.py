@@ -62,7 +62,6 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
     @mcp.tool()
     async def inference_cloud(
         prompt: str,
-        system: str = "",
         max_tokens: int = 512,
         ctx: Context | None = None,
     ) -> str:
@@ -75,23 +74,22 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         carries ``path`` (``cloud`` or ``local_mock``), the degradation
         ``reason``, ``cap_remaining``, and a ``cap`` snapshot so a routed
         controller can see it was served by the mock. ``prompt`` is the
-        untrusted slot. The ``system`` slot is reserved for trusted content
-        (the caller must pass only trusted content here, otherwise untrusted
-        text is elevated into the system slot); it defaults to a stable
-        cloud-path instruction so prompt-cache hits are preserved.
-        ``max_tokens`` is clamped to a ceiling because a cloud token is a
-        real cost. Tier T2 (stateful): a cloud call consumes one unit of
-        the daily cap.
+        untrusted user slot; the system slot is fixed to a stable, trusted
+        cloud-path instruction (fixed so caller content cannot reach the
+        trusted slot, stable so prompt-cache hits are preserved), matching
+        the slot discipline in ``anthropic_client.py``. ``max_tokens`` is
+        clamped to a ceiling because a cloud token is a real cost. Tier T2
+        (stateful): a cloud call consumes one unit of the daily cap.
         """
         bounded = max(1, min(int(max_tokens), _CLOUD_MAX_TOKENS_CEIL))
 
         async def _work() -> str:
             client = AnthropicClient(cfg)
 
-            async def _cloud(p: str, s: str) -> str:
+            async def _cloud(p: str, _s: str) -> str:
                 return await client.call(
                     prompt=p,
-                    system=s or _CLOUD_SYSTEM,
+                    system=_CLOUD_SYSTEM,
                     max_tokens=bounded,
                 )
 
@@ -106,7 +104,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                 comms_state=lambda: app.engine.comms.derive_state()[0],
                 cap_remaining=lambda: cap_status(cfg)["remaining"],
             )
-            result = await ladder.call(prompt, system=system)
+            result = await ladder.call(prompt)
             snapshot = cap_status(cfg)
             payload = result.to_dict()
             payload["cap"] = snapshot

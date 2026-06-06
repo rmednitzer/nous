@@ -247,11 +247,6 @@ tool registry.
     "prompt": {
       "title": "Prompt",
       "type": "string"
-    },
-    "system": {
-      "default": "",
-      "title": "System",
-      "type": "string"
     }
   },
   "required": [
