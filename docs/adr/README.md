@@ -36,3 +36,4 @@
 | 0031 | [Register the state_transition control tool](0031-state-transition-control-tool.md) | Accepted | 2026-06-06 |
 | 0032 | [FSM terminal-control tools](0032-fsm-terminal-control-tools.md) | Accepted | 2026-06-06 |
 | 0033 | [Complete the registered tool surface](0033-complete-tool-surface.md) | Accepted | 2026-06-06 |
+| 0034 | [Register the cloud inference path](0034-cloud-inference-path.md) | Accepted | 2026-06-06 |

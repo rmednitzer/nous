@@ -59,7 +59,7 @@ of this report):
 | DR-2 | `tests/unit/test_state_machine_guards.py::test_mission_refused_when_headroom_below_threshold` |
 | DR-3 | `tests/unit/test_comms_subsystem.py::test_derive_state_limited_when_one_link_unhealthy` |
 | DR-4 | `tests/unit/test_interop_adapters.py::test_cot_encode_refuses_stale_estimate` (and the per-adapter `*_refuses_stale` cases) |
-| DR-5 | `tests/unit/test_anthropic_client.py::test_cap_raises_when_exhausted` (cap fail-closed) ; `tests/unit/test_anthropic_status.py::test_cap_exhausted_payload_carries_reason_and_snapshot` (structured payload) ; `tests/unit/test_inference_fallback.py::test_local_used_when_cap_exhausted`, `::test_local_used_when_cloud_raises_cap_exhausted` (fallback ladder routes to the local mock) |
+| DR-5 | `tests/unit/test_anthropic_client.py::test_cap_raises_when_exhausted` (cap fail-closed) ; `tests/unit/test_anthropic_status.py::test_cap_exhausted_payload_carries_reason_and_snapshot` (structured payload) ; `tests/unit/test_inference_fallback.py::test_local_used_when_cap_exhausted`, `::test_local_used_when_cloud_raises_cap_exhausted` (fallback ladder routes to the local mock) ; `tests/integration/test_inference_cloud_tool.py::test_inference_cloud_degrades_on_cap_exhausted` (the registered `inference_cloud` tool degrades to the mock, ADR 0034) |
 | DR-6 | `tests/unit/test_audit_durability.py::test_audit_degraded_on_fsync_failure` |
 | DR-7 | `tests/unit/test_oauth.py::test_single_client_replaces_on_re_dcr` (a re-registration evicts the prior client; lockdown enforced). The disable-time warning is the lone unpinned sub-claim, below. |
 | DR-8 | `tests/unit/test_anthropic_client.py::test_corrupt_state_fails_closed` |

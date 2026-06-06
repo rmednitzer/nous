@@ -18,8 +18,9 @@ drain) is the controller's lever via :meth:`set_continuous_rate` or
 chain the single source of truth for the power loop and avoids a
 parallel SoC-debit path the estimator cannot see.
 
-Cloud path (model selection, network round-trip, cap accounting)
-lives in :mod:`nous.inference_fallback` and lands in a later ADR.
+Cloud path (network round-trip, cap accounting) lives in
+:mod:`nous.inference_fallback` and is exposed by the ``inference_cloud``
+tool (ADR 0034); model selection and streaming are tracked under BL-069.
 """
 
 from __future__ import annotations
