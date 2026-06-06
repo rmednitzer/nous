@@ -103,7 +103,7 @@ re-audit).
 | `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/safety/enforcer.py` | in-progress | Runtime safety enforcer (ADR 0022): `SafetyEnforcer.check` returns a structured `SafetyResult` (approved / clamped / evidence) and counts per-constraint and total violations; `floor_threshold` and `ceiling_clamp` cover the SC-2 refusal and throttle-clamp shapes. The FSM now routes its entry gates through it (SC-2 thermal + SC-8 power, registered via `register_fsm_constraints`), the engine mirrors every check to the audit log under `Tier.SAFETY`, and the tick-driven auto-safing (ADR 0027/0028) drives the FSM toward safety on a violation. |
-| `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. |
+| `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. The cloud call carries model-tier selection, capability-guarded adaptive thinking, and streaming for long generations (BL-069 / ADR 0035); changes require an ADR. |
 | `src/nous/engine.py` | in-progress | Tick orchestration; all ten L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. |
 | `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |
 | `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in (BL-005a). |
@@ -136,10 +136,13 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 752 tests pass at HEAD: BL-013 / ADR 0034 added
-  three with the `inference_cloud` cloud-path tool and BL-044 added one pinning
-  the self-model endurance band, on top of the 748 from BL-068 / ADR 0033 (five
-  with the `comms_send` / `comms_publish` tools), the 743 from BL-067 / ADR 0032
+  feature branch before merge. 759 tests pass at HEAD: BL-069 / ADR 0035 added
+  seven enriching the cloud call (the tier guard, the streaming branch, cache
+  markers, cache-read surfacing, and the tier forwarded by `inference_cloud`),
+  on top of the 752 from BL-013 / ADR 0034 (three with the `inference_cloud`
+  cloud-path tool) and BL-044 (one pinning the self-model endurance band), the
+  748 from BL-068 / ADR 0033 (five with the `comms_send` / `comms_publish`
+  tools), the 743 from BL-067 / ADR 0032
   (four for the `state_force_*` terminal-control tools)
   and the 739 from the 2026-06-06 cadence audit
   ([`docs/audit-2026-06-06.md`](docs/audit-2026-06-06.md)), which had measured

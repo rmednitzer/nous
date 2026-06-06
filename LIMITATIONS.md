@@ -63,10 +63,12 @@ gets an answer.
 per day stops producing cloud outputs and is served by the local mock
 (`inference_local` directly, or `inference_cloud` degraded to the mock).
 
-**Tracking.** See ADR-0005 (cap) and ADR-0034 (cloud path registration). The
-cap is intentional; raise the env var `NOUS_ANTHROPIC_DAILY_CAP` only with
-operator approval. Cloud-call enrichment (adaptive thinking, streaming, model
-selection) is tracked under BL-069.
+**Tracking.** See ADR-0005 (cap), ADR-0034 (cloud path registration), and
+ADR-0035 (cloud-call enrichment). The cap is intentional; raise the env var
+`NOUS_ANTHROPIC_DAILY_CAP` only with operator approval. Cloud-call enrichment
+(adaptive thinking, capability-guarded; streaming for long generations;
+model-tier selection surfaced as `inference_cloud(tier=...)`) landed under
+BL-069.
 
 ## L5. Profile hot-reload is runtime-only, not mid-scenario
 

@@ -14,6 +14,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   docs site, and the governance files lead with that framing so the scope
   stays honest about what the artefact is and is not.
 
+### Added (inference: enrich the cloud call, ADR 0035)
+
+- Cloud-call enrichment (ADR 0035, BL-069). `AnthropicClient.call` gains
+  model-tier selection (`tier` resolves to `anthropic_model_default` /
+  `anthropic_model_advanced`; an explicit `model` still overrides), adaptive
+  thinking that is capability-guarded (sent only on a thinking-capable model,
+  so the default Haiku 4.5 tier never receives a block it would reject), and
+  streaming via `messages.stream` + `get_final_message` for generations above
+  `_STREAM_OVER_TOKENS`. Both paths run under `with_options(timeout=...)` and
+  extract only text blocks, so an adaptive-thinking block never leaks into the
+  answer; the response's `usage.cache_read_input_tokens` is surfaced on
+  `last_cache_read_input_tokens`. `inference_cloud` exposes the tier as a
+  validated tool parameter (default on an unknown value). No sampling
+  parameters are sent (the 4.x families reject them), and the slot discipline
+  and daily cap (ADR 0005) are unchanged. The SDK is faked in tests so CI makes
+  no real call; the tool surface stays at thirty-six tools.
+
 ### Added (tool surface: posture, terminal, comms, and cloud inference)
 
 - Posture control (ADR 0031, BL-066). `state_transition` (T2) registers the

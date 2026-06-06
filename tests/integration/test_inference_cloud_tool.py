@@ -42,7 +42,12 @@ async def test_inference_cloud_uses_cloud_when_available(
     app = build_app(config)
 
     async def _fake_call(
-        self: AnthropicClient, *, prompt: str, system: str, max_tokens: int = 1024
+        self: AnthropicClient,
+        *,
+        prompt: str,
+        system: str,
+        max_tokens: int = 1024,
+        tier: str = "default",
     ) -> str:
         return f"CLOUD-OK::{prompt}"
 
@@ -63,7 +68,12 @@ async def test_inference_cloud_degrades_on_cap_exhausted(
     app = build_app(config)
 
     async def _raise_cap(
-        self: AnthropicClient, *, prompt: str, system: str, max_tokens: int = 1024
+        self: AnthropicClient,
+        *,
+        prompt: str,
+        system: str,
+        max_tokens: int = 1024,
+        tier: str = "default",
     ) -> str:
         raise CapExhausted("daily cap reached")
 
@@ -76,3 +86,35 @@ async def test_inference_cloud_degrades_on_cap_exhausted(
     assert out["path"] == "local_mock"
     assert "cap exhausted" in out["reason"]
     assert out["response"].startswith("[nous-local-mock")
+
+
+async def test_inference_cloud_forwards_tier(
+    config: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The tool forwards a validated tier to the cloud call (BL-069)."""
+    app = build_app(config)
+    seen: dict[str, str] = {}
+
+    async def _capture(
+        self: AnthropicClient,
+        *,
+        prompt: str,
+        system: str,
+        max_tokens: int = 1024,
+        tier: str = "default",
+    ) -> str:
+        seen["tier"] = tier
+        return "CLOUD-OK"
+
+    monkeypatch.setattr(AnthropicClient, "call", _capture)
+    monkeypatch.setattr(
+        app.engine.comms, "derive_state", lambda: (CommsState.CONNECTED, "test")
+    )
+
+    out = _payload(
+        await app.mcp.call_tool(
+            "inference_cloud", {"prompt": "deep question", "tier": "advanced"}
+        )
+    )
+    assert out["path"] == "cloud"
+    assert seen["tier"] == "advanced"
