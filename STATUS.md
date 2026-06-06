@@ -40,8 +40,8 @@ em-dash and private-repo bans, PR #41), **N1** (deployment drift
 between development line and `main`, PR #38), plus the
 regression-pin closure of **C1**, **C4**, **C5**, **H3**, and
 **M8** under PR #44 (`tests/regression/test_audit_findings.py`).
-**N2** (live audit sink degraded) carries forward as the next
-live-VM action item. See
+**N2** (live audit sink degraded) was the live-VM action item at that
+audit; the 2026-05-28 resync cleared it (Deployment posture, above). See
 [`docs/audit-2026-05-24.md`](docs/audit-2026-05-24.md) for the
 fresh code-index audit and the validation against the conformance
 documents; the cadence and the regression-pin pattern are codified
@@ -95,7 +95,7 @@ re-audit).
 
 | Component | State | Notes |
 |-----------|-------|-------|
-| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Thirty-six tools registered across device telemetry (T0), the ten subsystem reads (T0), self-model and estimators (T0), interop schema + codec (T0/T1), comms control (T2 `comms_send` / `comms_publish`, ADR 0033), local inference + cap (T0/T1), cloud inference (T2 `inference_cloud`, ADR 0034), scenarios and configuration (T2), posture control (T2 `state_transition`, ADR 0031), terminal control (T3 `state_force_fault` / `state_force_shutdown`, ADR 0032), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
+| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Thirty-six tools registered across device telemetry (T0), the eleven subsystem reads (T0; comms exposes both `comms_state` and `comms_status`), self-model and estimators (T0), interop schema + codec (T0/T1), comms control (T2 `comms_send` / `comms_publish`, ADR 0033), local inference + cap (T0/T1), cloud inference (T2 `inference_cloud`, ADR 0034), scenarios and configuration (T2), posture control (T2 `state_transition`, ADR 0031), terminal control (T3 `state_force_fault` / `state_force_shutdown`, ADR 0032), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
 | `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). Changes require an ADR. |

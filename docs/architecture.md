@@ -56,7 +56,8 @@ return body
 
 - **MCP tools** -- the thirty-six-tool surface is documented in
   [tool-reference.md](tool-reference.md). It carries the full L1 read
-  surface (one read tool per subsystem plus estimator summary) plus the
+  surface (a read tool for each subsystem, with comms exposing both
+  `comms_state` and `comms_status`, plus an estimator summary) plus the
   mutating tools `scenario_load` / `scenario_inject` / `profile_reload`,
   `comms_send` / `comms_publish`, `state_transition`, `inference_cloud`,
   and `audit_resync` (all T2), with the terminal `state_force_fault` /
