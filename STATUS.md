@@ -31,7 +31,7 @@ for the prior baseline.
 
 Deployment-side status note: the L1 subsystem rollout has been on
 `origin/main` since PR #38, so the auto-update timer lands the
-current thirty-six-tool surface on the live VM on the next poll after
+current thirty-seven-tool surface on the live VM on the next poll after
 `origin/main` advances (no-op when the remote HEAD is unchanged).
 Eight audit findings have closed since the 2026-05-23 baseline and
 the post-baseline §10 re-audit: **C3** (FastMCP lifespan ticks the
@@ -95,7 +95,7 @@ re-audit).
 
 | Component | State | Notes |
 |-----------|-------|-------|
-| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Thirty-six tools registered across device telemetry (T0), the eleven subsystem reads (T0; comms exposes both `comms_state` and `comms_status`), self-model and estimators (T0), interop schema + codec (T0/T1), comms control (T2 `comms_send` / `comms_publish`, ADR 0033), local inference + cap (T0/T1), cloud inference (T2 `inference_cloud`, ADR 0034), scenarios and configuration (T2), posture control (T2 `state_transition`, ADR 0031), terminal control (T3 `state_force_fault` / `state_force_shutdown`, ADR 0032), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
+| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Thirty-seven tools registered across device telemetry (T0), the eleven subsystem reads (T0; comms exposes both `comms_state` and `comms_status`), self-model and estimators (T0, including the BL-061 `self_model_situation` fused read, ADR 0038), interop schema + codec (T0/T1), comms control (T2 `comms_send` / `comms_publish`, ADR 0033), local inference + cap (T0/T1), cloud inference (T2 `inference_cloud`, ADR 0034), scenarios and configuration (T2), posture control (T2 `state_transition`, ADR 0031), terminal control (T3 `state_force_fault` / `state_force_shutdown`, ADR 0032), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
 | `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). Instrumented with OpenTelemetry metrics (`nous.tick.duration` histogram + `nous.tick.overruns` counter, no-op until a provider is configured; BL-037 / ADR 0036). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). Changes require an ADR. |
@@ -121,10 +121,10 @@ re-audit).
 | `src/nous/estimators/compute.py` | in-progress | 1-D Kalman per channel over (load_pct, draw_w); covariance shrinks under observation. Full multi-state EKF is BL-031a. |
 | `src/nous/estimators/storage.py` | in-progress | 1-D Kalman per channel over (used_gib, wear_pct); slow process variance matches the physical reality of NAND wear. |
 | `src/nous/estimators/comms.py` | in-progress | Per-link SIR particle filter (BL-030): N binary-state particles per link, sticky Markov transition conditioned on RSSI + loss, log-throughput observation model, systematic resampling. Deterministic under the engine seed. |
-| `src/nous/estimators/position.py` | in-progress | Constant-velocity (linear) Kalman filter over `(lat, lon, alt, v_*)` (BL-026): the state is in degrees so process and measurement are both linear (no Jacobian); the nonlinear EKF with m/s IMU fusion is BL-061. Velocity tracked as predict-only. |
+| `src/nous/estimators/position.py` | in-progress | Constant-velocity (linear) Kalman filter over `(lat, lon, alt, v_*)` (BL-026): the state is in degrees so process and measurement are both linear (no Jacobian); the nonlinear EKF with m/s IMU fusion remains tracked under BL-026. Velocity tracked as predict-only. |
 | `src/nous/estimators/sensors.py` | in-progress | Multi-channel Kalman over (temp_c, humidity_pct, baro_kpa); validates against physical bounds, rejects without poisoning the central estimate. |
 | `src/nous/estimators/biometrics.py` | in-progress | Multi-channel Kalman over biometric channels with physiological-bounds validation; `hydration_pct` added as a fourth tracked channel in BL-011. |
-| `src/nous/self_model/*` | in-progress | `assess` / `explain` / `viability` (BL-018) read live estimator state and emit capability claims. BL-035 lands the Monte Carlo-based calibrated quantile mapping (default `mode="monte_carlo"`; legacy `"gaussian"` opt-out retained). |
+| `src/nous/self_model/*` | in-progress | `assess` / `explain` / `viability` (BL-018) read live estimator state and emit capability claims. BL-035 lands the Monte Carlo-based calibrated quantile mapping (default `mode="monte_carlo"`; legacy `"gaussian"` opt-out retained). `situation` (the `self_model_situation` tool, BL-061 / ADR 0038) fuses those claims with provenance, staleness, the FSM posture, the safety posture, and ranked degraded-mode recommendations in one read. |
 | `src/nous/interop/*` | in-progress | Real adapter implementations for CoT, SensorThings, MISB KLV, NMEA 0183, STANAG 4774/4778, MQTT. `nous.interop.REGISTRY` exposes them; `interop_encode` / `interop_decode` MCP tools (T1) round-trip via the audited runner (BL-041). |
 | `src/nous/anthropic_status.py` | in-progress | Surfaces the daily cap state for `anthropic_cap_status` (BL-021); `cap_exhausted_payload(exc, settings=...)` renders `CapExhausted` as the same JSON shape. |
 | `src/nous/auth/oauth.py` | in-progress | File-backed issuer shape. |
@@ -136,8 +136,12 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 765 tests pass at HEAD: BL-051 / ADR 0037 added
-  four (the `scripts/migrate.py` upgrade / downgrade / stamp path and a
+  feature branch before merge. 779 tests pass at HEAD: BL-061 / ADR 0038 added
+  fourteen (the situational-awareness fusion layer and its `self_model_situation`
+  tool: capability fusion with provenance and staleness, the posture summary, the
+  safety posture, and the operator / power / thermal / comms / navigation /
+  inference recommendation branches), on top of the 765 from BL-051 / ADR 0037
+  (four: the `scripts/migrate.py` upgrade / downgrade / stamp path and a
   percent-encoded-URL regression), on top of
   the 761 from BL-037 / ADR 0036 (two: the tick-loop duration histogram and
   overrun counter), and the 759

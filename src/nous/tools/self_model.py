@@ -125,3 +125,14 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
             return json.dumps({"estimators": rows})
 
         return await wrap("self_estimator_status", {}, ctx, _work)
+
+    @mcp.tool()
+    async def self_model_situation(ctx: Context | None = None) -> str:
+        """Fused situational read: capabilities, provenance, posture, safety, recommendations."""
+
+        async def _work() -> str:
+            from ..self_model.situation import situation
+
+            return json.dumps(situation(app.engine).model_dump())
+
+        return await wrap("self_model_situation", {}, ctx, _work)

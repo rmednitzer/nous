@@ -8,7 +8,7 @@ extent the badge promises, and no further.
 | --- | --- | --- |
 | `validated` | Physics or estimator output that has been compared against a published reference or a measured device trace. | None at v0.1. |
 | `filtered` | A substantive subsystem feeding a recursive estimator with a real predict and update step and a documented covariance bound. | Power SoC (Kalman over SoC and voltage). APU per-source (parallel Kalman). |
-| `parametric` | A substantive subsystem with profile-driven physics, but the estimator on top is a passthrough or stub. | Inference local path (profile-derived latency / energy / capacity, no estimator). Position estimator (v0.1 linear-Kalman passthrough; nonlinear IMU fusion is BL-061). Comms estimator (per-link belief tracker; full particle filter is BL-030). |
+| `parametric` | A substantive subsystem with profile-driven physics, but the estimator on top is a passthrough or stub. | Inference local path (profile-derived latency / energy / capacity, no estimator). Position estimator (v0.1 linear-Kalman passthrough; nonlinear IMU fusion is BL-026). Comms estimator (per-link belief tracker; full particle filter is BL-030). |
 | `stub` | A skeleton that returns plausible constants or simple time-additive values. No dynamics, no calibration. | None on the development line; the L1 subsystem rollout closed the previous stub posture. |
 | `planned` | A surface mentioned in the architecture or the backlog that does not yet exist as code. | The PMU/PDU subsystem (BL-005b); the propagation-aware comms model (BL-048); a learned self-model (BL-046). |
 
@@ -34,7 +34,7 @@ five minutes of a merge.
 | compute | `filtered` | Load fraction with profile-driven draw curve; per-channel Kalman over load and draw (BL-007, BL-031a). |
 | storage | `filtered` | NAND wear and capacity accounting with write amplification; per-channel Kalman (BL-008). |
 | sensors | `filtered` | Temperature, humidity, barometric pressure; authoritative ambient source. Multi-channel Kalman with bounds validation (BL-009). |
-| position | `parametric` | Dead-reckoning + GNSS fix gating + IMU drift; v0.1 linear-Kalman passthrough validates NaN/Inf. Nonlinear IMU fusion lands with BL-061. |
+| position | `parametric` | Dead-reckoning + GNSS fix gating + IMU drift; v0.1 linear-Kalman passthrough validates NaN/Inf. Nonlinear IMU fusion lands with BL-026. |
 | biometrics | `filtered` | Heart rate, core temperature, hydration, cognitive load with physiological clamps. Multi-channel Kalman (BL-011, BL-029). Physiology grounding (BL-040) is planned. |
 | comms | `parametric` | Per-link envelopes drive FSM state each tick; per-link belief tracker. Full transition particle filter (BL-030) is planned. |
 | inference | `parametric` | Local-path with profile-derived latency / energy / capacity; cloud path registered via `inference_cloud` (ADR 0034), enrichment landed in BL-069 / ADR 0035 (tier, adaptive thinking, streaming); real local model is BL-043. |

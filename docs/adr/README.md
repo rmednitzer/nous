@@ -40,3 +40,4 @@
 | 0035 | [Enrich the cloud inference call](0035-enrich-cloud-inference-call.md) | Accepted | 2026-06-06 |
 | 0036 | [Tick-loop observability via OpenTelemetry](0036-tick-loop-observability-otel.md) | Accepted | 2026-06-06 |
 | 0037 | [Schema migration workflow](0037-schema-migration-workflow.md) | Accepted | 2026-06-06 |
+| 0038 | [Self-model situational awareness](0038-self-model-situational-awareness.md) | Accepted | 2026-06-06 |

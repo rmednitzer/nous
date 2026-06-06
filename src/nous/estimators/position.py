@@ -9,7 +9,8 @@ model are linear, so this is a plain linear Kalman filter, not an EKF:
 there is no Jacobian and no linearisation step. A genuine EKF only earns
 its name once the state carries body-frame velocity in m/s or a
 range/bearing measurement, either of which couples the axes through
-``cos(lat)``; that lands with the IMU-fusion track (BL-061). The filter
+``cos(lat)``; that lands with the IMU-fusion track, tracked under BL-026
+(this estimator's own id). The filter
 consumes GNSS observations (lat / lon / alt) from
 :class:`~nous.subsystems.position.PositionSubsystem` and predicts the
 trajectory between fixes using the constant-velocity process model.
@@ -24,8 +25,9 @@ The implementation deliberately stays diagonal (no cross-covariance
 between lat / lon / alt) because the GNSS observation model is
 diagonal and the constant-velocity decoupling between axes is exact in
 the small-angle regime relevant to a backpack-class device. A full
-6x6 filter with cross-covariance is left for BL-061 (situational-awareness
-fusion).
+6x6 filter with cross-covariance is the IMU-fusion continuation tracked
+under BL-026; the self-model situational-awareness fusion that consumes
+this estimate is BL-061.
 """
 
 from __future__ import annotations

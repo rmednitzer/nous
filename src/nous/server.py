@@ -272,6 +272,9 @@ Subsystem reads (T0):
 
 Self-model and estimators (T0):
   self_model_assess / self_model_viability / self_estimator_status
+  self_model_situation (one fused situational read: capabilities with
+  provenance and staleness, the FSM posture, the safety posture, and ranked
+  degraded-mode advice)
 
 Interop (T0 schema + T1 codec):
   interop_formats / interop_encode / interop_decode
