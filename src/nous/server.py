@@ -282,6 +282,10 @@ Posture control (T2):
   monitoring / c2, or the recoverable safe hold; terminal fault / shutdown
   are reserved for the T3 force tools)
 
+Terminal control (T3, irreversible):
+  state_force_fault / state_force_shutdown (drive the device into the
+  reset-only FAULT / SHUTDOWN posture; recover via state_transition reset)
+
 Scenarios and configuration (T2):
   scenario_load / scenario_inject / profile_reload
 

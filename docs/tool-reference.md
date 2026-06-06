@@ -35,6 +35,8 @@ the committed copy after changing a tool's signature or docstring.
 | `self_model_assess` | T0 | Self-model capability assessment with calibrated p5/p50/p95 bands. |
 | `self_model_viability` | T0 | Decide whether a task is feasible against the current capabilities. |
 | `sensors_status` | T0 | Environmental sensor pack: ambient temp, humidity, baro pressure. |
+| `state_force_fault` | T3 | Force the device into the terminal FAULT posture (T3, ADR 0032). |
+| `state_force_shutdown` | T3 | Force the device into the terminal SHUTDOWN posture (T3, ADR 0032). |
 | `state_get` | T0 | Current FSM mode plus the labels a controller queries together. |
 | `state_history` | T0 | Recent FSM transitions (oldest first; up to ``limit`` rows). |
 | `state_transition` | T2 | Drive the mission-posture FSM through one explicit trigger (ADR 0031). |
@@ -438,6 +440,26 @@ tool registry.
 {
   "properties": {},
   "title": "sensors_statusArguments",
+  "type": "object"
+}
+```
+
+### `state_force_fault`
+
+```json
+{
+  "properties": {},
+  "title": "state_force_faultArguments",
+  "type": "object"
+}
+```
+
+### `state_force_shutdown`
+
+```json
+{
+  "properties": {},
+  "title": "state_force_shutdownArguments",
   "type": "object"
 }
 ```
