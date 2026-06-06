@@ -176,10 +176,10 @@ Sparklines are over resampled buckets; high to the right is high value.
 
 | at_min | action | outcome |
 | ---: | --- | --- |
-| 0 | `inject_apu` (fuelcell_w=25) | applied: fuelcell_w=25 |
-| 720 | `inject_apu` (fuelcell_w=20) | applied: fuelcell_w=20 |
-| 1200 | `inject_apu` (fuelcell_w=0) | applied: fuelcell_w=0 |
-| 1320 | `state_transition` (trigger=low_power) | refused: no transition from 'idle' on trigger 'low_power' |
+| 0 | `inject_apu` (fuelcell_w=25) | applied: fuelcell_w=25.0 |
+| 720 | `inject_apu` (fuelcell_w=20) | applied: fuelcell_w=20.0 |
+| 1200 | `inject_apu` (fuelcell_w=0) | applied: fuelcell_w=0.0 |
+| 1320 | `state_transition` (trigger=low_power) | skipped: no transition from 'idle' on trigger 'low_power' |
 
 ## Artefacts
 

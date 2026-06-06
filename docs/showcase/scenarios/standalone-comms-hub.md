@@ -117,9 +117,9 @@ Sparklines are over resampled buckets; high to the right is high value.
 | at_min | action | outcome |
 | ---: | --- | --- |
 | 0 | `state_transition` (trigger=relay) | applied: mode -> relay |
-| 30 | `inject_comms_loss` (link_id=tak, loss_pct=20) | skipped: action 'inject_comms_loss' not yet wired (BL-014) |
-| 60 | `inject_comms_loss` (link_id=lora, loss_pct=10) | skipped: action 'inject_comms_loss' not yet wired (BL-014) |
-| 600 | `state_transition` (trigger=complete) | refused: no transition from 'degraded' on trigger 'complete' |
+| 30 | `inject_comms_loss` (link_id=tak, loss_pct=20) | applied: link_id=tak, loss_pct=20.0, connected=False |
+| 60 | `inject_comms_loss` (link_id=lora, loss_pct=10) | applied: link_id=lora, loss_pct=10.0, connected=False |
+| 600 | `state_transition` (trigger=complete) | skipped: no transition from 'degraded' on trigger 'complete' |
 
 ## Artefacts
 

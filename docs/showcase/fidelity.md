@@ -19,8 +19,9 @@ records the move; the showcase pages are reviewed at the same time.
 
 ## Current subsystem mapping
 
-Reflects the development branch at revision `02f2062`. The live VM lags
-this mapping until the L1 rollout (PRs #29..#37) merges to `main`.
+Reflects `origin/main`. The L1 subsystem rollout reached `main` in PR #38;
+the live VM auto-updates from `main`, so it tracks this mapping within about
+five minutes of a merge.
 
 | Subsystem | Badge | Notes |
 | --- | --- | --- |
@@ -36,7 +37,7 @@ this mapping until the L1 rollout (PRs #29..#37) merges to `main`.
 | position | `parametric` | Dead-reckoning + GNSS fix gating + IMU drift; v0.1 linear-Kalman passthrough validates NaN/Inf. Nonlinear IMU fusion lands with BL-061. |
 | biometrics | `filtered` | Heart rate, core temperature, hydration, cognitive load with physiological clamps. Multi-channel Kalman (BL-011, BL-029). Physiology grounding (BL-040) is planned. |
 | comms | `parametric` | Per-link envelopes drive FSM state each tick; per-link belief tracker. Full transition particle filter (BL-030) is planned. |
-| inference | `parametric` | Local-path with profile-derived latency / energy / capacity; cloud path is BL-013 follow-up, real local model is BL-043. |
+| inference | `parametric` | Local-path with profile-derived latency / energy / capacity; cloud path registered via `inference_cloud` (ADR 0034), enrichment is BL-069; real local model is BL-043. |
 | self model | `parametric` | Calibrated `p5`/`p50`/`p95` capability claims via Monte Carlo over the estimator posteriors (BL-018/BL-035); learned self-model is future. |
 
 ## How badges roll up

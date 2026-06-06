@@ -19,12 +19,13 @@ authored and reviewed when the code they describe changes.
 | [Scenario gallery](scenarios/README.md) | Per-scenario telemetry, sparklines, timelines. | Regenerated in CI from scenario YAML. |
 
 The showcase is deliberately not a marketing page. The simulator is
-pre-1.0; the development line carries the L1 subsystem rollout (ten
-subsystems, nine estimators) but the self-model layer remains a
-placeholder, the scenario injectors are not yet wired, and no number
-has yet been compared against measured device traces. See the
-[2026-05-23 audit](../audit-2026-05-23.md), the
-[2026-05-21 review](../review-2026-05-21.md), and `AUDIT.md` for the
+pre-1.0 and runs entirely in software. The L1 subsystem rollout is on
+`main` (ten subsystems, nine estimators), the self-model layer emits
+calibrated capability claims (BL-018, BL-035), and the scenario loader
+and injectors drive the engine end to end (BL-014). What it is not: no
+number has been compared against measured traces from real hardware, and
+the interop conformance is self-declared, not certified. See the
+[2026-06-06 audit](../audit-2026-06-06.md) and `AUDIT.md` for the
 substance findings. The fidelity badges exist to keep the showcase
 honest about that. ADR 0017 records the decision behind this section.
 
@@ -32,5 +33,5 @@ If you are looking for the live reference instance, it remains
 private and gated; see `docs/deployment.md` for the deployment
 pattern. The live VM tracks `origin/main` via auto-update; if `main`
 lags the development line, the live MCP serves an older surface than
-this showcase claims (see audit-2026-05-23 §4 for the most recent
+this showcase claims (see audit-2026-06-06 §6 for the most recent
 probe).
