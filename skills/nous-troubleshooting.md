@@ -20,11 +20,11 @@ underlying subsystem with its `*_status` read.
 ## The Anthropic daily cap is exhausted
 
 `anthropic_cap_status` reports `exhausted: true` (and `remaining: 0`) once
-the daily cap is reached; the cloud path then fails closed with
-`CapExhausted`. Fall back to `inference_local`. The cap rolls over at UTC
-midnight. (The `inference_cloud` tool that consumes the cap is classified
-in `policy.py` but not yet registered; `anthropic_cap_status` is the signal
-to branch on today.)
+the daily cap is reached. The `inference_cloud` tool (ADR 0034) handles this
+for you: when the cap is exhausted it degrades to the local mock and returns
+`path: local_mock` with a cap-exhausted `reason`, rather than failing the
+call. The cap rolls over at UTC midnight; poll `anthropic_cap_status` to see
+when cloud calls will be admitted again.
 
 ## The audit log looks empty
 

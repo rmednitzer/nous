@@ -23,6 +23,7 @@ the committed copy after changing a tool's signature or docstring.
 | `compute_status` | T0 | Compute subsystem: load fraction, electrical draw, throttling. |
 | `device_health` | T0 | Engine snapshot: tick, ts_s, mode, operator/comms state. |
 | `device_info` | T0 | Report nous version, profile, transport, policy, audit/anchor paths, safety posture. |
+| `inference_cloud` | T2 | Cloud-path inference through the SC-5 fallback ladder (ADR 0034). |
 | `inference_local` | T1 | Local-path inference. |
 | `inference_status` | T0 | Inference subsystem totals: calls, tokens, joules, last latency. |
 | `interop_decode` | T1 | Decode a hex-encoded payload via the named adapter (BL-041 / T1). |
@@ -229,6 +230,34 @@ tool registry.
 {
   "properties": {},
   "title": "device_infoArguments",
+  "type": "object"
+}
+```
+
+### `inference_cloud`
+
+```json
+{
+  "properties": {
+    "max_tokens": {
+      "default": 512,
+      "title": "Max Tokens",
+      "type": "integer"
+    },
+    "prompt": {
+      "title": "Prompt",
+      "type": "string"
+    },
+    "system": {
+      "default": "",
+      "title": "System",
+      "type": "string"
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "title": "inference_cloudArguments",
   "type": "object"
 }
 ```

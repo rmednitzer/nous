@@ -281,6 +281,11 @@ Comms control (T2):
 Local inference and cloud cap (T0/T1):
   inference_local / anthropic_cap_status
 
+Cloud inference (T2):
+  inference_cloud (prefer the capped Anthropic path; the fallback ladder
+  degrades to the local mock on cap exhaustion, comms loss, or call failure,
+  so a controller always gets an answer)
+
 Posture control (T2):
   state_transition (drive the FSM: ready -> idle, then mission / relay /
   monitoring / c2, or the recoverable safe hold; terminal fault / shutdown

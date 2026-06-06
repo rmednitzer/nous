@@ -52,17 +52,21 @@ behaviours need an external model.
 **State.** The Anthropic daily cap is implemented in `anthropic_client.py`
 and counted against `$NOUS_HOME/.anthropic_daily_count`; the default cap is
 100 calls per UTC day, and once exhausted the client fails closed with
-`CapExhausted` until the counter rolls over. The cap state is exposed today
-through the `anthropic_cap_status` tool (T0); the `inference_cloud` tool that
-will consume the cap is classified in `policy.py` but not yet registered (the
-cloud inference path is deferred, see STATUS L1).
+`CapExhausted` until the counter rolls over. The cap state is exposed through
+the `anthropic_cap_status` tool (T0). The `inference_cloud` tool (T2) that
+consumes the cap is now registered (ADR-0034): it routes through the
+`InferenceFallback` ladder, which degrades to the local mock when the cap is
+exhausted, comms are down, or the cloud call fails, so a controller always
+gets an answer.
 
 **Implication.** A scenario that depends on more than 100 cloud inferences
-per day will stop producing cloud outputs. The local mock (`inference_local`)
-remains available.
+per day stops producing cloud outputs and is served by the local mock
+(`inference_local` directly, or `inference_cloud` degraded to the mock).
 
-**Tracking.** See ADR-0005. The cap is intentional; raise the env var
-`NOUS_ANTHROPIC_DAILY_CAP` only with operator approval.
+**Tracking.** See ADR-0005 (cap) and ADR-0034 (cloud path registration). The
+cap is intentional; raise the env var `NOUS_ANTHROPIC_DAILY_CAP` only with
+operator approval. Cloud-call enrichment (adaptive thinking, streaming, model
+selection) is tracked under BL-069.
 
 ## L5. Profile hot-reload is runtime-only, not mid-scenario
 

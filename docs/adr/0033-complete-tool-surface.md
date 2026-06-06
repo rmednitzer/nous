@@ -48,7 +48,9 @@ implicit:
   is deferred by design (BL-013, LIMITATIONS L4) pending its own ADR. The daily
   cap, the `CapExhausted` payload, and the fallback ladder are built, but
   exposing cloud inference on the controller surface is a product decision left
-  open.
+  open. (Superseded by ADR 0034, which makes that decision and registers
+  `inference_cloud` over the fallback ladder; `inference_request` stays deferred
+  as a redundant twin, since the ladder already routes cloud-or-local.)
 - `self_model_publish` (T2): "publish the self-model" has no settled target (a
   comms link? the audit log? a CoT detail block?), so it needs a design before
   a tier-2 mutator is justified. Deferred.

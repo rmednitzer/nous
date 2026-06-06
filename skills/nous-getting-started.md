@@ -62,11 +62,13 @@ revision (see [`docs/audit-2026-05-23.md`](../docs/audit-2026-05-23.md)
 
 ## Talking to a model
 
-- `inference_local` for the deterministic mock (no Anthropic call). It is
-  the only inference tool registered today.
+- `inference_local` for the deterministic mock (no Anthropic call).
+- `inference_cloud` for the cloud path: it prefers the capped Anthropic
+  client and degrades to the local mock when the cap is exhausted, comms are
+  down, or the call fails, so you always get an answer (ADR 0034). The
+  response reports `path` (`cloud` or `local_mock`) and a cap snapshot.
 - `anthropic_cap_status` reports whether a cloud call would be admitted
-  (key configured and cap not exhausted). The cloud-call tool
-  (`inference_cloud`) is classified but not yet registered.
+  (key configured and cap not exhausted).
 
 ## Caveats
 

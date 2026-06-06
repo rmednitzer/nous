@@ -35,7 +35,7 @@ flowchart TD
     Engine --> DB
     Adapters --> Engine
     Engine --> Adapters
-    Server -.->|"inference_cloud (deferred)"| Anthropic
+    Server -->|"inference_cloud"| Anthropic
 ```
 
 The simulator exposes itself as the controlled process; the Claude session is
@@ -51,5 +51,7 @@ audit log, so the safety decisions are themselves reviewable.
 
 The `inference_cloud` edge to the Anthropic API is the one control action that
 reaches outside the system boundary (artefact 02). It is classified and
-analysed (UCA-3a/3b, SC-5) but not yet registered as a tool; the cloud path is
-deferred by design (BL-013, ADR 0033).
+analysed (UCA-3a/3b, SC-5) and now registered as a T2 tool (ADR 0034): the
+`InferenceFallback` ladder routes a request to the capped Anthropic client and
+degrades to the local mock on cap exhaustion, comms loss, or a failed call,
+which is the H-5 (no-fallback) mitigation realised at the tool layer.
