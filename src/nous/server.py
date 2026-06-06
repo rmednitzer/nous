@@ -1,8 +1,10 @@
-"""FastMCP server: representative tools wired through the audited runner.
+"""FastMCP server: the audited tool surface wired through the runner.
 
-Every tool runs through :func:`nous.runner.run`. The handler returns a
-single bounded string. The tools registered here are the *representative*
-v0.1 surface; full subsystem coverage lands in L1 (see ``docs/backlog.md``).
+Every tool runs through :func:`nous.runner.run` and returns a single
+bounded string. The handlers live in per-capability modules under
+``nous.tools`` (ADR 0021); :func:`build_app` wires them by calling each
+module's ``register(mcp, app, wrap)``. See ``docs/tool-reference.md`` for
+the full surface and ``docs/backlog.md`` for the BL-NNN tracker.
 """
 
 from __future__ import annotations
