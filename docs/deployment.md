@@ -88,13 +88,25 @@ nous.service`. The state DB carries over; the audit log is append-only and
 unaffected.
 
 If a release ships a schema change, apply it with the project migration
-runner before restarting (Alembic under the hood, pointed at the engine's
-own `NOUS_DB_URL`):
+runner before the new code restarts (Alembic under the hood). Load the
+service environment first so the runner targets the same database the unit
+uses (`deploy/systemd/nous.service` reads `EnvironmentFile=/etc/nous/nous.env`);
+without it `resolved_db_url()` falls back to the local default and would
+migrate the wrong database:
 
 ```sh
+set -a; . /etc/nous/nous.env; set +a
 python scripts/migrate.py current   # what the DB is on now
 python scripts/migrate.py upgrade   # to head
 ```
+
+A schema-changing release needs this before the new code runs, but the
+auto-update timer (below) fast-forwards and restarts on its own with no
+migration step. For such a release, halt the timer first (see "Halt the
+auto-deploy loop"), migrate manually, then restart and re-enable. Wiring the
+runner into `deploy/auto-update.sh` ahead of the restart is the eventual fix
+(an ADR 0037 revisit trigger); until then this stays a manual, timer-halted
+step.
 
 See [ADR 0037](adr/0037-schema-migration-workflow.md) for the workflow and
 `scripts/migrate.py --help` for the full subcommand set.

@@ -13,6 +13,8 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 from nous.config import Settings
@@ -48,6 +50,10 @@ def test_upgrade_head_creates_schema(config: Settings) -> None:
 
 def test_upgrade_stamps_head_revision(config: Settings) -> None:
     _MIGRATE.main(["upgrade"])
+    # Derive head from the scripts dir so this stays valid as migrations are
+    # added, rather than hard-coding the baseline revision id.
+    head = ScriptDirectory.from_config(_MIGRATE.build_config()).get_current_head()
+    assert head is not None
     engine = create_engine(config.resolved_db_url())
     try:
         with engine.connect() as conn:
@@ -56,7 +62,7 @@ def test_upgrade_stamps_head_revision(config: Settings) -> None:
             ).scalar()
     finally:
         engine.dispose()
-    assert version == "0001_baseline"
+    assert version == head
 
 
 def test_downgrade_base_drops_schema(config: Settings) -> None:
@@ -66,3 +72,14 @@ def test_downgrade_base_drops_schema(config: Settings) -> None:
     remaining = _tables(config.resolved_db_url())
     assert "state_transitions" not in remaining
     assert "audit_entries" not in remaining
+
+
+def test_upgrade_handles_percent_encoded_url(
+    tmp_nous_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A percent in NOUS_DB_URL must not trip Alembic's ConfigParser."""
+    from nous.config import get_settings
+
+    monkeypatch.setenv("NOUS_DB_URL", f"sqlite:///{tmp_nous_home}/st%20ate.db")
+    get_settings.cache_clear()
+    assert _MIGRATE.main(["upgrade"]) == 0

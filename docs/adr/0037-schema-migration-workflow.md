@@ -54,6 +54,13 @@ the workflow ahead of the first real evolution, which is the point of BL-051.
 
 ## Revisit triggers
 
+Revisit to wire `scripts/migrate.py upgrade` into `deploy/auto-update.sh` ahead
+of the service restart: today the auto-update timer fast-forwards and restarts
+with no migration step, so a schema-changing release on that path requires
+halting the timer and migrating by hand (documented in the deployment guide).
+That is acceptable while no migration past the baseline exists, but the first
+real revision should land the auto-update integration with it.
+
 Revisit if a deployment needs zero-downtime or multi-step data migrations; the
 current model is offline schema migration on a stopped service. Revisit if
 `init_db`'s `create_all` and the Alembic head can drift (a model change landing

@@ -29,12 +29,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def build_config() -> Config:
     """Build an Alembic config pointed at the engine's resolved database URL."""
-    sys.path.insert(0, str(REPO_ROOT / "src"))
+    src = str(REPO_ROOT / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
     from nous.config import get_settings
 
     cfg = Config(str(REPO_ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
-    cfg.set_main_option("sqlalchemy.url", get_settings().resolved_db_url())
+    # Alembic's Config is ConfigParser-backed and does %-interpolation, so a
+    # percent in the URL (an encoded password or path) must be escaped before
+    # it is stored, or reading it back raises (ADR 0037).
+    cfg.set_main_option(
+        "sqlalchemy.url", get_settings().resolved_db_url().replace("%", "%%")
+    )
     return cfg
 
 
