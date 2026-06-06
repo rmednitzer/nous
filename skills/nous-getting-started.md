@@ -61,9 +61,10 @@ freshly booted engine parks in `BOOT`.
   `IDLE`, then `mission` / `relay` / `monitoring` / `c2`, or the recoverable
   `safe` hold. Operational entries are SC-2 / SC-8 gated and refuse when
   thermal headroom or power reserve is short.
-- `state_force_fault` / `state_force_shutdown` (T3) are irreversible: they
-  drop the device into the reset-only FAULT / SHUTDOWN postures (recover with
-  `state_transition reset`).
+- `state_force_fault` / `state_force_shutdown` (T3, irreversible) drive the
+  device into the reset-only FAULT / SHUTDOWN postures. Recovery is a
+  deliberate sequence on the `state_transition` path: `reset` then `boot`
+  (back to `BOOT`, from which `ready` reaches `IDLE`).
 - `comms_send` / `comms_publish` (T2) account a transmission on a link;
   `scenario_load` / `scenario_inject` / `profile_reload` (T2) drive scenarios
   and reconfiguration (see the scenario walkthrough).
