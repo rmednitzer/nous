@@ -14,6 +14,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   docs site, and the governance files lead with that framing so the scope
   stays honest about what the artefact is and is not.
 
+### Added (migrations: project-standard runner, ADR 0037)
+
+- Schema migration runner (ADR 0037, BL-051). `scripts/migrate.py` is the
+  project-standard entry point for Alembic migrations: it builds the config
+  from `alembic.ini`, pins `script_location` to `alembic/`, and targets the
+  engine's own `Settings.resolved_db_url()` (`NOUS_DB_URL` or the `$NOUS_HOME`
+  sqlite default), then dispatches `upgrade` / `downgrade` / `current` /
+  `history` / `revision` / `stamp` through `alembic.command`, so a migration
+  hits the same database the server reads with no URL to remember. Alembic
+  stays the source of truth; `init_db` remains a first-boot convenience. The
+  path is pinned by `tests/integration/test_migrations.py` (a fresh-sqlite
+  upgrade / downgrade round-trip that drives the runner directly), and the
+  workflow is documented in `docs/deployment.md` and an AGENTS.md recipe.
+
 ### Added (observability: tick-loop OTel metrics, ADR 0036)
 
 - Tick-loop instrumentation (ADR 0036, BL-037). `src/nous/telemetry.py` adds

@@ -41,7 +41,9 @@ def _resolve_url() -> str | None:
 
 _resolved_url = _resolve_url()
 if _resolved_url:
-    config.set_main_option("sqlalchemy.url", _resolved_url)
+    # ConfigParser does %-interpolation; escape % so a percent-encoded URL
+    # (an encoded password or path) does not raise on read (BL-051, ADR 0037).
+    config.set_main_option("sqlalchemy.url", _resolved_url.replace("%", "%%"))
     if _resolved_url.startswith("sqlite:///"):
         sqlite_path = Path(_resolved_url[len("sqlite:///"):])
         sqlite_path.parent.mkdir(parents=True, exist_ok=True)
