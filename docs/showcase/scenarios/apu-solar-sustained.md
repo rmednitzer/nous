@@ -116,9 +116,9 @@ Sparklines are over resampled buckets; high to the right is high value.
 
 | at_min | action | outcome |
 | ---: | --- | --- |
-| 0 | `inject_apu` (solar_w=55) | applied: solar_w=55 |
-| 360 | `inject_apu` (solar_w=25) | applied: solar_w=25 |
-| 600 | `inject_apu` (solar_w=5) | applied: solar_w=5 |
+| 0 | `inject_apu` (solar_w=55) | applied: solar_w=55.0 |
+| 360 | `inject_apu` (solar_w=25) | applied: solar_w=25.0 |
+| 600 | `inject_apu` (solar_w=5) | applied: solar_w=5.0 |
 
 ## Artefacts
 

@@ -35,7 +35,7 @@ rest as defaults. See [Fidelity](../fidelity.md) for the legend.
 
 - mode: `idle`
 - operator: `nominal`
-- comms: `denied`
+- comms: `degraded`
 - SoC: 82.013 %
 - APU offered: 0.0 W
 - fuel: 100.0 %
@@ -118,15 +118,15 @@ Sparklines are over resampled buckets; high to the right is high value.
 | at_min | action | outcome |
 | ---: | --- | --- |
 | 0 | `state_transition` (trigger=c2) | applied: mode -> c2 |
-| 5 | `inference_request` (prompt=status, path=auto) | skipped: action 'inference_request' not yet wired (BL-014) |
-| 10 | `inject_comms_loss` (link_id=lte, loss_pct=60) | skipped: action 'inject_comms_loss' not yet wired (BL-014) |
-| 12 | `inference_request` (prompt=status, path=auto) | skipped: action 'inference_request' not yet wired (BL-014) |
-| 18 | `inject_comms_loss` (link_id=lte, loss_pct=0) | skipped: action 'inject_comms_loss' not yet wired (BL-014) |
-| 35 | `inject_comms_loss` (link_id=lte, loss_pct=100) | skipped: action 'inject_comms_loss' not yet wired (BL-014) |
-| 37 | `inference_request` (prompt=fallback, path=auto) | skipped: action 'inference_request' not yet wired (BL-014) |
-| 40 | `state_transition` (trigger=degrade) | refused: no transition from 'degraded' on trigger 'degrade' |
-| 45 | `inference_request` (prompt=still local?, path=auto) | skipped: action 'inference_request' not yet wired (BL-014) |
-| 55 | `inject_comms_loss` (link_id=lte, loss_pct=0) | skipped: action 'inject_comms_loss' not yet wired (BL-014) |
+| 5 | `inference_request` (prompt=status, path=auto) | applied: n_tokens=64, latency_s=0.32, energy_j=7.68, rate_tok_per_s=200.0, saturated=False, response=[nous-local-mock tokens=64] status |
+| 10 | `inject_comms_loss` (link_id=lte, loss_pct=60) | applied: link_id=lte, loss_pct=60.0, connected=False |
+| 12 | `inference_request` (prompt=status, path=auto) | applied: n_tokens=64, latency_s=0.32, energy_j=7.68, rate_tok_per_s=200.0, saturated=False, response=[nous-local-mock tokens=64] status |
+| 18 | `inject_comms_loss` (link_id=lte, loss_pct=0) | applied: link_id=lte, loss_pct=0.0, connected=True |
+| 35 | `inject_comms_loss` (link_id=lte, loss_pct=100) | applied: link_id=lte, loss_pct=100.0, connected=False |
+| 37 | `inference_request` (prompt=fallback, path=auto) | applied: n_tokens=64, latency_s=0.32, energy_j=7.68, rate_tok_per_s=200.0, saturated=False, response=[nous-local-mock tokens=64] fallback |
+| 40 | `state_transition` (trigger=degrade) | skipped: no transition from 'degraded' on trigger 'degrade' |
+| 45 | `inference_request` (prompt=still local?, path=auto) | applied: n_tokens=64, latency_s=0.32, energy_j=7.68, rate_tok_per_s=200.0, saturated=False, response=[nous-local-mock tokens=64] still local? |
+| 55 | `inject_comms_loss` (link_id=lte, loss_pct=0) | applied: link_id=lte, loss_pct=0.0, connected=True |
 | 56 | `state_transition` (trigger=recover, context={'thermal_headroom_c': 25, 'thermal_headroom_threshold_c': 5}) | applied: mode -> idle |
 
 ## Artefacts

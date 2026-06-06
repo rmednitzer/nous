@@ -177,9 +177,9 @@ Sparklines are over resampled buckets; high to the right is high value.
 | at_min | action | outcome |
 | ---: | --- | --- |
 | 0 | `state_transition` (trigger=relay) | applied: mode -> relay |
-| 120 | `inject_thermal` (ambient_delta_c=12) | skipped: action 'inject_thermal' not yet wired (BL-014) |
-| 240 | `inject_thermal` (ambient_delta_c=0) | skipped: action 'inject_thermal' not yet wired (BL-014) |
-| 1200 | `state_transition` (trigger=complete) | refused: no transition from 'degraded' on trigger 'complete' |
+| 120 | `inject_thermal` (ambient_delta_c=12) | applied: sensors.temp_c=37.0, thermal.ambient_c=37.0 |
+| 240 | `inject_thermal` (ambient_delta_c=0) | applied: sensors.temp_c=37.0, thermal.ambient_c=37.0 |
+| 1200 | `state_transition` (trigger=complete) | skipped: no transition from 'degraded' on trigger 'complete' |
 
 ## Artefacts
 

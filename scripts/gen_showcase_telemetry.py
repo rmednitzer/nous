@@ -2,9 +2,12 @@
 
 Runs each ``scenarios/*.yaml`` through ``Engine.tick()`` and writes one
 JSONL telemetry trace and one summary markdown page per scenario. Steps
-that the v0.1 engine cannot apply yet (BL-014 injectors) are recorded as
-``skipped`` annotations rather than silently dropped. ADR 0017 defines
-the showcase site this generator feeds.
+are applied through the BL-014 injector dispatch
+(:func:`nous.scenarios.injectors.apply_injection`), the same path the
+``scenario_load`` / ``scenario_inject`` tools use, so the gallery reflects
+the live runner; an injector that refuses or errors is recorded as a
+``skipped`` annotation rather than silently dropped. ADR 0017 defines the
+showcase site this generator feeds.
 """
 
 from __future__ import annotations
@@ -29,12 +32,6 @@ SPARKLINE_CHARS = "_.-=+*#%@"
 
 SHOWCASE_TICK_HZ = 1.0 / 60.0
 
-_APU_SETTERS = {
-    "solar_w": "set_solar_w",
-    "fuelcell_w": "set_fuelcell_w",
-    "solar_insolation_w": "set_solar_insolation_w",
-    "fuelcell_load_pct": "set_fuelcell_load_pct",
-}
 
 def _load_engine_module() -> Any:
     sys.path.insert(0, str(REPO_ROOT / "src"))
@@ -67,26 +64,18 @@ def _resample(values: list[float], buckets: int) -> list[float]:
 
 
 def _apply_step(engine: Any, action: str, args: Mapping[str, Any]) -> str:
-    if action == "state_transition":
-        trigger = args.get("trigger")
-        if not isinstance(trigger, str):
-            return "skipped: missing trigger"
-        context = args.get("context")
-        ctx = dict(context) if isinstance(context, Mapping) else None
-        ok, mode, reason = engine.request_transition(trigger, context=ctx)
-        if not ok:
-            return f"refused: {reason}"
-        return f"applied: mode -> {mode.value}"
-    if action == "inject_apu":
-        applied: list[str] = []
-        for key, setter in _APU_SETTERS.items():
-            if key in args and hasattr(engine.apu, setter):
-                getattr(engine.apu, setter)(float(args[key]))
-                applied.append(f"{key}={args[key]}")
-        if not applied:
-            return "skipped: no recognised apu argument"
-        return "applied: " + ", ".join(applied)
-    return f"skipped: action {action!r} not yet wired (BL-014)"
+    from nous.scenarios.injectors import apply_injection
+
+    outcome = apply_injection(engine, action, dict(args))
+    if not outcome["applied"]:
+        return f"skipped: {outcome.get('error', 'not applied')}"
+    result = outcome.get("result")
+    if action == "state_transition" and isinstance(result, Mapping):
+        return f"applied: mode -> {result.get('mode')}"
+    if isinstance(result, Mapping) and result:
+        changes = ", ".join(f"{k}={v}" for k, v in result.items())
+        return f"applied: {changes}"
+    return "applied"
 
 
 def _ticks_per_minute(engine: Any) -> float:
