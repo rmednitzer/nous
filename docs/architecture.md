@@ -54,7 +54,7 @@ return body
 
 ## External surfaces
 
-- **MCP tools** -- the thirty-six-tool surface is documented in
+- **MCP tools** -- the thirty-seven-tool surface is documented in
   [tool-reference.md](tool-reference.md). It carries the full L1 read
   surface (a read tool for each subsystem, with comms exposing both
   `comms_state` and `comms_status`, plus an estimator summary) plus the

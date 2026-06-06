@@ -36,6 +36,7 @@ the committed copy after changing a tool's signature or docstring.
 | `scenario_load` | T2 | Load and run a scenario YAML against the engine. |
 | `self_estimator_status` | T0 | Estimator covariances, last update times, divergence flags. |
 | `self_model_assess` | T0 | Self-model capability assessment with calibrated p5/p50/p95 bands. |
+| `self_model_situation` | T0 | Fused situational read: capabilities + provenance + posture + recommendations. |
 | `self_model_viability` | T0 | Decide whether a task is feasible against the current capabilities. |
 | `sensors_status` | T0 | Environmental sensor pack: ambient temp, humidity, baro pressure. |
 | `state_force_fault` | T3 | Force the device into the terminal FAULT posture (T3, ADR 0032). |
@@ -466,6 +467,16 @@ tool registry.
     }
   },
   "title": "self_model_assessArguments",
+  "type": "object"
+}
+```
+
+### `self_model_situation`
+
+```json
+{
+  "properties": {},
+  "title": "self_model_situationArguments",
   "type": "object"
 }
 ```

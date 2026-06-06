@@ -223,7 +223,7 @@ def _format_summary_md(name: str, trace: Mapping[str, Any]) -> str:
     )
     lines.append(
         "| position | `parametric` | dead reckoning + GNSS fix gating; "
-        "Kalman passthrough (IMU fusion is BL-061) |"
+        "Kalman passthrough (IMU fusion is BL-026) |"
     )
     lines.append(
         "| biometrics | `filtered` | HR / core temp / hydration / cognitive "

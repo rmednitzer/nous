@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (self-model: situational awareness, ADR 0038)
+
+- Situational-awareness fusion (ADR 0038, BL-061). `self_model_situation` (T0)
+  is the one-call tactical picture: `src/nous/self_model/situation.py` reuses
+  the `assess` capability claims (so the headline numbers match
+  `self_model_assess`) and layers on each claim's provenance (the backing
+  estimator's source and its staleness), the FSM posture (mode plus the
+  operator and comms labels, with a one-word summary), the `SafetyEnforcer`
+  violation posture, and a short ranked list of degraded-mode recommendations
+  ordered to mirror the engine's auto-safing priority. Staleness (`age_s`) is
+  the literal estimator clock lag and the live trust signal stays the
+  covariance-derived `confidence`; the recommendations are advisory, not a
+  safety gate (the enforcer remains the only authority that refuses or clamps).
+  The tool surface grows from thirty-six to thirty-seven; the existing
+  self-model tools are untouched. Covered by
+  `tests/unit/test_self_model_situation.py` and
+  `tests/integration/test_self_model_situation_tool.py`. The old BL-061
+  cross-references to the position EKF / IMU-fusion track are re-pointed to
+  BL-026, removing a backlog double-booking.
+
 ### Changed (framing: simulation-based digital twin)
 
 - The project describes itself consistently as a *simulation-based* digital

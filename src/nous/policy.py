@@ -83,6 +83,7 @@ _READ_ONLY_TOOLS = frozenset(
         "self_model_assess",
         "self_model_viability",
         "self_estimator_status",
+        "self_model_situation",
         "interop_formats",
         "scenario_status",
         "audit_summary",
