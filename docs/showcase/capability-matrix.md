@@ -4,15 +4,17 @@ Per-subsystem, per-estimator view of what is real today and what is
 not. The badges are defined in [Fidelity](fidelity.md). Each row
 points at the backlog item that is expected to raise the badge.
 
-Last reviewed: 2026-06-05.
+Last reviewed: 2026-06-06.
 
-> **Deployment note.** The badges below reflect `origin/main` at
-> revision `43d0db2` (post PR #42). The catch-up train (PR #38) brought
-> the L1 subsystem rollout onto `main` after the 2026-05-23 baseline,
-> so the live VM picks up the L1 surface on the next auto-update poll.
-> The live MCP audit in [`docs/audit-2026-05-23.md`](../audit-2026-05-23.md)
-> §4 was conducted before the catch-up; §10 records the post-catch-up
-> state.
+> **Deployment note.** The badges below track `origin/main` (most
+> recently the BL-013 cloud-path landing, PR #110). The live VM
+> auto-updates from `main` within about five minutes of a merge (see
+> [deployment](../deployment.md)), so it picks up a badge change on the next
+> poll after `origin/main` advances. The earliest live MCP audit
+> ([`docs/audit-2026-05-23.md`](../audit-2026-05-23.md)) predates the L1
+> catch-up train; the 2026-06-06 audit
+> ([`docs/audit-2026-06-06.md`](../audit-2026-06-06.md)) records the
+> current state.
 
 ## Subsystems
 
@@ -28,14 +30,14 @@ Last reviewed: 2026-06-05.
 | position | `filtered` (lat / lon / alt dead-reckoning + GNSS fix gating + IMU drift) | `parametric` (v0.1 linear-Kalman passthrough with NaN/Inf validation; nonlinear IMU fusion is BL-061) | [estimator](../model-cards/estimator-position-kalman.md) | BL-010, BL-026 |
 | biometrics | `filtered` (HR / core temp / hydration / cognitive load with physiological clamps) | `filtered` (multi-channel Kalman; physiology grounding is BL-040) | [estimator](../model-cards/estimator-biometrics-kalman.md) | BL-011, BL-029, BL-040 |
 | comms | `filtered` (per-link envelopes drive FSM `state.comms_state` each tick) | `parametric` (per-link belief tracker; full transition particle filter is BL-030) | [estimator](../model-cards/estimator-comms-particle.md) | BL-012, BL-030, BL-048 |
-| inference | `parametric` (local-path with profile-derived latency / energy / capacity; cloud path deferred) | n/a | [local mock](../model-cards/inference-local-mock.md) | BL-013, BL-043 |
+| inference | `parametric` (local-path with profile-derived latency / energy / capacity; cloud path registered via `inference_cloud`, ADR 0034, routing the SC-5 fallback ladder to the capped Anthropic client and degrading to the local mock; call enrichment is BL-069) | n/a | [local mock](../model-cards/inference-local-mock.md) | BL-013, BL-043, BL-069 |
 | self model | `parametric` (assess / viability emit calibrated `p5`/`p50`/`p95` claims via Monte Carlo over the estimator posteriors; learned self-model is future) | n/a | [self-model](../model-cards/self-model.md) | BL-018, BL-035 |
 
 ## Cross-cutting surfaces
 
 | Surface | Status | Notes |
 | --- | --- | --- |
-| audit (JSONL, output-hashed) | `filtered` | append-only with fsync + chmod 0600; redaction still flat (AUDIT-2026-05-23 C2). The live VM is currently audit-degraded (AUDIT-2026-05-23 N2). |
+| audit (JSONL, output-hashed) | `filtered` | append-only with fsync + chmod 0600, plus the BL-016 per-record hash chain and the BL-031 daily anchor; redaction still flat (AUDIT-2026-05-23 C2). The live VM resynced 2026-05-28 (AUDIT-2026-05-23 N2 cleared; `audit.degraded:false` confirmed by the 2026-06-06 live probe). |
 | policy + runner (tier-classified admission) | `filtered` | tiers consistent with ADR 0001 and 0013. Denial path still misses `exit_code=1` (AUDIT-2026-05-23 M1). |
 | OAuth issuer | `filtered` for single-client lockdown; `planned` for L3 multi-tenant | BL-019, BL-059. File-store lock and refresh-family revocation still open (AUDIT-2026-05-23 H6, H7). |
 | anthropic client (daily cap + prompt cache) | `filtered` | Flush-before-unlock race closed (AUDIT C1); test coverage in `tests/unit/test_anthropic_client.py`. BL-021 surfacing still planned. |

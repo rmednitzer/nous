@@ -14,6 +14,73 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   docs site, and the governance files lead with that framing so the scope
   stays honest about what the artefact is and is not.
 
+### Added (tool surface: posture, terminal, comms, and cloud inference)
+
+- Posture control (ADR 0031, BL-066). `state_transition` (T2) registers the
+  FSM write seam `Engine.request_transition`, so a controller can drive the
+  mission posture directly (`ready` -> `idle`, then `mission` / `relay` /
+  `monitoring` / `c2`, or the recoverable `safe` hold) instead of only through
+  `scenario_inject`. Operational entries stay SC-2 / SC-8 gated; the terminal
+  `fault` / `shutdown` triggers are refused here and reserved for the T3 force
+  tools. Covered by `tests/integration/test_state_transition_tool.py`.
+- Terminal control (ADR 0032, BL-067). `state_force_fault` and
+  `state_force_shutdown` (T3, no arguments) register the reset-only FAULT /
+  SHUTDOWN postures through the audited surface, resolving the dangling
+  reference ADR 0031 left. Recovery stays on the T2 path (`reset` -> STOWED ->
+  `boot`). Covered by `tests/integration/test_state_force_tools.py`.
+- Comms control (ADR 0033, BL-068). `comms_send` (record a transmission of N
+  bytes on a link, resetting the age-out timer) and `comms_publish` (encode a
+  message via an interop adapter and account its bytes on the link) register the
+  two comms write seams that already had engine support. ADR 0033 also records
+  the disposition of every remaining classified-but-unregistered name, closing
+  the 2026-06-06 audit's finding F. Covered by
+  `tests/integration/test_comms_tools.py`.
+- Cloud inference (ADR 0034, BL-013). `inference_cloud` (T2) registers the
+  cloud path: the SC-5 fallback ladder routes to the capped `AnthropicClient`
+  and degrades to the local mock when the cap is exhausted, comms are down, or
+  the call fails, so a controller always gets an answer. Call enrichment
+  (adaptive thinking, streaming, model-tier selection) is tracked as BL-069.
+  Covered by `tests/integration/test_inference_cloud_tool.py`. Across these
+  additions the registered surface grows from thirty to thirty-six tools.
+
+### Added (safety: FSM actuation and uniform fault reachability, ADR 0029 / 0030)
+
+- FSM actuation, neutral recovery, and fail-closed robustness (ADR 0029).
+  Entering `SAFE`, `LOW_POWER`, or `THERMAL_LIMIT` now caps the compute
+  subsystem's delivered load through `ComputeSubsystem.set_mode_load_ceiling`
+  (composing with the thermal-throttle ceiling), so auto-safing to `LOW_POWER`
+  genuinely sheds load and slows the drain it was named for. `recover` and
+  `cool` now target the neutral `IDLE` rather than `MISSION` (the controller
+  re-selects the operational mode, re-gated), removing the silent
+  `RELAY -> MISSION` collapse. The operator-incapacitation auto-safe is
+  debounced over three consecutive ticks, so a single estimator spike no longer
+  forces a one-way `SAFE`.
+- Uniform fault reachability (ADR 0030). Adds the three missing failsafe edges
+  (`THERMAL_LIMIT` / `LOW_POWER` / `SAFE` to `FAULT`), so `FAULT` is reachable
+  in exactly one ungated `fault` trigger from every powered mode (the table
+  grows from 47 to 50 transitions, purely additive). The reachability suite
+  gains `test_failsafe_edges_are_never_gated`, turning the prose-only "no
+  failsafe edge is gated" claim into a build-breaking assertion.
+
+### Documented (STPA coverage, estimator model cards, reserved audit mirror)
+
+- STPA derived requirements and coverage report (BL-044). Artefact 09 now
+  carries a derived requirement for every safety constraint (new DR-11 through
+  DR-14), and a new `docs/stpa/11-coverage.md` traces every loss end to end
+  (Loss -> Hazard -> SC -> UCA/LS -> DR) and names the test that pins each
+  enforced requirement. Pinned by a new band-widening test in
+  `tests/unit/test_self_model.py`.
+- Estimator model-card coverage (BL-050). Every estimator now carries a card
+  under `docs/model-cards/` (power SoC, APU per-source, thermal, compute,
+  storage, environmental sensors, biometrics, the comms particle filter, and
+  the position Kalman filter), each reachable from the docs nav, the
+  model-cards index, and the capability matrix.
+- Reserved SQLite audit mirror (BL-065). The `audit_entries` table is recorded
+  as reserved, not live: the JSONL sink stays the single authoritative audit
+  trail (BL-016 hash chain plus BL-031 daily anchor). ADR 0002 carries a
+  2026-06-05 update with the decision and its revisit trigger; pinned by
+  `tests/unit/test_audit_entries_reserved.py`.
+
 ### Added (safety: FSM hardening, ADR 0022 / 0027 / 0028)
 
 - Runtime safety enforcer (ADR 0022). `src/nous/safety/enforcer.py` turns an
