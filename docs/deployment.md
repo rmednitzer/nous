@@ -62,6 +62,25 @@ runs `chattr +a` to restore append-only semantics on Linux.
 The systemd journal carries the rest of the process output. `journalctl
 -u nous.service -f` follows it.
 
+## Observability
+
+The tick loop is instrumented with OpenTelemetry metrics (BL-037, ADR 0036):
+a `nous.tick.duration` histogram and a `nous.tick.overruns` counter. `nous`
+depends only on the OTel API, so the instruments are no-ops until a provider
+is configured: by default the per-tick `record` call does no SDK, exporter, or
+collector work, and there is nothing to scrape.
+
+To export them, install the SDK plus an exporter and launch the server under
+the OTel auto-instrumentation wrapper, which reads the standard `OTEL_*`
+environment variables (no `nous`-specific configuration is needed):
+
+```sh
+pip install opentelemetry-sdk opentelemetry-exporter-otlp opentelemetry-distro
+OTEL_SERVICE_NAME=nous \
+  OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4317 \
+  opentelemetry-instrument python -m nous serve
+```
+
 ## Upgrades
 
 Pull, `pip install -U .`, `systemctl daemon-reload && systemctl restart

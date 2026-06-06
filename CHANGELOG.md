@@ -14,6 +14,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   docs site, and the governance files lead with that framing so the scope
   stays honest about what the artefact is and is not.
 
+### Added (observability: tick-loop OTel metrics, ADR 0036)
+
+- Tick-loop instrumentation (ADR 0036, BL-037). `src/nous/telemetry.py` adds
+  two OpenTelemetry instruments built from the OTel API alone: a
+  `nous.tick.duration` histogram (seconds, with the FSM mode as an attribute)
+  and a `nous.tick.overruns` counter. `tick_loop` records the elapsed time each
+  tick and increments the counter on an over-budget tick. The runtime depends
+  only on `opentelemetry-api`, whose instruments are no-ops until a
+  `MeterProvider` is configured, so the default footprint and behaviour are
+  unchanged; an operator opts in by launching under `opentelemetry-instrument`
+  (standard `OTEL_*` env vars). Metrics, not a span per tick, because the loop
+  runs at 2 Hz. The SDK is a dev dependency only, driving the in-memory reader
+  the test asserts against (no exporter, no network in CI).
+
 ### Added (inference: enrich the cloud call, ADR 0035)
 
 - Cloud-call enrichment (ADR 0035, BL-069). `AnthropicClient.call` gains
