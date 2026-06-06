@@ -128,6 +128,16 @@ the tool surface is FastMCP.
 3. Add a section to `docs/hardware-profiles.md` and a one-line entry in the
    profiles README.
 
+### Adding a schema migration
+
+1. Change the SQLModel definitions in `src/nous/db.py`.
+2. Generate a revision: `python scripts/migrate.py revision -m "<change>"
+   --autogenerate` (diffs the metadata against the current database), then
+   review and hand-edit the generated file under `alembic/versions/`.
+3. Apply it with `python scripts/migrate.py upgrade`, and extend the pins in
+   `tests/integration/test_migrations.py`. Alembic is the source of truth;
+   see ADR 0037.
+
 ### Adding an ADR
 
 Copy `docs/adr/0000-template.md` to the next number and fill it in. Keep it

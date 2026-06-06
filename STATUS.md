@@ -136,8 +136,10 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 761 tests pass at HEAD: BL-037 / ADR 0036 added
-  two (the tick-loop duration histogram and overrun counter), on top of the 759
+  feature branch before merge. 764 tests pass at HEAD: BL-051 / ADR 0037 added
+  three (the `scripts/migrate.py` upgrade / downgrade / stamp path), on top of
+  the 761 from BL-037 / ADR 0036 (two: the tick-loop duration histogram and
+  overrun counter), the 759
   from BL-069 / ADR 0035 (seven enriching the cloud call: the tier guard, the
   streaming branch, cache markers, cache-read surfacing, and the tier forwarded
   by `inference_cloud`),

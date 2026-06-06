@@ -84,8 +84,20 @@ OTEL_SERVICE_NAME=nous \
 ## Upgrades
 
 Pull, `pip install -U .`, `systemctl daemon-reload && systemctl restart
-nous.service`. The state DB carries over (Alembic handles migrations);
-the audit log is append-only and unaffected.
+nous.service`. The state DB carries over; the audit log is append-only and
+unaffected.
+
+If a release ships a schema change, apply it with the project migration
+runner before restarting (Alembic under the hood, pointed at the engine's
+own `NOUS_DB_URL`):
+
+```sh
+python scripts/migrate.py current   # what the DB is on now
+python scripts/migrate.py upgrade   # to head
+```
+
+See [ADR 0037](adr/0037-schema-migration-workflow.md) for the workflow and
+`scripts/migrate.py --help` for the full subcommand set.
 
 ## Auto-deploy from `main`
 
