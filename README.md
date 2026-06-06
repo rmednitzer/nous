@@ -48,7 +48,7 @@ Pre-1.0. The L0 scaffold (layout, audited MCP tool surface, FSM, engine
 tick loop, hardware-profile loader, policy/audit/runner spine) is in
 place. The L1 subsystem rollout (power, APU, thermal, compute,
 inference, storage, comms, position, sensors, biometrics) and their
-estimators are landed on the development line with passing tests; the
+estimators are landed on `main` with passing tests; the
 interop adapters (CoT, SensorThings, MISB KLV, NMEA, STANAG, MQTT) now
 emit standards-shaped output. The self-model layer aggregates the live
 estimators into calibrated capability claims (BL-018, BL-035). See
