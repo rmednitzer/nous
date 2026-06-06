@@ -19,9 +19,12 @@ The artefacts follow the canonical numbered layout:
 | [08-loss-scenarios.md](08-loss-scenarios.md) | Loss scenarios for the chosen UCAs. |
 | [09-derived-requirements.md](09-derived-requirements.md) | Requirements that flow back into the backlog. |
 | [10-fsm-constraints-mapping.md](10-fsm-constraints-mapping.md) | FSM transition to constraint to hazard traceability. |
+| [11-coverage.md](11-coverage.md) | End-to-end coverage report: loss to requirement, with the test that pins each enforced requirement. |
 
-The STPA is treated as a *work in progress*; the v0.1 pass covers the
-top losses, hazards, control structure, and a first pass at unsafe
-control actions and loss scenarios. Derived requirements are partial
-and cross-link to the backlog (`docs/backlog.md`) and any governing
-ADR.
+The derived requirements are complete: every safety constraint (SC-1 .. SC-8)
+carries at least one **enforced** derived requirement, and
+[11-coverage.md](11-coverage.md) traces each loss end to end and names the test
+that pins every enforced requirement (BL-044). The analysis stays a teaching
+artefact for "how would we operate the real device?", not a certified safety
+case (artefact 01, `LIMITATIONS.md` L16). Requirements cross-link to the backlog
+(`docs/backlog.md`) and the governing ADR.
