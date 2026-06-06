@@ -83,6 +83,15 @@ mode-independent and must never be refused. The
 operational modes do not connect to each other directly: a mode switch goes
 through `idle` (via `complete`) so the new operational entry is re-gated.
 
+## Bring-up
+
+`Engine.start()` drives `stowed -> boot -> idle`, so a started engine settles in
+`idle` (powered, no active mission), not the transient `boot` (ADR 0039).
+Completing boot is the one bring-up transition that is ungated: the `ready` edge
+carries no safety gate, so the engine always fires it on start, while the gated
+operational entries from `idle` stay controller-driven. An unattended deployment
+therefore rests in `idle` rather than `boot`.
+
 ## Safety gates
 
 Entering an operational mode is safety-gated. `_SAFETY_GATES` in

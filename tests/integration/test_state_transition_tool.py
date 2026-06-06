@@ -27,13 +27,11 @@ def _payload(result: Any) -> dict[str, Any]:
     return data
 
 
-async def test_state_transition_drives_boot_to_operational(config: Settings) -> None:
+async def test_state_transition_drives_idle_to_operational(config: Settings) -> None:
     app = build_app(config)
-    assert app.engine.state.mode.value == "boot"
-
-    ready = _payload(await app.mcp.call_tool("state_transition", {"trigger": "ready"}))
-    assert ready["ok"] is True
-    assert ready["mode"] == "idle"
+    # start() completes bring-up to IDLE (ADR 0039), so a fresh app is in the
+    # idle standby posture rather than the transient BOOT.
+    assert app.engine.state.mode.value == "idle"
 
     # A safety-gated operational entry passes on a freshly-booted device
     # (full battery, junction well below the throttle threshold).
@@ -47,11 +45,11 @@ async def test_state_transition_reports_refusal_without_raising(
     config: Settings,
 ) -> None:
     app = build_app(config)
-    # "mission" is not a table edge from BOOT: the tool returns ok=false
-    # rather than surfacing the ValueError, and the posture is unchanged.
-    out = _payload(await app.mcp.call_tool("state_transition", {"trigger": "mission"}))
+    # "cool" is not a table edge from IDLE: the tool returns ok=false rather
+    # than surfacing the ValueError, and the posture is unchanged.
+    out = _payload(await app.mcp.call_tool("state_transition", {"trigger": "cool"}))
     assert out["ok"] is False
-    assert app.engine.state.mode.value == "boot"
+    assert app.engine.state.mode.value == "idle"
 
 
 async def test_state_transition_refuses_terminal_triggers(config: Settings) -> None:
@@ -63,4 +61,4 @@ async def test_state_transition_refuses_terminal_triggers(config: Settings) -> N
         out = _payload(await app.mcp.call_tool("state_transition", {"trigger": trigger}))
         assert out["ok"] is False
         assert "terminal" in str(out["reason"])
-        assert app.engine.state.mode.value == "boot"
+        assert app.engine.state.mode.value == "idle"

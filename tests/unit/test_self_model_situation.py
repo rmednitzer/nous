@@ -24,8 +24,7 @@ _STATUSES = {"nominal", "watch", "degraded", "critical"}
 @pytest.fixture
 def engine(tmp_nous_home: Path) -> Engine:
     eng = Engine()
-    eng.start()
-    eng.request_transition("ready")  # BOOT -> IDLE so the posture is operational-ready
+    eng.start()  # start() lands in IDLE (ADR 0039)
     eng.tick()
     return eng
 

@@ -20,5 +20,6 @@ def test_engine_starts_and_advances_clock(engine: Engine) -> None:
     assert engine.state.ts_s > 0.0
 
 
-def test_engine_starts_in_boot_after_start(engine: Engine) -> None:
-    assert engine.state.mode is Mode.BOOT
+def test_engine_settles_in_idle_after_start(engine: Engine) -> None:
+    # start() completes bring-up STOWED -> BOOT -> IDLE (ADR 0039).
+    assert engine.state.mode is Mode.IDLE

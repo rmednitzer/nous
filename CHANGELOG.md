@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (engine lifecycle: start completes to IDLE, ADR 0039)
+
+- `Engine.start()` now drives `STOWED -> BOOT -> IDLE` (ADR 0039, BL-070)
+  instead of parking in the transient `BOOT`. Completing boot is plant
+  behaviour: the `ready` edge is ungated, so the engine fires it on start, while
+  the gated operational entries from `idle` (mission / relay / monitoring / c2)
+  stay controller-driven and the terminal `fault` / `shutdown` triggers stay on
+  their own tools. An unattended deployment now rests in the `idle` standby
+  posture, so `device_health` reads `idle` after an auto-update restart rather
+  than `boot`. Both bring-up transitions are logged. The scenario runner drops
+  its now-redundant post-start `ready` step; the FSM transition table is
+  unchanged. Pinned by a new `test_engine_start_completes_to_idle` plus updated
+  smoke / restart / `state_transition`-tool tests.
+
 ### Added (self-model: situational awareness, ADR 0038)
 
 - Situational-awareness fusion (ADR 0038, BL-061). `self_model_situation` (T0)

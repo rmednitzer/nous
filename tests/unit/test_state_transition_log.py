@@ -60,6 +60,17 @@ def test_engine_persists_boot_transition(
     assert "boot" in triggers
 
 
+def test_engine_start_completes_to_idle(tmp_nous_home: Path, db_path: Path) -> None:
+    # ADR 0039: start() drives STOWED -> BOOT -> IDLE and logs both edges.
+    engine = init_db(f"sqlite:///{db_path}")
+    log = StateTransitionLog(engine)
+    e = Engine(transition_log=log)
+    e.start()
+    assert e.state.mode is Mode.IDLE
+    triggers = [r.trigger for r in log.tail(10)]
+    assert triggers[:2] == ["boot", "ready"]
+
+
 def test_engine_persists_request_transition(
     tmp_nous_home: Path, db_path: Path
 ) -> None:
