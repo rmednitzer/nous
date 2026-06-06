@@ -67,7 +67,8 @@ The systemd journal carries the rest of the process output. `journalctl
 The tick loop is instrumented with OpenTelemetry metrics (BL-037, ADR 0036):
 a `nous.tick.duration` histogram and a `nous.tick.overruns` counter. `nous`
 depends only on the OTel API, so the instruments are no-ops until a provider
-is configured: by default there is no overhead and nothing to scrape.
+is configured: by default the per-tick `record` call does no SDK, exporter, or
+collector work, and there is nothing to scrape.
 
 To export them, install the SDK plus an exporter and launch the server under
 the OTel auto-instrumentation wrapper, which reads the standard `OTEL_*`

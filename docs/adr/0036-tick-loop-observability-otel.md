@@ -30,7 +30,9 @@ Instrument the tick loop with OpenTelemetry metrics through the OTel API alone.
 (seconds, carrying the FSM mode as an attribute) and a `nous.tick.overruns`
 counter. `tick_loop` records the elapsed time on every tick and increments the
 counter when a tick runs over its budget. With no provider configured (the
-default), both calls are no-ops, so behaviour and overhead are unchanged.
+default), both calls are no-ops: behaviour is unchanged and the only per-tick
+cost is the no-op `record` / `add` call itself, with no SDK, exporter, or
+collector work.
 
 An operator opts in without any `nous`-specific configuration by launching the
 server under `opentelemetry-instrument` (or by wiring an SDK in their own

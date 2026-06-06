@@ -1,8 +1,9 @@
 """OpenTelemetry instruments for the simulator (BL-037, ADR 0036).
 
 Instrumented with the OTel *API* only. With no ``MeterProvider`` configured
-the instruments are no-ops, so ``nous`` adds no measurable overhead and takes
-no dependency on a collector by default. An operator opts in by wiring an SDK
+the instruments are no-ops: each tick still evaluates the ``record`` / ``add``
+call, but that call does no SDK, exporter, or collector work, and ``nous``
+takes no dependency on a collector by default. An operator opts in by wiring an SDK
 and exporter, most simply by launching under ``opentelemetry-instrument`` so
 the standard ``OTEL_*`` environment variables configure a provider; the
 instruments below then rebind to it.

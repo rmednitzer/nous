@@ -40,7 +40,8 @@ async def tick_loop(engine: Engine, hz: float, stop: anyio.Event) -> None:
         engine.tick()
         elapsed = engine.clock.monotonic() - t0
         # OTel metrics (BL-037, ADR 0036): no-op until a provider is configured.
-        tick_duration.record(elapsed, {"nous.tick.mode": str(engine.state.mode.value)})
+        # Mode is a StrEnum, so .value is already a str (no conversion needed).
+        tick_duration.record(elapsed, {"nous.tick.mode": engine.state.mode.value})
         budget = dt - elapsed
         if budget > 0:
             with anyio.move_on_after(budget):
