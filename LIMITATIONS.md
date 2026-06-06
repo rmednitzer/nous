@@ -134,17 +134,21 @@ from a running model. Do not benchmark against them.
 **Tracking.** [BL-043] running a real local model (TensorRT-LLM or llama.cpp)
 is `[planned]` for L3.
 
-## L10. STPA scope v0.1
+## L10. STPA scope
 
-**State.** The STPA artefacts in `docs/stpa/` cover the simulator's top
-losses, hazards, control structure, and a first pass at unsafe control
-actions and loss scenarios. Coverage is *not* complete; derived requirements
-are partial.
+**State.** The STPA artefacts in `docs/stpa/` cover the simulator's losses,
+hazards, control structure, unsafe control actions, and loss scenarios, and the
+derived requirements are now complete: every safety constraint carries at least
+one enforced requirement, with the end-to-end traceability and the pinning
+tests in `docs/stpa/11-coverage.md` (BL-044).
 
-**Implication.** Do not cite the STPA as a finished safety case. It is a
-work-in-progress safety analysis.
+**Implication.** The STPA is internally complete for the simulator, but it
+remains a teaching artefact, not a certified safety case for a real device
+(`docs/stpa/01-purpose.md`); conformance is self-declared (L16). Do not cite it
+as a finished safety case for hardware.
 
-**Tracking.** [BL-044] STPA completion is `[planned]` for L3.
+**Tracking.** [BL-044] STPA derived-requirements completion + coverage report
+is `[done]`. A real-device safety case is out of scope for the simulator.
 
 ## L11. Single-tenant claude.ai integration
 

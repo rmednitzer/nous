@@ -56,6 +56,25 @@ def test_thermal_headroom_drops_when_junction_hot(engine: Engine) -> None:
     assert a.thermal_headroom.point < baseline.point
 
 
+def test_endurance_band_widens_as_soc_covariance_grows(engine: Engine) -> None:
+    """SC-1 / DR-1: a less-certain estimator must yield a wider, less confident
+    capability claim, so the controller cannot act on false precision (loss L-1).
+
+    Growing the SoC posterior covariance (predict-only, no observation folded
+    in) must widen the endurance band and lower its numeric confidence.
+    """
+    tight = assess("status", engine=engine).endurance
+    assert tight is not None
+
+    for _ in range(50):
+        engine.power_est.predict(10.0)
+
+    loose = assess("status", engine=engine).endurance
+    assert loose is not None
+    assert (loose.p95 - loose.p5) > (tight.p95 - tight.p5)
+    assert loose.confidence < tight.confidence
+
+
 def test_inference_capacity_falls_to_zero_at_full_load(engine: Engine) -> None:
     engine.compute.set_load_pct(100.0)
     for _ in range(40):

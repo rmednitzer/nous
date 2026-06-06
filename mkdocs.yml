@@ -108,6 +108,7 @@ nav:
       - "08 Loss scenarios": stpa/08-loss-scenarios.md
       - "09 Derived requirements": stpa/09-derived-requirements.md
       - "10 FSM constraints mapping": stpa/10-fsm-constraints-mapping.md
+      - "11 Coverage report": stpa/11-coverage.md
   - Backlog: backlog.md
   - Contributor runbook: contributor-runbook.md
   - Deployment: deployment.md
