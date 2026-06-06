@@ -114,8 +114,12 @@ _STATEFUL_TOOLS = frozenset(
         "inference_cloud",
         "inference_request",
         "self_model_publish",
+        # state_transition is the registered T2 FSM-write tool (ADR 0031); it
+        # wraps the engine's request_transition method, which is not itself a
+        # tool name. ADR 0032 retired the redundant request_transition entry
+        # (classify still defaults any unknown name to STATEFUL, so this is
+        # behaviour-preserving).
         "state_transition",
-        "request_transition",
         # AUDIT-2026-05-23 N2: re-opens the audit sink in place after
         # an operator remediates the underlying cause. Stateful
         # (mutates the in-process audit handler) but idempotent

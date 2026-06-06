@@ -1,11 +1,11 @@
-"""FSM-state tools (ADR 0021, ADR 0031).
+"""FSM-state tools (ADR 0021, ADR 0031, ADR 0032).
 
-The current-mode read (state_get), the transition history (state_history),
-and the posture-control write (state_transition). state_get / state_history
-were extracted byte-faithfully from ``server.py``; state_transition (ADR
-0031) is the first-class T2 control surface that lets a controller drive the
-mission-posture FSM directly, a path that previously existed only by
-injecting a scenario action through ``scenario_inject``.
+The current-mode reads (state_get, state_history) plus the posture-control
+writes: state_transition (T2, ADR 0031) drives the reversible mission-posture
+transitions, and state_force_fault / state_force_shutdown (T3, ADR 0032) are
+the irreversible terminal-control tools that state_transition deliberately
+refuses. state_get / state_history were extracted byte-faithfully from
+``server.py``; the write tools wrap ``Engine.request_transition``.
 """
 
 from __future__ import annotations
@@ -135,3 +135,49 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
             return json.dumps({"ok": ok, "mode": mode.value, "reason": reason})
 
         return await wrap("state_transition", {"trigger": trigger}, ctx, _work)
+
+    @mcp.tool()
+    async def state_force_fault(ctx: Context | None = None) -> str:
+        """Force the device into the terminal FAULT posture (T3, ADR 0032).
+
+        Fires the FSM ``fault`` trigger, which ADR 0030 makes reachable in one
+        step from every powered mode. FAULT is terminal: it leaves only via a
+        ``reset`` (which reboots through STOWED), so this is the irreversible
+        (T3) counterpart to the reversible ``state_transition`` tool, which
+        refuses ``fault`` for exactly this reason. Recovery is a separate,
+        deliberate act: ``state_transition`` with ``reset`` then ``boot``.
+
+        Returns ``{"ok": bool, "mode": str, "reason": str}``; ``ok`` is
+        ``false`` only where the table offers no ``fault`` edge (the device is
+        already terminal, or STOWED). Tier T3 (irreversible): refused by
+        ``guarded`` and ``readonly`` policy modes unless explicitly allowed.
+        """
+
+        async def _work() -> str:
+            ok, mode, reason = app.engine.request_transition("fault")
+            return json.dumps({"ok": ok, "mode": mode.value, "reason": reason})
+
+        return await wrap("state_force_fault", {}, ctx, _work)
+
+    @mcp.tool()
+    async def state_force_shutdown(ctx: Context | None = None) -> str:
+        """Force the device into the terminal SHUTDOWN posture (T3, ADR 0032).
+
+        Fires the FSM ``shutdown`` trigger. SHUTDOWN is terminal (``reset``
+        only), so like ``state_force_fault`` this is the irreversible (T3) path
+        that ``state_transition`` refuses. This drives the *modelled* shutdown
+        posture; it does not stop the simulator process (that is the engine
+        lifecycle's ``stop``). Recovery is ``state_transition`` with ``reset``
+        then ``boot``.
+
+        Returns ``{"ok": bool, "mode": str, "reason": str}``; ``ok`` is
+        ``false`` from a mode with no ``shutdown`` edge (STOWED, FAULT, or
+        already SHUTDOWN). Tier T3 (irreversible): refused by ``guarded`` and
+        ``readonly`` policy modes unless explicitly allowed.
+        """
+
+        async def _work() -> str:
+            ok, mode, reason = app.engine.request_transition("shutdown")
+            return json.dumps({"ok": ok, "mode": mode.value, "reason": reason})
+
+        return await wrap("state_force_shutdown", {}, ctx, _work)
