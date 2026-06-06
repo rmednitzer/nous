@@ -16,6 +16,8 @@ the committed copy after changing a tool's signature or docstring.
 | `audit_summary` | T0 | Read-only view of the audit handler's state. |
 | `audit_verify` | T0 | Verify the audit hash chain on disk (BL-016, ADR 0025). |
 | `biometrics_status` | T0 | Operator biometrics: heart rate, core temp, hydration, cognitive load. |
+| `comms_publish` | T2 | Encode ``data`` via an interop adapter and transmit it on a link (T2, ADR 0033). |
+| `comms_send` | T2 | Record a transmission of ``n_bytes`` on link ``link_id`` (T2, ADR 0033). |
 | `comms_state` | T0 | Comms-stack summary (per ADR-0006). |
 | `comms_status` | T0 | Comms subsystem: per-link envelope, live RSSI, loss, throughput, age. |
 | `compute_status` | T0 | Compute subsystem: load fraction, electrical draw, throttling. |
@@ -118,6 +120,65 @@ tool registry.
 {
   "properties": {},
   "title": "biometrics_statusArguments",
+  "type": "object"
+}
+```
+
+### `comms_publish`
+
+```json
+{
+  "properties": {
+    "adapter": {
+      "title": "Adapter",
+      "type": "string"
+    },
+    "data": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Data"
+    },
+    "link_id": {
+      "title": "Link Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "link_id",
+    "adapter"
+  ],
+  "title": "comms_publishArguments",
+  "type": "object"
+}
+```
+
+### `comms_send`
+
+```json
+{
+  "properties": {
+    "link_id": {
+      "title": "Link Id",
+      "type": "string"
+    },
+    "n_bytes": {
+      "title": "N Bytes",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "link_id",
+    "n_bytes"
+  ],
+  "title": "comms_sendArguments",
   "type": "object"
 }
 ```

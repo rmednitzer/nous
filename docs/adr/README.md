@@ -35,3 +35,4 @@
 | 0030 | [FSM completeness -- uniform fault reachability from every powered mode](0030-fsm-fault-reachability-completeness.md) | Accepted | 2026-06-05 |
 | 0031 | [Register the state_transition control tool](0031-state-transition-control-tool.md) | Accepted | 2026-06-06 |
 | 0032 | [FSM terminal-control tools](0032-fsm-terminal-control-tools.md) | Accepted | 2026-06-06 |
+| 0033 | [Complete the registered tool surface](0033-complete-tool-surface.md) | Accepted | 2026-06-06 |

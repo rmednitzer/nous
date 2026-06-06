@@ -274,6 +274,10 @@ Self-model and estimators (T0):
 Interop (T0 schema + T1 codec):
   interop_formats / interop_encode / interop_decode
 
+Comms control (T2):
+  comms_send (record a transmission of N bytes on a link) / comms_publish
+  (encode a message via an interop adapter and account its bytes on the link)
+
 Local inference and cloud cap (T0/T1):
   inference_local / anthropic_cap_status
 
