@@ -83,10 +83,10 @@ def run_scenario(engine: Engine, scenario: Scenario) -> ScenarioReport:
 
     The runner does not start or stop the engine; the caller owns
     lifecycle so the runner is composable with the FastMCP lifespan
-    and with the CLI's ``nous scenario`` subcommand. The runner does
-    issue the ``ready`` trigger after start if the FSM is sitting in
-    BOOT so the canonical scenarios (which start with a mission /
-    relay / monitoring / c2 trigger) admit cleanly.
+    and with the CLI's ``nous scenario`` subcommand. ``engine.start()``
+    completes bring-up to IDLE (ADR 0039), so the canonical scenarios
+    (which start with a mission / relay / monitoring / c2 trigger from
+    IDLE) admit cleanly.
 
     Tick accounting is relative to this run: ``tick_budget`` is the
     number of ticks the runner will advance, measured from the
@@ -98,11 +98,7 @@ def run_scenario(engine: Engine, scenario: Scenario) -> ScenarioReport:
     scenario whose first step is ``at_min: 0`` sees the injection
     applied at the run's t=0 boundary rather than one tick late.
     """
-    engine.start()
-    from ..state.machine import Mode
-
-    if engine.fsm.current is Mode.BOOT:
-        engine.request_transition("ready")
+    engine.start()  # start() completes bring-up to IDLE (ADR 0039)
 
     steps = scenario.steps_sorted()
     pending: list[tuple[int, ScenarioStep]] = list(enumerate(steps))

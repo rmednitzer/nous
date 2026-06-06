@@ -104,7 +104,7 @@ re-audit).
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/safety/enforcer.py` | in-progress | Runtime safety enforcer (ADR 0022): `SafetyEnforcer.check` returns a structured `SafetyResult` (approved / clamped / evidence) and counts per-constraint and total violations; `floor_threshold` and `ceiling_clamp` cover the SC-2 refusal and throttle-clamp shapes. The FSM now routes its entry gates through it (SC-2 thermal + SC-8 power, registered via `register_fsm_constraints`), the engine mirrors every check to the audit log under `Tier.SAFETY`, and the tick-driven auto-safing (ADR 0027/0028) drives the FSM toward safety on a violation. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. The cloud call carries model-tier selection, capability-guarded adaptive thinking, and streaming for long generations (BL-069 / ADR 0035); changes require an ADR. |
-| `src/nous/engine.py` | in-progress | Tick orchestration; all ten L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. |
+| `src/nous/engine.py` | in-progress | Tick orchestration; all ten L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. `start()` completes bring-up to the IDLE standby posture (STOWED -> BOOT -> IDLE; ADR 0039), so a started engine settles in IDLE rather than the transient BOOT. |
 | `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |
 | `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in (BL-005a). |
 | `src/nous/subsystems/thermal.py` | in-progress | Two-state lumped model: junction + enclosure (BL-005). Drives the FSM thermal-headroom guard and the battery cell temperature. |
@@ -136,11 +136,11 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 779 tests pass at HEAD: BL-061 / ADR 0038 added
-  fourteen (the situational-awareness fusion layer and its `self_model_situation`
-  tool: capability fusion with provenance and staleness, the posture summary, the
-  safety posture, and the operator / power / thermal / comms / navigation /
-  inference recommendation branches), on top of the 765 from BL-051 / ADR 0037
+  feature branch before merge. 781 tests pass at HEAD: BL-070 / ADR 0039 added
+  one (`Engine.start` completes bring-up to IDLE), on top of the 780 from
+  BL-061 / ADR 0038 (fifteen: fourteen for the situational-awareness fusion
+  layer and its `self_model_situation` tool, plus one staleness-after-reload
+  regression added in review), on top of the 765 from BL-051 / ADR 0037
   (four: the `scripts/migrate.py` upgrade / downgrade / stamp path and a
   percent-encoded-URL regression), on top of
   the 761 from BL-037 / ADR 0036 (two: the tick-loop duration histogram and

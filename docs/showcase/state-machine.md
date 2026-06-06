@@ -68,8 +68,8 @@ stateDiagram-v2
 
 | Trigger | Effect | Originator (today) |
 | --- | --- | --- |
-| `boot` | `STOWED -> BOOT` | controller |
-| `ready` | `BOOT -> IDLE` | controller |
+| `boot` | `STOWED -> BOOT` | engine bring-up (`start`), or controller |
+| `ready` | `BOOT -> IDLE` | engine bring-up (`start`), or controller |
 | `mission`, `relay`, `monitoring`, `c2` | `IDLE -> <mode>` | controller |
 | `degrade` | `<active mode> -> DEGRADED` | controller, or the engine's auto-safing loop (ADR 0027/0028) |
 | `thermal_limit` | `MISSION -> THERMAL_LIMIT` | controller, or auto-safing on an SC-2 violation |

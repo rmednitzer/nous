@@ -248,7 +248,15 @@ class Engine:
         return 1.0 / float(self.settings.tick_hz)
 
     def start(self) -> None:
-        """Boot transition. Idempotent. Re-startable after ``stop()``."""
+        """Bring-up to the IDLE standby posture. Idempotent. Re-startable after ``stop()``.
+
+        Drives STOWED -> BOOT -> IDLE so a started engine settles in IDLE
+        (powered, no active mission) rather than the transient BOOT (ADR 0039).
+        Completing boot is plant behaviour, not a supervisory decision: the
+        ``ready`` edge is ungated, so it always fires here, while the gated
+        operational entries from IDLE (mission / relay / monitoring / c2) stay
+        controller-driven.
+        """
         if self._started:
             return
         if self.fsm.current is Mode.SHUTDOWN or self.fsm.current is Mode.FAULT:
@@ -259,6 +267,10 @@ class Engine:
             prev_boot: Mode = self.fsm.current
             new_boot = self.fsm.transition("boot")
             self._record_transition(prev_boot, "boot", new_boot, reason="boot")
+        if self.fsm.current is Mode.BOOT:
+            prev_ready: Mode = self.fsm.current
+            new_ready = self.fsm.transition("ready")
+            self._record_transition(prev_ready, "ready", new_ready, reason="boot complete")
         self._started = True
         self._wall_start = time.monotonic()
         self._set_mode(self.fsm.current)

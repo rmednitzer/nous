@@ -41,3 +41,4 @@
 | 0036 | [Tick-loop observability via OpenTelemetry](0036-tick-loop-observability-otel.md) | Accepted | 2026-06-06 |
 | 0037 | [Schema migration workflow](0037-schema-migration-workflow.md) | Accepted | 2026-06-06 |
 | 0038 | [Self-model situational awareness](0038-self-model-situational-awareness.md) | Accepted | 2026-06-06 |
+| 0039 | [Engine start completes to the IDLE standby posture](0039-engine-start-completes-to-idle.md) | Accepted | 2026-06-06 |
