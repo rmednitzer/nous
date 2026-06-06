@@ -87,17 +87,26 @@ Pull, `pip install -U .`, `systemctl daemon-reload && systemctl restart
 nous.service`. The state DB carries over; the audit log is append-only and
 unaffected.
 
-If a release ships a schema change, apply it with the project migration
-runner before the new code restarts (Alembic under the hood). Load the
-service environment first so the runner targets the same database the unit
-uses (`deploy/systemd/nous.service` reads `EnvironmentFile=/etc/nous/nous.env`);
-without it `resolved_db_url()` falls back to the local default and would
-migrate the wrong database:
+If a release ships a schema change, apply it offline before the new code
+restarts (Alembic under the hood). Stop the service first so it releases its
+open handle on the sqlite database: the migration model is offline on a
+stopped service (ADR 0037), and migrating underneath the live process can race
+with its writes. Run the migration as the `nous` service account through the
+deployed venv (`/opt/nous/venv`, where `install.sh` installs the project and
+Alembic), with the service environment loaded. Running as `nous` keeps a
+freshly created `state.db` and its `-wal`/`-shm` sidecars owned by the service
+rather than the operator; loading `/etc/nous/nous.env` (which the unit reads as
+its `EnvironmentFile`) keeps `resolved_db_url()` on the same database the unit
+uses instead of the local default:
 
 ```sh
-set -a; . /etc/nous/nous.env; set +a
-python scripts/migrate.py current   # what the DB is on now
-python scripts/migrate.py upgrade   # to head
+sudo systemctl stop nous.service
+sudo -u nous bash -c '
+  set -a; . /etc/nous/nous.env; set +a
+  /opt/nous/venv/bin/python /opt/nous/scripts/migrate.py current   # what the DB is on now
+  /opt/nous/venv/bin/python /opt/nous/scripts/migrate.py upgrade   # to head
+'
+sudo systemctl start nous.service
 ```
 
 A schema-changing release needs this before the new code runs, but the
