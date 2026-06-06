@@ -1,18 +1,18 @@
-"""Subsystem telemetry reads (ADR 0021).
+"""Subsystem telemetry reads (ADR 0021) plus the comms write tools (ADR 0033).
 
 The ten read-only (T0) subsystem status tools, grouped into one module per
 the capability-grouping option of ADR 0021's revisit trigger: they are uniform
 telemetry reads (truth plus calibrated estimate), so one ``subsystems`` module
-is more legible than ten one-tool files. Handler bodies and docstrings are
-byte-faithful to the inline ``server.py`` definitions they replace, so the
-registered tool surface does not change. (``inference_status`` stays with
+is more legible than ten one-tool files. The two comms write tools
+(``comms_send`` / ``comms_publish``, T2, ADR 0033) live here too so every comms
+tool is discoverable in one place. (``inference_status`` stays with
 ``inference_local`` in the inference module.)
 """
 
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
@@ -212,6 +212,98 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
             return json.dumps(payload)
 
         return await wrap("comms_status", {}, ctx, _work)
+
+    @mcp.tool()
+    async def comms_send(link_id: str, n_bytes: int, ctx: Context | None = None) -> str:
+        """Record a transmission of ``n_bytes`` on link ``link_id`` (T2, ADR 0033).
+
+        Wraps the comms subsystem's ``tx`` seam: a successful send resets the
+        link's age-out timer (keeping it live) and updates its coarse
+        throughput. A send on an unknown link, a link the controller has forced
+        down, or a non-positive byte count is rejected. Returns ``{"ok": bool,
+        "link_id": str, "bytes_accepted": int, "connected": bool}``; ``ok`` is
+        ``false`` when no bytes were accepted. Tier T2 (stateful): the link's
+        live state changes and the call is audited.
+        """
+
+        async def _work() -> str:
+            accepted = app.engine.comms.tx(link_id, n_bytes)
+            link = app.engine.comms.link(link_id)
+            return json.dumps(
+                {
+                    "ok": accepted > 0,
+                    "link_id": link_id,
+                    "bytes_accepted": accepted,
+                    "connected": bool(link.is_live()) if link is not None else False,
+                }
+            )
+
+        return await wrap(
+            "comms_send", {"link_id": link_id, "n_bytes": n_bytes}, ctx, _work
+        )
+
+    @mcp.tool()
+    async def comms_publish(
+        link_id: str,
+        adapter: str,
+        data: dict[str, Any] | None = None,
+        ctx: Context | None = None,
+    ) -> str:
+        """Encode ``data`` via an interop adapter and transmit it on a link (T2, ADR 0033).
+
+        Combines the interop registry (BL-041) with the comms ``tx`` seam: the
+        message is encoded to wire bytes through the named adapter (``cot``,
+        ``nmea0183``, ...), then those bytes are accounted against the link's
+        envelope (age reset, throughput updated). The encoded payload is
+        returned hex-encoded alongside the byte count the link accepted, so a
+        controller sees both the wire form and its effect on the link.
+
+        Encode errors carry the same categories as ``interop_encode`` (unknown
+        adapter, stale source estimate, schema/value error) but are reported as
+        ``{"ok": false, ...}`` so the result shape stays uniform with
+        ``comms_send``; nothing is transmitted on an encode failure. Tier T2
+        (stateful).
+        """
+
+        async def _work() -> str:
+            from ..interop import StaleEstimateError, build_adapter
+
+            try:
+                impl = build_adapter(adapter)
+            except KeyError as exc:
+                return json.dumps({"ok": False, "error": str(exc)})
+            try:
+                payload = impl.encode(dict(data or {}))
+            except StaleEstimateError as exc:
+                return json.dumps(
+                    {
+                        "ok": False,
+                        "adapter": adapter,
+                        "error": "stale_estimate",
+                        "age_s": exc.age_s,
+                        "max_age_s": exc.max_age_s,
+                    }
+                )
+            except (ValueError, TypeError) as exc:
+                return json.dumps({"ok": False, "adapter": adapter, "error": str(exc)})
+            accepted = app.engine.comms.tx(link_id, len(payload))
+            return json.dumps(
+                {
+                    "ok": accepted > 0,
+                    "link_id": link_id,
+                    "adapter": adapter,
+                    "payload_hex": payload.hex(),
+                    "len": len(payload),
+                    "bytes_accepted": accepted,
+                }
+            )
+
+        return await wrap(
+            "comms_publish",
+            {"link_id": link_id, "adapter": adapter, "data": dict(data or {})},
+            ctx,
+            _work,
+        )
 
     @mcp.tool()
     async def position_status(ctx: Context | None = None) -> str:

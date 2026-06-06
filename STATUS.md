@@ -31,7 +31,7 @@ for the prior baseline.
 
 Deployment-side status note: the L1 subsystem rollout has been on
 `origin/main` since PR #38, so the auto-update timer lands the
-current thirty-three-tool surface on the live VM on the next poll after
+current thirty-five-tool surface on the live VM on the next poll after
 `origin/main` advances (no-op when the remote HEAD is unchanged).
 Eight audit findings have closed since the 2026-05-23 baseline and
 the post-baseline §10 re-audit: **C3** (FastMCP lifespan ticks the
@@ -95,7 +95,7 @@ re-audit).
 
 | Component | State | Notes |
 |-----------|-------|-------|
-| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Thirty-three tools registered across device telemetry (T0), the ten subsystem reads (T0), self-model and estimators (T0), interop schema + codec (T0/T1), local inference + cap (T0/T1), scenarios and configuration (T2), posture control (T2 `state_transition`, ADR 0031), terminal control (T3 `state_force_fault` / `state_force_shutdown`, ADR 0032), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
+| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Thirty-five tools registered across device telemetry (T0), the ten subsystem reads (T0), self-model and estimators (T0), interop schema + codec (T0/T1), comms control (T2 `comms_send` / `comms_publish`, ADR 0033), local inference + cap (T0/T1), scenarios and configuration (T2), posture control (T2 `state_transition`, ADR 0031), terminal control (T3 `state_force_fault` / `state_force_shutdown`, ADR 0032), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
 | `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). Changes require an ADR. |
@@ -136,9 +136,10 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 743 tests pass at HEAD: BL-067 / ADR 0032
-  added four with the `state_force_*` terminal-control tools, on top of the
-  739 from the 2026-06-06 cadence audit
+  feature branch before merge. 748 tests pass at HEAD: BL-068 / ADR 0033
+  added five with the `comms_send` / `comms_publish` tools, on top of the 743
+  from BL-067 / ADR 0032 (four for the `state_force_*` terminal-control tools)
+  and the 739 from the 2026-06-06 cadence audit
   ([`docs/audit-2026-06-06.md`](docs/audit-2026-06-06.md)), which had measured
   736 green at the start of the pass (correcting a stale `645` this section
   had carried) and added three with the `state_transition` tool (ADR 0031);
