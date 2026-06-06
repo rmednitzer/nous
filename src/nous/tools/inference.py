@@ -1,9 +1,11 @@
-"""Inference and cloud-cap tools (ADR 0021).
+"""Inference and cloud-cap tools (ADR 0021, ADR 0034).
 
 The local-path inference call (T1), the inference-subsystem totals read (T0),
-and the Anthropic daily-cap status (T0), extracted from ``server.py``. Handler
-bodies and docstrings are byte-faithful to the inline definitions they replace,
-so the registered tool surface does not change.
+and the Anthropic daily-cap status (T0) were extracted from ``server.py``
+byte-faithfully (ADR 0021), so that move did not change the registered tool
+surface. The cloud-path tool ``inference_cloud`` (T2) was added later
+(ADR 0034); it wires the ``InferenceFallback`` ladder over the capped
+``AnthropicClient.call`` and the local mock.
 """
 
 from __future__ import annotations
@@ -73,7 +75,9 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         carries ``path`` (``cloud`` or ``local_mock``), the degradation
         ``reason``, ``cap_remaining``, and a ``cap`` snapshot so a routed
         controller can see it was served by the mock. ``prompt`` is the
-        untrusted slot; ``system`` (trusted) defaults to a stable
+        untrusted slot. The ``system`` slot is reserved for trusted content
+        (the caller must pass only trusted content here, otherwise untrusted
+        text is elevated into the system slot); it defaults to a stable
         cloud-path instruction so prompt-cache hits are preserved.
         ``max_tokens`` is clamped to a ceiling because a cloud token is a
         real cost. Tier T2 (stateful): a cloud call consumes one unit of
@@ -103,8 +107,12 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                 cap_remaining=lambda: cap_status(cfg)["remaining"],
             )
             result = await ladder.call(prompt, system=system)
+            snapshot = cap_status(cfg)
             payload = result.to_dict()
-            payload["cap"] = cap_status(cfg)
+            payload["cap"] = snapshot
+            # The ladder captures cap_remaining before the cloud call; reconcile
+            # it to the post-call snapshot so the two fields never disagree.
+            payload["cap_remaining"] = snapshot["remaining"]
             return json.dumps(payload)
 
         return await wrap(
