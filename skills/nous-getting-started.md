@@ -38,7 +38,7 @@ anything.
 - `comms_state` and `comms_status` return the aggregate FSM signal
   plus the per-link envelopes (live RSSI, loss, throughput, age).
 - `position_status` returns lat / lon / alt, fix state, dead-reckoning
-  duration, and the position EKF estimate.
+  duration, and the position Kalman estimate.
 - `sensors_status` returns ambient temperature, humidity, and
   barometric pressure with Kalman covariance.
 - `biometrics_status` returns heart rate, core temperature, hydration,
@@ -52,13 +52,29 @@ anything.
   `drivers`. Read the `p5` band and `confidence` for viability and safety
   decisions; do not treat a wide band as if it were the point estimate.
 
+## Driving the device
+
+Reads are safe; control tools mutate state and audit at a higher tier. A
+freshly booted engine parks in `BOOT`.
+
+- `state_transition` (T2) drives the mission posture: `ready` to reach
+  `IDLE`, then `mission` / `relay` / `monitoring` / `c2`, or the recoverable
+  `safe` hold. Operational entries are SC-2 / SC-8 gated and refuse when
+  thermal headroom or power reserve is short.
+- `state_force_fault` / `state_force_shutdown` (T3) are irreversible: they
+  drop the device into the reset-only FAULT / SHUTDOWN postures (recover with
+  `state_transition reset`).
+- `comms_send` / `comms_publish` (T2) account a transmission on a link;
+  `scenario_load` / `scenario_inject` / `profile_reload` (T2) drive scenarios
+  and reconfiguration (see the scenario walkthrough).
+
 ## Deployment posture
 
 The live VM tracks `origin/main`; the development line may be ahead
 of `main` and therefore ahead of the live MCP. If the read surface
 above is not all reachable, the live host is on an older
-revision (see [`docs/audit-2026-05-23.md`](../docs/audit-2026-05-23.md)
-§4 for the most recent live-MCP probe).
+revision (see [`docs/audit-2026-06-06.md`](../docs/audit-2026-06-06.md)
+§6 for the most recent live-MCP probe).
 
 ## Talking to a model
 
