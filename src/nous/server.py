@@ -295,7 +295,8 @@ Posture control (T2):
 
 Terminal control (T3, irreversible):
   state_force_fault / state_force_shutdown (drive the device into the
-  reset-only FAULT / SHUTDOWN posture; recover via state_transition reset)
+  reset-only FAULT / SHUTDOWN posture; recover via state_transition reset
+  then boot)
 
 Scenarios and configuration (T2):
   scenario_load / scenario_inject / profile_reload
