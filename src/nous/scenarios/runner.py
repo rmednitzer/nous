@@ -81,12 +81,12 @@ class ScenarioReport(dict[str, Any]):
 def run_scenario(engine: Engine, scenario: Scenario) -> ScenarioReport:
     """Drive ``engine`` through ``scenario``. Returns a structured report.
 
-    The runner does not start or stop the engine; the caller owns
-    lifecycle so the runner is composable with the FastMCP lifespan
-    and with the CLI's ``nous scenario`` subcommand. ``engine.start()``
-    completes bring-up to IDLE (ADR 0039), so the canonical scenarios
-    (which start with a mission / relay / monitoring / c2 trigger from
-    IDLE) admit cleanly.
+    The runner starts the engine idempotently (``engine.start()``) but does
+    not own the stop/shutdown lifecycle; the caller does, so the runner stays
+    composable with the FastMCP lifespan and the CLI's ``nous scenario``
+    subcommand. ``start()`` completes bring-up to IDLE (ADR 0039), so the
+    canonical scenarios (which start with a mission / relay / monitoring / c2
+    trigger from IDLE) admit cleanly.
 
     Tick accounting is relative to this run: ``tick_budget`` is the
     number of ticks the runner will advance, measured from the
