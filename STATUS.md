@@ -96,7 +96,7 @@ re-audit).
 | Component | State | Notes |
 |-----------|-------|-------|
 | `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Thirty-six tools registered across device telemetry (T0), the eleven subsystem reads (T0; comms exposes both `comms_state` and `comms_status`), self-model and estimators (T0), interop schema + codec (T0/T1), comms control (T2 `comms_send` / `comms_publish`, ADR 0033), local inference + cap (T0/T1), cloud inference (T2 `inference_cloud`, ADR 0034), scenarios and configuration (T2), posture control (T2 `state_transition`, ADR 0031), terminal control (T3 `state_force_fault` / `state_force_shutdown`, ADR 0032), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
-| `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). |
+| `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). Instrumented with OpenTelemetry metrics (`nous.tick.duration` histogram + `nous.tick.overruns` counter, no-op until a provider is configured; BL-037 / ADR 0036). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). Changes require an ADR. |
 | `src/nous/audit_anchor.py` | in-progress | Daily anchor over the chain head (ADR 0026 / BL-031): `AnchorLog` appends one hash-linked anchor per UTC day, and `verify_anchors` (the `audit_anchor_verify` tool) cross-checks anchored heads against the chain across logrotate segments to catch tail truncation within the retention window. |
@@ -136,9 +136,11 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 759 tests pass at HEAD: BL-069 / ADR 0035 added
-  seven enriching the cloud call (the tier guard, the streaming branch, cache
-  markers, cache-read surfacing, and the tier forwarded by `inference_cloud`),
+  feature branch before merge. 761 tests pass at HEAD: BL-037 / ADR 0036 added
+  two (the tick-loop duration histogram and overrun counter), on top of the 759
+  from BL-069 / ADR 0035 (seven enriching the cloud call: the tier guard, the
+  streaming branch, cache markers, cache-read surfacing, and the tier forwarded
+  by `inference_cloud`),
   on top of the 752 from BL-013 / ADR 0034 (three with the `inference_cloud`
   cloud-path tool) and BL-044 (one pinning the self-model endurance band), the
   748 from BL-068 / ADR 0033 (five with the `comms_send` / `comms_publish`

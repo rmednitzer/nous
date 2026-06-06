@@ -20,9 +20,12 @@ the tool surface is FastMCP.
   0016), `uv` for dependency management, `hatchling` for build
 - `mcp>=1.27` (FastMCP), `pydantic>=2.11`, `pydantic-settings`, `sqlmodel`,
   `alembic`, `anthropic`, `numpy`, `filterpy`, `pynmea2`, `paho-mqtt`,
-  `pyyaml`, `httpx`, `anyio>=4.6`, `uvicorn`, `starlette`
+  `pyyaml`, `httpx`, `anyio>=4.6`, `uvicorn`, `starlette`, `opentelemetry-api`
+  (tick-loop metrics, no-op without a configured provider; ADR 0036)
 - Dev: `pytest`, `pytest-asyncio` (asyncio_mode auto), `ruff`, `mypy`
-  (strict), `hypothesis`, `mkdocs`, `mkdocs-material`, `mkdocstrings[python]`
+  (strict), `hypothesis`, `opentelemetry-sdk` (drives the in-memory metric
+  reader in the telemetry test), `mkdocs`, `mkdocs-material`,
+  `mkdocstrings[python]`
 
 ## Where to start
 

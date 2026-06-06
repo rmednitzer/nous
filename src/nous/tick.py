@@ -6,6 +6,7 @@ import anyio
 import anyio.lowlevel
 
 from .engine import Engine
+from .telemetry import tick_duration, tick_overruns
 
 __all__ = ["tick_loop"]
 
@@ -38,11 +39,14 @@ async def tick_loop(engine: Engine, hz: float, stop: anyio.Event) -> None:
         t0 = engine.clock.monotonic()
         engine.tick()
         elapsed = engine.clock.monotonic() - t0
+        # OTel metrics (BL-037, ADR 0036): no-op until a provider is configured.
+        tick_duration.record(elapsed, {"nous.tick.mode": str(engine.state.mode.value)})
         budget = dt - elapsed
         if budget > 0:
             with anyio.move_on_after(budget):
                 await stop.wait()
         else:
             overruns += 1
+            tick_overruns.add(1)
             await anyio.lowlevel.checkpoint()
     engine.state.last_capabilities["tick_overruns"] = float(overruns)
