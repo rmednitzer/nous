@@ -1,7 +1,7 @@
 """Cached Anthropic client with a daily call cap and prompt-cache discipline.
 
 The simulator's ``inference_cloud`` tool funnels every Claude call through
-this module. Three behaviours are intentional:
+this module. Four behaviours are intentional:
 
 1. **Daily cap.** A file-locked counter at ``$NOUS_HOME/.anthropic_daily_count``
    bounds calls per UTC day. When the cap is exhausted every further call
@@ -9,10 +9,16 @@ this module. Three behaviours are intentional:
    ``inference_local`` (the local mock).
 2. **Prompt caching.** The system prompt and any RAG/tool-result content are
    marked with ``cache_control`` so repeated calls within the cache TTL pay
-   only the input-token discount.
+   only the input-token discount. The response's ``cache_read_input_tokens``
+   is recorded on :attr:`AnthropicClient.last_cache_read_input_tokens` so the
+   discipline is observable rather than assumed.
 3. **Slot discipline.** Untrusted content (sensor text, intercepted radio
    payloads) is always placed in the *user* message slot. The system slot
    and tool-result slots are reserved for trusted content.
+4. **Enriched call (BL-069, ADR 0035).** ``call`` selects a model tier
+   (default / advanced), enables adaptive thinking on the thinking-capable
+   tier, and streams long generations through ``messages.stream`` so a slow
+   response stays inside the request timeout. The default tier is unchanged.
 """
 
 from __future__ import annotations
@@ -25,14 +31,49 @@ from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from anthropic import AsyncAnthropic
-from anthropic.types import TextBlockParam
+from anthropic import AsyncAnthropic, Omit, omit
+from anthropic.types import (
+    Message,
+    TextBlockParam,
+    ThinkingConfigAdaptiveParam,
+    ThinkingConfigParam,
+)
 
 from .config import Settings, get_settings
 
 __all__ = ["AnthropicClient", "CallCap", "CapExhausted", "build_client"]
+
+_ADAPTIVE_THINKING: ThinkingConfigAdaptiveParam = {"type": "adaptive"}
+
+# Stream a generation longer than this so a slow cloud response stays inside the
+# request timeout instead of tripping the SDK's non-streaming guard (the
+# claude-api skill: stream for long output / high max_tokens).
+_STREAM_OVER_TOKENS = 1024
+
+# Model families that accept ``thinking={"type": "adaptive"}``. Haiku 4.5 (the
+# default tier) does not, so the call omits the block there rather than 400 the
+# request; only a thinking-capable tier (Sonnet 4.6, Opus 4.6+) gains it.
+_THINKING_CAPABLE_PREFIXES = (
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-sonnet-4-6",
+)
+
+
+def _supports_adaptive_thinking(model: str) -> bool:
+    return any(model.startswith(prefix) for prefix in _THINKING_CAPABLE_PREFIXES)
+
+
+def _join_text(message: Message) -> str:
+    """Concatenate the text blocks, dropping any adaptive-thinking block."""
+    parts: list[str] = []
+    for block in message.content:
+        if block.type == "text":
+            parts.append(block.text)
+    return "\n".join(parts)
 
 
 class CapExhausted(RuntimeError):
@@ -147,31 +188,49 @@ class AnthropicClient:
             cap_path or (settings.home / ".anthropic_daily_count"),
             settings.anthropic_daily_cap,
         )
+        self.last_cache_read_input_tokens: int | None = None
 
     @property
     def available(self) -> bool:
         return self._client is not None
+
+    def _resolve_model(self, tier: str, model: str | None) -> str:
+        if model is not None:
+            return model
+        if tier == "advanced":
+            return self.settings.anthropic_model_advanced
+        return self.settings.anthropic_model_default
 
     async def call(
         self,
         *,
         prompt: str,
         system: str,
+        tier: Literal["default", "advanced"] = "default",
         model: str | None = None,
         max_tokens: int = 1024,
+        thinking: bool = True,
         trusted_context: Iterable[Mapping[str, Any]] = (),
         timeout_s: float = 30.0,
     ) -> str:
         """Issue a Claude call, respecting the cap and the cache markers.
 
-        ``timeout_s`` bounds the request at the SDK layer so a hung
-        endpoint cannot stall the tick loop indefinitely. A timeout
-        surfaces as the SDK's :class:`anthropic.APITimeoutError`, which
-        the audited runner converts into a structured error line.
+        ``tier`` selects ``anthropic_model_default`` ("default") or
+        ``anthropic_model_advanced`` ("advanced"); an explicit ``model``
+        overrides both. ``thinking`` requests adaptive thinking, but it is
+        only sent when the resolved model supports it (BL-069 / ADR 0035), so
+        the default Haiku tier never receives a block it would reject. A
+        generation above ``_STREAM_OVER_TOKENS`` is streamed and collected
+        with ``get_final_message`` so a long response stays inside the
+        timeout. ``timeout_s`` bounds the request at the SDK layer so a hung
+        endpoint cannot stall the tick loop indefinitely; a timeout surfaces
+        as the SDK's :class:`anthropic.APITimeoutError`, which the audited
+        runner converts into a structured error line.
         """
         if self._client is None:
             raise RuntimeError("ANTHROPIC_API_KEY not configured")
         self._cap.increment()
+        resolved = self._resolve_model(tier, model)
         sys_blocks: list[TextBlockParam] = [
             {
                 "type": "text",
@@ -187,19 +246,33 @@ class AnthropicClient:
                     "cache_control": {"type": "ephemeral"},
                 }
             )
-        response = await self._client.messages.create(
-            model=model or self.settings.anthropic_model_default,
-            max_tokens=max_tokens,
-            system=sys_blocks,
-            messages=[{"role": "user", "content": prompt}],
-            timeout=timeout_s,
+        thinking_param: ThinkingConfigParam | Omit = (
+            _ADAPTIVE_THINKING
+            if thinking and _supports_adaptive_thinking(resolved)
+            else omit
         )
-        parts: list[str] = []
-        for block in getattr(response, "content", []) or []:
-            text = getattr(block, "text", "")
-            if text:
-                parts.append(text)
-        return "\n".join(parts)
+        client = self._client.with_options(timeout=timeout_s)
+        messages: list[Any] = [{"role": "user", "content": prompt}]
+        message: Message
+        if max_tokens > _STREAM_OVER_TOKENS:
+            async with client.messages.stream(
+                model=resolved,
+                max_tokens=max_tokens,
+                system=sys_blocks,
+                messages=messages,
+                thinking=thinking_param,
+            ) as stream:
+                message = await stream.get_final_message()
+        else:
+            message = await client.messages.create(
+                model=resolved,
+                max_tokens=max_tokens,
+                system=sys_blocks,
+                messages=messages,
+                thinking=thinking_param,
+            )
+        self.last_cache_read_input_tokens = message.usage.cache_read_input_tokens
+        return _join_text(message)
 
 
 @lru_cache(maxsize=1)

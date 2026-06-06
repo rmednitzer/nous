@@ -37,7 +37,7 @@ five minutes of a merge.
 | position | `parametric` | Dead-reckoning + GNSS fix gating + IMU drift; v0.1 linear-Kalman passthrough validates NaN/Inf. Nonlinear IMU fusion lands with BL-061. |
 | biometrics | `filtered` | Heart rate, core temperature, hydration, cognitive load with physiological clamps. Multi-channel Kalman (BL-011, BL-029). Physiology grounding (BL-040) is planned. |
 | comms | `parametric` | Per-link envelopes drive FSM state each tick; per-link belief tracker. Full transition particle filter (BL-030) is planned. |
-| inference | `parametric` | Local-path with profile-derived latency / energy / capacity; cloud path registered via `inference_cloud` (ADR 0034), enrichment is BL-069; real local model is BL-043. |
+| inference | `parametric` | Local-path with profile-derived latency / energy / capacity; cloud path registered via `inference_cloud` (ADR 0034), enrichment landed in BL-069 / ADR 0035 (tier, adaptive thinking, streaming); real local model is BL-043. |
 | self model | `parametric` | Calibrated `p5`/`p50`/`p95` capability claims via Monte Carlo over the estimator posteriors (BL-018/BL-035); learned self-model is future. |
 
 ## How badges roll up

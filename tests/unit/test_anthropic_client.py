@@ -14,8 +14,10 @@ ordering flushes and fsyncs inside the locked region, so N workers
 that each call `increment()` K times must leave the on-disk counter
 at exactly N*K.
 
-The tests exercise `CallCap` directly; the Anthropic SDK is never
-called.
+The cap tests exercise `CallCap` directly; the `call` tests (BL-069,
+ADR 0035) drive `AnthropicClient.call` against a fake `AsyncAnthropic`,
+so CI never reaches the network while still pinning the tier guard,
+streaming branch, cache markers, and surfaced cache-read tokens.
 """
 
 from __future__ import annotations
@@ -24,10 +26,13 @@ import json
 import multiprocessing as mp
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
+from anthropic import omit
 
-from nous.anthropic_client import CallCap, CapExhausted
+from nous.anthropic_client import AnthropicClient, CallCap, CapExhausted
+from nous.config import Settings
 
 
 def test_counter_persists_across_instances(tmp_path: Path) -> None:
@@ -180,3 +185,166 @@ def test_fsync_failure_fails_closed(
     monkeypatch.setattr("nous.anthropic_client.os.fsync", _fail_fsync)
     with pytest.raises(CapExhausted, match="could not be fsynced"):
         cap.increment()
+
+
+# --- AnthropicClient.call: enriched cloud leg (BL-069, ADR 0035) ------------
+#
+# A fake AsyncAnthropic stands in for the SDK so no request leaves the host.
+# It records the kwargs each call site sends so a test can assert the tier
+# guard, the create-vs-stream branch, and the cache markers.
+
+
+class _FakeBlock:
+    def __init__(self, type_: str, *, text: str = "", thinking: str = "") -> None:
+        self.type = type_
+        self.text = text
+        self.thinking = thinking
+
+
+class _FakeUsage:
+    def __init__(self, cache_read: int | None) -> None:
+        self.cache_read_input_tokens = cache_read
+
+
+class _FakeMessage:
+    def __init__(self, blocks: list[_FakeBlock], cache_read: int | None) -> None:
+        self.content = blocks
+        self.usage = _FakeUsage(cache_read)
+
+
+class _FakeStream:
+    def __init__(self, message: _FakeMessage) -> None:
+        self._message = message
+
+    async def __aenter__(self) -> _FakeStream:
+        return self
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
+
+    async def get_final_message(self) -> _FakeMessage:
+        return self._message
+
+
+class _FakeMessages:
+    def __init__(self, message: _FakeMessage, calls: dict[str, Any]) -> None:
+        self._message = message
+        self._calls = calls
+
+    async def create(self, **kwargs: Any) -> _FakeMessage:
+        self._calls["create"] = kwargs
+        return self._message
+
+    def stream(self, **kwargs: Any) -> _FakeStream:
+        self._calls["stream"] = kwargs
+        return _FakeStream(self._message)
+
+
+class _FakeAsyncAnthropic:
+    def __init__(self, message: _FakeMessage, calls: dict[str, Any]) -> None:
+        self.messages = _FakeMessages(message, calls)
+        self._calls = calls
+
+    def with_options(self, **kwargs: Any) -> _FakeAsyncAnthropic:
+        self._calls["with_options"] = kwargs
+        return self
+
+
+def _client_with_fake(
+    config: Settings, tmp_path: Path, message: _FakeMessage
+) -> tuple[AnthropicClient, dict[str, Any]]:
+    calls: dict[str, Any] = {}
+    client = AnthropicClient(config, cap_path=tmp_path / "cap.json")
+    client._client = _FakeAsyncAnthropic(message, calls)  # type: ignore[assignment]
+    return client, calls
+
+
+async def test_call_default_tier_creates_without_thinking(
+    config: Settings, tmp_path: Path
+) -> None:
+    message = _FakeMessage([_FakeBlock("text", text="hi there")], cache_read=42)
+    client, calls = _client_with_fake(config, tmp_path, message)
+
+    out = await client.call(prompt="q", system="sys", max_tokens=256)
+
+    assert out == "hi there"
+    assert "create" in calls and "stream" not in calls
+    kwargs = calls["create"]
+    assert kwargs["model"] == config.anthropic_model_default
+    assert kwargs["thinking"] is omit  # Haiku default tier: no thinking block
+    assert all(
+        block.get("cache_control") == {"type": "ephemeral"}
+        for block in kwargs["system"]
+    )
+    assert client.last_cache_read_input_tokens == 42
+    assert CallCap(tmp_path / "cap.json", cap=100).peek()[0] == 1
+
+
+async def test_call_streams_long_generation(config: Settings, tmp_path: Path) -> None:
+    message = _FakeMessage([_FakeBlock("text", text="long answer")], cache_read=0)
+    client, calls = _client_with_fake(config, tmp_path, message)
+
+    out = await client.call(prompt="q", system="sys", max_tokens=3000)
+
+    assert out == "long answer"
+    assert "stream" in calls and "create" not in calls
+
+
+async def test_advanced_tier_enables_adaptive_thinking(
+    config: Settings, tmp_path: Path
+) -> None:
+    message = _FakeMessage([_FakeBlock("text", text="x")], cache_read=0)
+    client, calls = _client_with_fake(config, tmp_path, message)
+
+    await client.call(prompt="q", system="sys", tier="advanced", max_tokens=256)
+
+    kwargs = calls["create"]
+    assert kwargs["model"] == config.anthropic_model_advanced
+    assert kwargs["thinking"] == {"type": "adaptive"}
+
+
+async def test_thinking_off_omits_block_even_on_capable_tier(
+    config: Settings, tmp_path: Path
+) -> None:
+    message = _FakeMessage([_FakeBlock("text", text="x")], cache_read=0)
+    client, calls = _client_with_fake(config, tmp_path, message)
+
+    await client.call(
+        prompt="q", system="sys", tier="advanced", thinking=False, max_tokens=256
+    )
+
+    assert calls["create"]["thinking"] is omit
+
+
+async def test_thinking_block_excluded_from_text(
+    config: Settings, tmp_path: Path
+) -> None:
+    message = _FakeMessage(
+        [
+            _FakeBlock("thinking", thinking="private reasoning"),
+            _FakeBlock("text", text="final answer"),
+        ],
+        cache_read=0,
+    )
+    client, _ = _client_with_fake(config, tmp_path, message)
+
+    out = await client.call(prompt="q", system="sys", tier="advanced", max_tokens=256)
+
+    assert out == "final answer"
+
+
+async def test_cap_exhausted_blocks_the_sdk_call(
+    config: Settings, tmp_path: Path
+) -> None:
+    message = _FakeMessage([_FakeBlock("text", text="must not return")], cache_read=0)
+    capped = config.model_copy(update={"anthropic_daily_cap": 1})
+    calls: dict[str, Any] = {}
+    cap_path = tmp_path / "cap.json"
+    client = AnthropicClient(capped, cap_path=cap_path)
+    client._client = _FakeAsyncAnthropic(message, calls)  # type: ignore[assignment]
+    CallCap(cap_path, cap=1).increment()  # consume the day's only slot
+
+    with pytest.raises(CapExhausted):
+        await client.call(prompt="q", system="sys", max_tokens=128)
+
+    assert calls == {}  # SDK never reached

@@ -247,6 +247,11 @@ tool registry.
     "prompt": {
       "title": "Prompt",
       "type": "string"
+    },
+    "tier": {
+      "default": "default",
+      "title": "Tier",
+      "type": "string"
     }
   },
   "required": [

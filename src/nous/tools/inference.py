@@ -11,7 +11,7 @@ surface. The cloud-path tool ``inference_cloud`` (T2) was added later
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
 
@@ -63,6 +63,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
     async def inference_cloud(
         prompt: str,
         max_tokens: int = 512,
+        tier: str = "default",
         ctx: Context | None = None,
     ) -> str:
         """Cloud-path inference through the SC-5 fallback ladder (ADR 0034).
@@ -78,10 +79,16 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         cloud-path instruction (fixed so caller content cannot reach the
         trusted slot, stable so prompt-cache hits are preserved), matching
         the slot discipline in ``anthropic_client.py``. ``max_tokens`` is
-        clamped to a ceiling because a cloud token is a real cost. Tier T2
-        (stateful): a cloud call consumes one unit of the daily cap.
+        clamped to a ceiling because a cloud token is a real cost. ``tier``
+        picks the model: ``default`` (fast, cheap) or ``advanced`` (stronger,
+        with adaptive thinking); an unknown value falls back to ``default``
+        (BL-069, ADR 0035). Tier T2 (stateful): a cloud call consumes one
+        unit of the daily cap.
         """
         bounded = max(1, min(int(max_tokens), _CLOUD_MAX_TOKENS_CEIL))
+        safe_tier: Literal["default", "advanced"] = (
+            "advanced" if tier == "advanced" else "default"
+        )
 
         async def _work() -> str:
             client = AnthropicClient(cfg)
@@ -91,6 +98,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                     prompt=p,
                     system=_CLOUD_SYSTEM,
                     max_tokens=bounded,
+                    tier=safe_tier,
                 )
 
             async def _local(p: str) -> str:
@@ -115,7 +123,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
 
         return await wrap(
             "inference_cloud",
-            {"prompt_len": len(prompt), "max_tokens": bounded},
+            {"prompt_len": len(prompt), "max_tokens": bounded, "tier": safe_tier},
             ctx,
             _work,
         )
