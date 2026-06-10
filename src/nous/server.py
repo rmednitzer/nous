@@ -25,6 +25,7 @@ from .db import StateTransitionLog, init_db
 from .engine import Engine
 from .policy import PolicyMode
 from .runner import run as audited_run
+from .scenarios.session import ScenarioSession
 from .tick import tick_loop
 from .tools import audit, inference, interop, meta, scenarios, self_model, state, subsystems
 
@@ -72,6 +73,9 @@ class Nous:
         self.engine = Engine(
             settings=settings, transition_log=self.transition_log, audit=self.audit
         )
+        # The active scenario session (ADR 0040). Process-scoped like the
+        # engine itself (ADR 0024), so it survives stateless-HTTP requests.
+        self.scenario_session: ScenarioSession | None = None
         self.engine.start()
 
     @property
@@ -276,6 +280,11 @@ Self-model and estimators (T0):
   provenance and staleness, the FSM posture, the safety posture, and ranked
   degraded-mode advice)
 
+Self-model publish (T2):
+  self_model_publish (push the situation or assess read through an interop
+  adapter -- mqtt, sensorthings, stanag_4774, or cot -- and account the
+  bytes on a comms link)
+
 Interop (T0 schema + T1 codec):
   interop_formats / interop_encode / interop_decode
 
@@ -301,8 +310,13 @@ Terminal control (T3, irreversible):
   reset-only FAULT / SHUTDOWN posture; recover via state_transition reset
   then boot)
 
-Scenarios and configuration (T2):
-  scenario_load / scenario_inject / profile_reload
+Scenarios and configuration (T0/T1/T2):
+  scenario_load (T2; mode="run" blocks to the report, mode="session" starts
+  a stateful session riding the live tick loop) / scenario_inject (T2) /
+  profile_reload (T2) / scenario_status (T0 progress read) /
+  scenario_pause / scenario_resume / scenario_reset (T1 session control;
+  pause freezes the scenario clock, never the device) / tick_advance (T1;
+  advance simulated time by n ticks, deterministic fast-forward)
 
 Operational recovery (T2):
   audit_resync

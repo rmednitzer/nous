@@ -22,7 +22,7 @@ from .loader import Scenario, ScenarioStep
 if TYPE_CHECKING:
     from ..engine import Engine
 
-__all__ = ["ScenarioReport", "ScenarioStepRecord", "run_scenario"]
+__all__ = ["ScenarioReport", "ScenarioStepRecord", "fire_step", "run_scenario", "skip_step"]
 
 
 class ScenarioStepRecord(dict[str, Any]):
@@ -78,6 +78,40 @@ class ScenarioReport(dict[str, Any]):
         )
 
 
+def fire_step(engine: Engine, index: int, step: ScenarioStep) -> ScenarioStepRecord:
+    """Apply one scenario step against the engine and record the outcome.
+
+    Shared by the one-shot runner and the stateful session (ADR 0040) so
+    both surfaces report a fired step identically.
+    """
+    outcome = apply_injection(engine, step.action, step.args)
+    return ScenarioStepRecord(
+        index=index,
+        at_min=step.at_min,
+        ts_s=engine.state.ts_s,
+        tick=engine.state.tick,
+        action=step.action,
+        applied=bool(outcome.get("applied", False)),
+        result=outcome.get("result"),
+        error=str(outcome.get("error", "")),
+        args=dict(step.args),
+    )
+
+
+def skip_step(engine: Engine, index: int, step: ScenarioStep) -> ScenarioStepRecord:
+    """Record a step the run could not reach before its tick budget ran out."""
+    return ScenarioStepRecord(
+        index=index,
+        at_min=step.at_min,
+        ts_s=engine.state.ts_s,
+        tick=engine.state.tick,
+        action=step.action,
+        applied=False,
+        error="tick budget exhausted before scheduled time",
+        args=dict(step.args),
+    )
+
+
 def run_scenario(engine: Engine, scenario: Scenario) -> ScenarioReport:
     """Drive ``engine`` through ``scenario``. Returns a structured report.
 
@@ -110,20 +144,7 @@ def run_scenario(engine: Engine, scenario: Scenario) -> ScenarioReport:
     def _fire_due(elapsed_min: float) -> None:
         while pending and pending[0][1].at_min <= elapsed_min:
             idx, step = pending.pop(0)
-            outcome = apply_injection(engine, step.action, step.args)
-            records.append(
-                ScenarioStepRecord(
-                    index=idx,
-                    at_min=step.at_min,
-                    ts_s=engine.state.ts_s,
-                    tick=engine.state.tick,
-                    action=step.action,
-                    applied=bool(outcome.get("applied", False)),
-                    result=outcome.get("result"),
-                    error=str(outcome.get("error", "")),
-                    args=dict(step.args),
-                )
-            )
+            records.append(fire_step(engine, idx, step))
 
     _fire_due(0.0)
 
@@ -135,18 +156,7 @@ def run_scenario(engine: Engine, scenario: Scenario) -> ScenarioReport:
             break
 
     for idx, step in pending:
-        records.append(
-            ScenarioStepRecord(
-                index=idx,
-                at_min=step.at_min,
-                ts_s=engine.state.ts_s,
-                tick=engine.state.tick,
-                action=step.action,
-                applied=False,
-                error="tick budget exhausted before scheduled time",
-                args=dict(step.args),
-            )
-        )
+        records.append(skip_step(engine, idx, step))
 
     return ScenarioReport(
         scenario=scenario,
