@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -60,7 +60,9 @@ from .subsystems.storage import StorageSubsystem
 from .subsystems.thermal import ThermalSubsystem
 from .types import TickContext
 
-__all__ = ["Engine", "EngineState"]
+__all__ = ["Engine", "EngineState", "TickHook"]
+
+TickHook = Callable[[TickContext], None]
 
 
 # Safety-critical numeric profile fields (section, key). They feed the SC-8
@@ -186,6 +188,8 @@ class Engine:
         self._started = False
         self._wall_start = 0.0
         self._operator_incap_streak = 0
+        self._tick_hooks: list[TickHook] = []
+        self.tick_hook_errors = 0
         # ADR 0019 deterministic seed + clock seams. ``seed=None``
         # falls back to OS entropy (current behaviour); ``clock=None``
         # picks the real ``MonotonicClock``. A test that needs a
@@ -247,6 +251,38 @@ class Engine:
     def dt_s(self) -> float:
         return 1.0 / float(self.settings.tick_hz)
 
+    def add_tick_hook(self, hook: TickHook) -> None:
+        """Register a per-tick observer called with each tick's context (ADR 0040).
+
+        Hooks run at the end of ``tick()``, after the mode has settled, so an
+        observer sees the same picture a tool reading the engine would.
+        Registering the same callable twice is a no-op.
+        """
+        if hook not in self._tick_hooks:
+            self._tick_hooks.append(hook)
+
+    def remove_tick_hook(self, hook: TickHook) -> None:
+        """Deregister a tick observer. Unknown hooks are ignored."""
+        if hook in self._tick_hooks:
+            self._tick_hooks.remove(hook)
+
+    def _run_tick_hooks(self, ctx: TickContext) -> None:
+        """Call every registered hook; a raising hook never kills the tick.
+
+        The tick loop is the safety spine (ADR 0024, ADR 0027): an observer
+        bug must degrade the observer, not the plant. Failures are counted on
+        ``tick_hook_errors`` (surfaced via ``snapshot()``) so containment
+        stays legible rather than silent. The tuple snapshot keeps iteration
+        safe when a hook deregisters itself (a session finishing its budget).
+        """
+        if not self._tick_hooks:
+            return
+        for hook in tuple(self._tick_hooks):
+            try:
+                hook(ctx)
+            except Exception:  # noqa: BLE001
+                self.tick_hook_errors += 1
+
     def start(self) -> None:
         """Bring-up to the IDLE standby posture. Idempotent. Re-startable after ``stop()``.
 
@@ -276,6 +312,9 @@ class Engine:
         self._set_mode(self.fsm.current)
         self.state.ts_s = 0.0
         self.state.tick = 0
+        # Per-boot counter, reset with the tick clock: a fresh run's hook
+        # health must not inherit a previous run's failures (ADR 0040).
+        self.tick_hook_errors = 0
 
     def reload_profile(self, name: str | None = None) -> dict[str, Any]:
         """Hot-reload the hardware profile from disk (BL-039).
@@ -699,6 +738,7 @@ class Engine:
             mode=self.state.mode.value,
             profile=self.settings.profile,
         )
+        self._run_tick_hooks(ctx)
         return ctx
 
     def _refresh_capabilities(self) -> None:
@@ -758,6 +798,7 @@ class Engine:
         return {
             "tick": self.state.tick,
             "ts_s": self.state.ts_s,
+            "tick_hook_errors": self.tick_hook_errors,
             "mode": self.state.mode.value,
             "operator_state": self.state.operator_state.value,
             "operator_state_reason": self.state.operator_state_reason,

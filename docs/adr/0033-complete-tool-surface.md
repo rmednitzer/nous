@@ -95,3 +95,15 @@ Alternatives rejected:
 - The cloud inference ADR lands (unblocks `inference_cloud` /
   `inference_request`).
 - A self-model publish target is chosen (unblocks `self_model_publish`).
+
+## Update (2026-06-09)
+
+The first and third triggers fired. ADR 0040 lands the stateful scenario
+session and registers `scenario_status` / `scenario_pause` /
+`scenario_resume` / `scenario_reset` plus `tick_advance` (the session rides
+an engine tick hook, which also dissolves the race this ADR feared for a
+bare `tick_advance`). ADR 0041 settles the self-model publish target (the
+`comms_publish` composition) and registers `self_model_publish`. The
+remaining unregistered names are unregistered by design: `inference_request`
+(redundant twin of `inference_cloud`, per the ADR 0034 note above) and the
+operator-only `db_reset` / `audit_rotate`.

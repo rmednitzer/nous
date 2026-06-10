@@ -95,7 +95,7 @@ re-audit).
 
 | Component | State | Notes |
 |-----------|-------|-------|
-| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Thirty-seven tools registered across device telemetry (T0), the eleven subsystem reads (T0; comms exposes both `comms_state` and `comms_status`), self-model and estimators (T0, including the BL-061 `self_model_situation` fused read, ADR 0038), interop schema + codec (T0/T1), comms control (T2 `comms_send` / `comms_publish`, ADR 0033), local inference + cap (T0/T1), cloud inference (T2 `inference_cloud`, ADR 0034), scenarios and configuration (T2), posture control (T2 `state_transition`, ADR 0031), terminal control (T3 `state_force_fault` / `state_force_shutdown`, ADR 0032), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
+| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Forty-three tools registered across device telemetry (T0), the eleven subsystem reads (T0; comms exposes both `comms_state` and `comms_status`), self-model and estimators (T0, including the BL-061 `self_model_situation` fused read, ADR 0038), self-model publish (T2 `self_model_publish`, ADR 0041), interop schema + codec (T0/T1), comms control (T2 `comms_send` / `comms_publish`, ADR 0033), local inference + cap (T0/T1), cloud inference (T2 `inference_cloud`, ADR 0034), scenarios and configuration (T2 `scenario_load` / `scenario_inject` / `profile_reload`, plus the ADR 0040 session surface: T0 `scenario_status`, T1 `scenario_pause` / `scenario_resume` / `scenario_reset`, T1 `tick_advance`), posture control (T2 `state_transition`, ADR 0031), terminal control (T3 `state_force_fault` / `state_force_shutdown`, ADR 0032), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
 | `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). Instrumented with OpenTelemetry metrics (`nous.tick.duration` histogram + `nous.tick.overruns` counter, no-op until a provider is configured; BL-037 / ADR 0036). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). Changes require an ADR. |
@@ -104,7 +104,7 @@ re-audit).
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/safety/enforcer.py` | in-progress | Runtime safety enforcer (ADR 0022): `SafetyEnforcer.check` returns a structured `SafetyResult` (approved / clamped / evidence) and counts per-constraint and total violations; `floor_threshold` and `ceiling_clamp` cover the SC-2 refusal and throttle-clamp shapes. The FSM now routes its entry gates through it (SC-2 thermal + SC-8 power, registered via `register_fsm_constraints`), the engine mirrors every check to the audit log under `Tier.SAFETY`, and the tick-driven auto-safing (ADR 0027/0028) drives the FSM toward safety on a violation. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. The cloud call carries model-tier selection, capability-guarded adaptive thinking, and streaming for long generations (BL-069 / ADR 0035); changes require an ADR. |
-| `src/nous/engine.py` | in-progress | Tick orchestration; all ten L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. `start()` completes bring-up to the IDLE standby posture (STOWED -> BOOT -> IDLE; ADR 0039), so a started engine settles in IDLE rather than the transient BOOT. |
+| `src/nous/engine.py` | in-progress | Tick orchestration; all ten L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. `start()` completes bring-up to the IDLE standby posture (STOWED -> BOOT -> IDLE; ADR 0039), so a started engine settles in IDLE rather than the transient BOOT. Per-tick observer hooks (`add_tick_hook` / `remove_tick_hook`, ADR 0040) run after the mode settles, with exceptions contained and counted on `tick_hook_errors` so an observer bug never kills the auto-safing tick. |
 | `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |
 | `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in (BL-005a). |
 | `src/nous/subsystems/thermal.py` | in-progress | Two-state lumped model: junction + enclosure (BL-005). Drives the FSM thermal-headroom guard and the battery cell temperature. |
@@ -128,7 +128,7 @@ re-audit).
 | `src/nous/interop/*` | in-progress | Real adapter implementations for CoT, SensorThings, MISB KLV, NMEA 0183, STANAG 4774/4778, MQTT. `nous.interop.REGISTRY` exposes them; `interop_encode` / `interop_decode` MCP tools (T1) round-trip via the audited runner (BL-041). |
 | `src/nous/anthropic_status.py` | in-progress | Surfaces the daily cap state for `anthropic_cap_status` (BL-021); `cap_exhausted_payload(exc, settings=...)` renders `CapExhausted` as the same JSON shape. |
 | `src/nous/auth/oauth.py` | in-progress | File-backed issuer shape. |
-| `src/nous/scenarios/*` | in-progress | `loader` parses YAML from disk into typed `Scenario` objects; `injectors` mutate the live engine for ten action kinds (FSM, biometrics, thermal, APU, comms, sensors, position, velocity, compute, inference); `runner` drives the engine through a scenario timeline and returns a JSON-safe report (BL-014). |
+| `src/nous/scenarios/*` | in-progress | `loader` parses YAML from disk into typed `Scenario` objects; `injectors` mutate the live engine for ten action kinds (FSM, biometrics, thermal, APU, comms, sensors, position, velocity, compute, inference); `runner` drives the engine through a scenario timeline and returns a JSON-safe report (BL-014); `session` runs the same timeline as a stateful session riding the engine tick hook, with pause / resume / reset and a status read (BL-071, ADR 0040). |
 | `profiles/jetson-agx-orin.yaml` | in-progress | Reference profile with placeholder curves. |
 | `deploy/*` | in-progress | Systemd / Caddy / logrotate / install.sh / cloud-init. |
 | Test suite | in-progress | Unit, integration scaffold, stdio smoke. |
@@ -136,8 +136,15 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 781 tests pass at HEAD: BL-070 / ADR 0039 added
-  one (`Engine.start` completes bring-up to IDLE), on top of the 780 from
+  feature branch before merge. 812 tests pass at HEAD: BL-071 / ADR 0040 and
+  BL-072 / ADR 0041 added thirty-one (the engine tick-hook seam, the stateful
+  scenario session and its tool surface, `tick_advance` stepping and bounds,
+  the `self_model_publish` adapter shapes and refusals, and five
+  review-round pins: the completion-frozen snapshot, the stale-session
+  clearing on load, the per-boot hook-error counter, and the DONE-session
+  re-start guard), on top of the 781
+  from BL-070 / ADR 0039 (one: `Engine.start` completes bring-up to IDLE), on
+  top of the 780 from
   BL-061 / ADR 0038 (fifteen: fourteen for the situational-awareness fusion
   layer and its `self_model_situation` tool, plus one staleness-after-reload
   regression added in review), on top of the 765 from BL-051 / ADR 0037

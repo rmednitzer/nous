@@ -54,18 +54,21 @@ return body
 
 ## External surfaces
 
-- **MCP tools** -- the thirty-seven-tool surface is documented in
+- **MCP tools** -- the forty-three-tool surface is documented in
   [tool-reference.md](tool-reference.md). It carries the full L1 read
   surface (a read tool for each subsystem, with comms exposing both
-  `comms_state` and `comms_status`, plus an estimator summary) plus the
+  `comms_state` and `comms_status`, plus an estimator summary and the
+  `scenario_status` session read) plus the
   mutating tools `scenario_load` / `scenario_inject` / `profile_reload`,
-  `comms_send` / `comms_publish`, `state_transition`, `inference_cloud`,
-  and `audit_resync` (all T2), with the terminal `state_force_fault` /
-  `state_force_shutdown` at T3. A few names stay classified-but-unregistered
-  in `policy.py` (the scenario-control verbs and `scenario_status`,
-  `tick_advance`, `inference_request`, `self_model_publish`, and the
-  operator-only `db_reset` / `audit_rotate`), forward-classified per
-  ADR 0007 and ADR 0033.
+  `comms_send` / `comms_publish`, `self_model_publish`, `state_transition`,
+  `inference_cloud`,
+  and `audit_resync` (all T2), the reversible session and stepping controls
+  `scenario_pause` / `scenario_resume` / `scenario_reset` / `tick_advance`
+  (T1, ADR 0040), and the terminal `state_force_fault` /
+  `state_force_shutdown` at T3. The names still classified-but-unregistered
+  in `policy.py` are so by design (`inference_request` as the redundant twin
+  of `inference_cloud`, and the operator-only `db_reset` / `audit_rotate`),
+  forward-classified per ADR 0007 with dispositions recorded in ADR 0033.
 - **OAuth issuer** -- file-backed, single-client by default. The
   Caddyfile template gates `/authorize` and `/.well-known/oauth-*` on
   the operator's CIDR plus the Anthropic ranges.

@@ -33,9 +33,14 @@ the committed copy after changing a tool's signature or docstring.
 | `power_status` | T0 | Battery state-of-charge, draw, projected endurance. |
 | `profile_reload` | T2 | Hot-reload the hardware profile from disk. |
 | `scenario_inject` | T2 | Fire a single scenario injector against the live engine. |
-| `scenario_load` | T2 | Load and run a scenario YAML against the engine. |
+| `scenario_load` | T2 | Load a scenario YAML and execute it against the engine (T2). |
+| `scenario_pause` | T1 | Freeze the scenario session's clock (T1, reversible; ADR 0040). |
+| `scenario_reset` | T1 | Detach and clear the scenario session (T1; ADR 0040). |
+| `scenario_resume` | T1 | Unfreeze a paused scenario session (T1, reversible; ADR 0040). |
+| `scenario_status` | T0 | Progress of the stateful scenario session, if any (T0, ADR 0040). |
 | `self_estimator_status` | T0 | Estimator covariances, last update times, divergence flags. |
 | `self_model_assess` | T0 | Self-model capability assessment with calibrated p5/p50/p95 bands. |
+| `self_model_publish` | T2 | Publish the current self-model read over a comms link (T2, ADR 0041). |
 | `self_model_situation` | T0 | Fused situational read: capabilities, provenance, posture, safety, recommendations. |
 | `self_model_viability` | T0 | Decide whether a task is feasible against the current capabilities. |
 | `sensors_status` | T0 | Environmental sensor pack: ambient temp, humidity, baro pressure. |
@@ -46,6 +51,7 @@ the committed copy after changing a tool's signature or docstring.
 | `state_transition` | T2 | Drive the mission-posture FSM through one explicit trigger (ADR 0031). |
 | `storage_status` | T0 | Storage subsystem: capacity, used, wear, write rate. |
 | `thermal_status` | T0 | Two-state thermal model (junction + enclosure + ambient). |
+| `tick_advance` | T1 | Advance simulated time by ``n`` engine ticks, synchronously (T1). |
 
 Every tool runs through the audited runner. Output bodies are SHA-256
 hashed; the audit record never contains the body itself. See
@@ -432,6 +438,11 @@ tool registry.
 ```json
 {
   "properties": {
+    "mode": {
+      "default": "run",
+      "title": "Mode",
+      "type": "string"
+    },
     "path": {
       "title": "Path",
       "type": "string"
@@ -441,6 +452,46 @@ tool registry.
     "path"
   ],
   "title": "scenario_loadArguments",
+  "type": "object"
+}
+```
+
+### `scenario_pause`
+
+```json
+{
+  "properties": {},
+  "title": "scenario_pauseArguments",
+  "type": "object"
+}
+```
+
+### `scenario_reset`
+
+```json
+{
+  "properties": {},
+  "title": "scenario_resetArguments",
+  "type": "object"
+}
+```
+
+### `scenario_resume`
+
+```json
+{
+  "properties": {},
+  "title": "scenario_resumeArguments",
+  "type": "object"
+}
+```
+
+### `scenario_status`
+
+```json
+{
+  "properties": {},
+  "title": "scenario_statusArguments",
   "type": "object"
 }
 ```
@@ -467,6 +518,34 @@ tool registry.
     }
   },
   "title": "self_model_assessArguments",
+  "type": "object"
+}
+```
+
+### `self_model_publish`
+
+```json
+{
+  "properties": {
+    "adapter": {
+      "default": "mqtt",
+      "title": "Adapter",
+      "type": "string"
+    },
+    "kind": {
+      "default": "situation",
+      "title": "Kind",
+      "type": "string"
+    },
+    "link_id": {
+      "title": "Link Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "link_id"
+  ],
+  "title": "self_model_publishArguments",
   "type": "object"
 }
 ```
@@ -625,6 +704,22 @@ tool registry.
 {
   "properties": {},
   "title": "thermal_statusArguments",
+  "type": "object"
+}
+```
+
+### `tick_advance`
+
+```json
+{
+  "properties": {
+    "n": {
+      "default": 1,
+      "title": "N",
+      "type": "integer"
+    }
+  },
+  "title": "tick_advanceArguments",
   "type": "object"
 }
 ```

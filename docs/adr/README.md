@@ -42,3 +42,5 @@
 | 0037 | [Schema migration workflow](0037-schema-migration-workflow.md) | Accepted | 2026-06-06 |
 | 0038 | [Self-model situational awareness](0038-self-model-situational-awareness.md) | Accepted | 2026-06-06 |
 | 0039 | [Engine start completes to the IDLE standby posture](0039-engine-start-completes-to-idle.md) | Accepted | 2026-06-06 |
+| 0040 | [Stateful scenario sessions and deterministic tick stepping](0040-stateful-scenario-sessions.md) | Accepted | 2026-06-09 |
+| 0041 | [Self-model publish target](0041-self-model-publish-target.md) | Accepted | 2026-06-09 |

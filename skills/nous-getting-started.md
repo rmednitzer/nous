@@ -55,10 +55,10 @@ anything.
 ## Driving the device
 
 Reads are safe; control tools mutate state and audit at a higher tier. A
-freshly booted engine parks in `BOOT`.
+freshly started engine settles in the `IDLE` standby posture (ADR 0039).
 
-- `state_transition` (T2) drives the mission posture: `ready` to reach
-  `IDLE`, then `mission` / `relay` / `monitoring` / `c2`, or the recoverable
+- `state_transition` (T2) drives the mission posture: from `IDLE`,
+  `mission` / `relay` / `monitoring` / `c2`, or the recoverable
   `safe` hold. Operational entries are SC-2 / SC-8 gated and refuse when
   thermal headroom or power reserve is short.
 - `state_force_fault` / `state_force_shutdown` (T3, irreversible) drive the
@@ -66,8 +66,14 @@ freshly booted engine parks in `BOOT`.
   deliberate sequence on the `state_transition` path: `reset` then `boot`
   (back to `BOOT`, from which `ready` reaches `IDLE`).
 - `comms_send` / `comms_publish` (T2) account a transmission on a link;
-  `scenario_load` / `scenario_inject` / `profile_reload` (T2) drive scenarios
-  and reconfiguration (see the scenario walkthrough).
+  `self_model_publish` (T2) pushes the situation or assess read through an
+  interop adapter onto a link (ADR 0041).
+- `scenario_load` / `scenario_inject` / `profile_reload` (T2) drive scenarios
+  and reconfiguration. A `scenario_load` with `mode="session"` runs the
+  timeline as a stateful session controlled by `scenario_status` /
+  `scenario_pause` / `scenario_resume` / `scenario_reset`, and
+  `tick_advance` (T1) fast-forwards simulated time (see the scenario
+  walkthrough).
 
 ## Deployment posture
 

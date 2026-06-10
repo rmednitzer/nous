@@ -266,36 +266,10 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         """
 
         async def _work() -> str:
-            from ..interop import StaleEstimateError, build_adapter
+            from .publish import encode_and_tx
 
-            try:
-                impl = build_adapter(adapter)
-            except KeyError as exc:
-                return json.dumps({"ok": False, "error": str(exc)})
-            try:
-                payload = impl.encode(dict(data or {}))
-            except StaleEstimateError as exc:
-                return json.dumps(
-                    {
-                        "ok": False,
-                        "adapter": adapter,
-                        "error": "stale_estimate",
-                        "age_s": exc.age_s,
-                        "max_age_s": exc.max_age_s,
-                    }
-                )
-            except (ValueError, TypeError) as exc:
-                return json.dumps({"ok": False, "adapter": adapter, "error": str(exc)})
-            accepted = app.engine.comms.tx(link_id, len(payload))
             return json.dumps(
-                {
-                    "ok": accepted > 0,
-                    "link_id": link_id,
-                    "adapter": adapter,
-                    "payload_hex": payload.hex(),
-                    "len": len(payload),
-                    "bytes_accepted": accepted,
-                }
+                encode_and_tx(app.engine, link_id, adapter, dict(data or {}))
             )
 
         return await wrap(
