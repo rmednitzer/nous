@@ -44,3 +44,5 @@
 | 0039 | [Engine start completes to the IDLE standby posture](0039-engine-start-completes-to-idle.md) | Accepted | 2026-06-06 |
 | 0040 | [Stateful scenario sessions and deterministic tick stepping](0040-stateful-scenario-sessions.md) | Accepted | 2026-06-09 |
 | 0041 | [Self-model publish target](0041-self-model-publish-target.md) | Accepted | 2026-06-09 |
+| 0042 | [Confine scenario_load to a configured scenarios directory](0042-confine-scenario-load-to-a-directory.md) | Proposed | 2026-06-13 |
+| 0043 | [Constant-time verification for OAuth bearer and refresh tokens](0043-constant-time-token-verification.md) | Proposed | 2026-06-13 |

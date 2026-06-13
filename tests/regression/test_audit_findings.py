@@ -302,6 +302,17 @@ class TestH3CotEventCarriesRequiredAttributes:
         decoded = adapter.decode(malicious)
         assert "error" in decoded
 
+    def test_decoder_refuses_doctype_past_512_bytes(self) -> None:
+        """AUDIT-2026-06-13 1-A: the DOCTYPE guard scanned only the first
+        512 bytes, so a declaration placed after a long, well-formed comment
+        reached the parser. The guard now scans the whole payload."""
+        adapter = CotAdapter()
+        padding = b"<!-- " + b"x" * 600 + b" -->"
+        malicious = padding + b"<!DOCTYPE event SYSTEM 'http://evil'><event/>"
+        assert len(padding) > 512
+        decoded = adapter.decode(malicious)
+        assert "error" in decoded
+
 
 class TestH6OAuthFileStoreLockedAndConfidential:
     """H6: OAuth file store needs an async lock plus ``chmod 0600`` plus

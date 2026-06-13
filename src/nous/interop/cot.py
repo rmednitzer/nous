@@ -109,8 +109,12 @@ def _safe_parse(payload: bytes) -> ElementTree.Element | None:
     parser = ElementTree.XMLParser()  # nosec B314 - explicit DOCTYPE / ENTITY refusal below
     # ``ElementTree`` does not resolve external entities by default in
     # CPython, but we explicitly assert no doctype so a controller that
-    # someday swaps in a different parser cannot regress quietly.
-    if b"<!DOCTYPE" in payload[:512] or b"<!ENTITY" in payload[:512]:
+    # someday swaps in a different parser cannot regress quietly. The scan
+    # covers the whole payload: a bounded prefix would let a declaration
+    # placed past the cutoff (after a long comment or processing
+    # instruction) reach the parser, which is where a well-formed XML
+    # internal subset is still allowed to sit.
+    if b"<!DOCTYPE" in payload or b"<!ENTITY" in payload:
         raise ElementTree.ParseError("DOCTYPE / ENTITY declarations refused")
     parser.feed(payload)
     return parser.close()
