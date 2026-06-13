@@ -70,7 +70,7 @@ Recommended fix: after the dict lookup, confirm the match with
 Constant-time storage for a dict-backed store is awkward, so this warrants a
 deliberate decision. Effort: M.
 
-Disposition: **Backlog** (BACKLOG SEC-1, proposed ADR 0042). `oauth.py` is a
+Disposition: **Backlog** (BACKLOG SEC-2, proposed ADR 0043). `oauth.py` is a
 credential surface; the change deserves an ADR and is not a same-pass fix.
 
 ### S-03 (was 5-A) -- Med -- CWE-22 -- `src/nous/scenarios/loader.py:85`, `src/nous/tools/scenarios.py`
@@ -92,7 +92,7 @@ behavior change (absolute paths used by the CLI today would need the directory
 allowance), so it needs a test and a decision rather than a silent clamp.
 Effort: M.
 
-Disposition: **Backlog** (BACKLOG SEC-2, proposed ADR 0043). Deferred to avoid
+Disposition: **Backlog** (BACKLOG SEC-1, proposed ADR 0042). Deferred to avoid
 breaking the documented `nous scenario <path>` CLI workflow without an ADR.
 
 ### S-04 (was 2-A) -- Low -- CWE-833 -- `src/nous/anthropic_client.py:107-153`

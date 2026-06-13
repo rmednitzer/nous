@@ -13,7 +13,7 @@
 The automated security surface is clean (pip-audit, bandit, gitleaks all zero),
 the build is green (812 tests at baseline), and every quality gate the project
 runs (`ruff`, `mypy --strict`, policy greps, `mkdocs --strict`) passes. The
-repository already carries a deep, dated self-audit trail and 41 accepted ADRs,
+repository already carries a deep, dated self-audit trail and 40 accepted ADRs,
 so this pass focused on verifying the live state, probing the input boundaries
 the prior audits had not exhaustively re-checked, and landing only changes that
 are safe and locally testable.
@@ -45,7 +45,7 @@ injection, secret exposure, or audit-bypass class of bug was found.
 | gitleaks | 0 leaks | 0 leaks |
 | ruff format drift | 80 files (not CI-enforced) | 80 files (deferred, QUAL-1) |
 | coverage | `[UNVERIFIED]` (no tooling) | `[UNVERIFIED]` (deferred, TOOL-1) |
-| Security findings (open) | n/a | 0 critical, 0 high, 2 med, 2 low, 1 info (all backlogged) |
+| Security findings (open) | n/a | 0 critical, 0 high, 2 med, 3 low, 1 info (all backlogged) |
 
 The single behavior change (CoT guard) added one test; the baseline suite was
 re-run after it (`813 passed`).

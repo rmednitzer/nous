@@ -101,7 +101,9 @@ Counts (`find ... | wc -l`, `wc -l`):
 
 The repo carries an unusually deep self-audit trail, relevant because this
 pass should not duplicate it: root `AUDIT.md` (2026-05-20 baseline) plus
-dated audits in `docs/` through 2026-06-06; 19 accepted ADRs under
-`docs/adr/`; `docs/backlog.md` (BL-NNN tracker); STATUS.md, LIMITATIONS.md,
+dated audits in `docs/` through 2026-06-06; 40 accepted ADRs under
+`docs/adr/` (numbered 0001-0041, with ADR 0008 superseded by 0016), plus the
+two this pass proposes (0042, 0043); `docs/backlog.md` (BL-NNN tracker);
+STATUS.md, LIMITATIONS.md,
 SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE, NOTICE,
 REUSE.toml. This audit is dated 2026-06-13 and continues that cadence.
