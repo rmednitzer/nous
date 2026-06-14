@@ -125,6 +125,37 @@ def test_tx_resets_age_and_marks_live() -> None:
     assert lte.age_s == pytest.approx(0.0)
 
 
+def test_tx_throughput_is_a_rate_over_the_send_interval() -> None:
+    # COMMS-3: throughput_bps is bits / elapsed-since-last-send, not the raw
+    # packet size in bits. 1000 bytes (8000 bits) sent after a 2 s gap is a
+    # 4000 bps rate, not 8000.
+    c = CommsSubsystem(_profile())
+    c.step(2.0)
+    c.tx("lte", 1000)
+    lte = c.link("lte")
+    assert lte is not None
+    assert lte.throughput_bps == pytest.approx(4000.0)
+
+
+def test_tx_throughput_caps_at_link_bandwidth() -> None:
+    # A burst in near-zero time cannot beat the link's capacity.
+    c = CommsSubsystem(_profile())
+    c.step(0.001)
+    c.tx("lte", 10_000_000)
+    lte = c.link("lte")
+    assert lte is not None
+    assert lte.throughput_bps == pytest.approx(lte.bandwidth_bps)
+
+
+def test_tx_first_send_reports_link_bandwidth() -> None:
+    # No elapsed time on the first send -> report capacity, not divide by zero.
+    c = CommsSubsystem(_profile())
+    c.tx("lte", 1500)
+    lte = c.link("lte")
+    assert lte is not None
+    assert lte.throughput_bps == pytest.approx(lte.bandwidth_bps)
+
+
 def test_tx_unknown_link_returns_zero() -> None:
     c = CommsSubsystem(_profile())
     assert c.tx("nonexistent", 500) == 0
