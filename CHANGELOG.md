@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (comms: higher-fidelity propagation, BL-088 / ADR 0054)
+
+- Five additive, opt-in upgrades to the BL-048 link budget in
+  `subsystems/propagation.py`, each defaulting to reproduce the ADR 0053
+  free-space budget so a link that does not opt in is byte-for-byte unchanged: a
+  log-distance path-loss exponent (the environment, not just free space), a
+  single knife-edge diffraction loss for a discrete terrain obstruction (ITU-R
+  P.526, no DEM needed), a kTB thermal-noise floor when a channel bandwidth is
+  configured, a directional antenna pattern keyed on the bearing to the peer, and
+  a Rician multipath fast-fade draw on top of the log-normal shadowing.
+- `solve_link_budget` gains one optional `fast_fade_db` argument (the second
+  stochastic draw); the other four upgrades read from `LinkPropagation`.
+  `subsystems/comms.py` draws the fade in `_apply_propagation` and is otherwise
+  unchanged, so the observation to filter to `derive` to FSM pipeline and the
+  whole existing suite are untouched. The net effects surface through the same
+  `comms_status` diagnostics (a blocked link shows a higher path loss, a wider
+  channel a lower SNR). Covered by `tests/unit/test_propagation.py` and
+  `tests/integration/test_propagation_demo.py`. DEM-driven multi-obstacle terrain
+  is split out to BL-089; mesh routing stays in the BL-056 DTN layer.
+
 ### Added (comms: propagation-aware link quality, BL-048 / ADR 0053)
 
 - A comms link with a `propagation` block now solves its RSSI, packet loss, and

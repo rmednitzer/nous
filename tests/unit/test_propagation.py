@@ -4,17 +4,25 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 from hypothesis import given
 from hypothesis import strategies as st
+from pytest import approx as pytest_approx
 
 from nous.subsystems.propagation import (
     LinkPropagation,
+    antenna_gain_offset_db,
+    bearing_deg,
     capacity_bps,
     free_space_path_loss_db,
+    knife_edge_diffraction_db,
+    log_distance_path_loss_db,
     received_power_dbm,
+    rician_fade_db,
     rssi_to_loss_pct,
     slant_range_m,
     solve_link_budget,
+    thermal_noise_floor_dbm,
 )
 
 
@@ -165,3 +173,218 @@ def test_capacity_monotone_and_loss_monotone_in_range(
     assert far.range_m >= near.range_m
     assert far.capacity_bps <= near.capacity_bps + 1e-6
     assert far.loss_pct >= near.loss_pct - 1e-9
+
+
+# -- BL-088 / ADR 0054: higher-fidelity upgrades --------------------------
+
+
+def test_log_distance_reduces_to_free_space_at_exponent_two() -> None:
+    assert log_distance_path_loss_db(5_000.0, 2.4e9, 2.0) == pytest_approx(
+        free_space_path_loss_db(5_000.0, 2.4e9)
+    )
+
+
+def test_log_distance_is_steeper_above_exponent_two() -> None:
+    free = log_distance_path_loss_db(5_000.0, 2.4e9, 2.0)
+    urban = log_distance_path_loss_db(5_000.0, 2.4e9, 3.0)
+    forest = log_distance_path_loss_db(5_000.0, 2.4e9, 4.0)
+    assert free < urban < forest
+
+
+def test_knife_edge_zero_below_los_and_grows_with_height() -> None:
+    below = knife_edge_diffraction_db(400.0, 500.0, 2_000.0, 3_000.0, 2.4e9)
+    grazing = knife_edge_diffraction_db(500.0, 500.0, 2_000.0, 3_000.0, 2.4e9)
+    tall = knife_edge_diffraction_db(600.0, 500.0, 2_000.0, 3_000.0, 2.4e9)
+    assert below == 0.0
+    assert 0.0 <= grazing < tall
+
+
+def test_knife_edge_grazing_is_about_six_db() -> None:
+    # At v = 0 (obstruction exactly on the line of sight) the ITU loss is ~6 dB.
+    grazing = knife_edge_diffraction_db(500.0, 500.0, 2_000.0, 3_000.0, 2.4e9)
+    assert grazing == pytest_approx(6.0, abs=0.1)
+
+
+def test_antenna_offset_zero_at_boresight_floored_at_back() -> None:
+    assert antenna_gain_offset_db(90.0, 90.0, 30.0, 20.0) == 0.0
+    # -3 dB at the half-beamwidth off boresight.
+    assert antenna_gain_offset_db(120.0, 90.0, 30.0, 20.0) == pytest_approx(-3.0)
+    # Floored at the back-lobe attenuation.
+    assert antenna_gain_offset_db(270.0, 90.0, 30.0, 20.0) == -20.0
+    # Symmetric about boresight, and wraps across 0/360 (340 vs 10 is 30 apart).
+    assert antenna_gain_offset_db(60.0, 90.0, 30.0, 20.0) == pytest_approx(-3.0)
+    assert antenna_gain_offset_db(340.0, 10.0, 30.0, 20.0) == pytest_approx(-3.0)
+
+
+def test_thermal_noise_floor_formula_and_monotonicity() -> None:
+    # -174 dBm/Hz + 10 log10(1e6) + 5 dB NF ~= -109 dBm.
+    assert thermal_noise_floor_dbm(1e6, 5.0) == pytest_approx(-109.0, abs=0.1)
+    # A wider channel raises the floor by 3 dB per doubling.
+    assert thermal_noise_floor_dbm(2e6, 0.0) - thermal_noise_floor_dbm(
+        1e6, 0.0
+    ) == pytest_approx(3.0, abs=0.05)
+
+
+def test_rician_fade_is_lower_variance_at_higher_k() -> None:
+    rng = np.random.default_rng(0)
+    rayleigh = [rician_fade_db(rng, 0.0) for _ in range(4000)]
+    near_los = [rician_fade_db(rng, 15.0) for _ in range(4000)]
+    assert float(np.var(rayleigh)) > float(np.var(near_los))
+    # Fading is a net loss on average (the log is concave on a unit-mean power).
+    assert float(np.mean(rayleigh)) > 0.0
+
+
+def test_rician_fade_is_deterministic_under_seed() -> None:
+    a = [rician_fade_db(np.random.default_rng(3), 6.0) for _ in range(3)]
+    b = [rician_fade_db(np.random.default_rng(3), 6.0) for _ in range(3)]
+    assert a == b
+
+
+def test_bearing_cardinal_directions() -> None:
+    assert bearing_deg(47.0, 13.0, 48.0, 13.0) == pytest_approx(0.0, abs=0.5)  # north
+    assert bearing_deg(47.0, 13.0, 47.0, 13.1) == pytest_approx(90.0, abs=0.5)  # east
+
+
+def test_solve_link_budget_obstruction_adds_diffraction_loss() -> None:
+    clear = LinkPropagation(peer_lat=47.0, peer_lon=13.10, peer_alt_m=500.0)
+    blocked = LinkPropagation(
+        peer_lat=47.0,
+        peer_lon=13.10,
+        peer_alt_m=500.0,
+        obstruction_distance_m=4_000.0,
+        obstruction_height_m=900.0,  # a ridge well above the 500 m line of sight
+    )
+    a = solve_link_budget(
+        clear, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0,
+    )
+    b = solve_link_budget(
+        blocked, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0,
+    )
+    assert a.diffraction_loss_db == 0.0
+    assert b.diffraction_loss_db > 0.0
+    assert b.rssi_dbm < a.rssi_dbm
+    assert b.path_loss_db > a.path_loss_db
+
+
+def test_solve_link_budget_off_boresight_antenna_lowers_rssi() -> None:
+    # Peer due east (bearing ~90); a boresight pointed north sees it off-axis.
+    pointed = LinkPropagation(
+        peer_lat=47.0, peer_lon=13.10, peer_alt_m=500.0,
+        antenna_boresight_deg=90.0, antenna_half_beamwidth_deg=30.0,
+    )
+    turned = LinkPropagation(
+        peer_lat=47.0, peer_lon=13.10, peer_alt_m=500.0,
+        antenna_boresight_deg=0.0, antenna_half_beamwidth_deg=30.0,
+    )
+    on = solve_link_budget(
+        pointed, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0,
+    )
+    off = solve_link_budget(
+        turned, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0,
+    )
+    # The peer is essentially on boresight (a due-east great-circle bearing is
+    # ~90 but not exactly), so the offset is negligible rather than exactly 0.
+    assert on.antenna_offset_db == pytest_approx(0.0, abs=1e-3)
+    assert off.antenna_offset_db < -1.0
+    assert off.rssi_dbm < on.rssi_dbm
+
+
+def test_solve_link_budget_ktb_noise_floor_when_channel_bandwidth_set() -> None:
+    base = LinkPropagation(peer_lat=47.0, peer_lon=13.10, peer_alt_m=500.0)
+    ktb = LinkPropagation(
+        peer_lat=47.0, peer_lon=13.10, peer_alt_m=500.0,
+        channel_bandwidth_hz=5e6, noise_figure_db=6.0,
+    )
+    b1 = solve_link_budget(
+        base, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0,
+    )
+    b2 = solve_link_budget(
+        ktb, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0,
+    )
+    assert b1.noise_floor_dbm == pytest_approx(-100.0)  # the ADR 0053 constant
+    assert b2.noise_floor_dbm == pytest_approx(
+        thermal_noise_floor_dbm(5e6, 6.0)
+    )
+
+
+def test_solve_link_budget_fast_fade_only_shifts_rssi() -> None:
+    prop = LinkPropagation(peer_lat=47.0, peer_lon=13.10, peer_alt_m=500.0)
+    quiet = solve_link_budget(
+        prop, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0,
+    )
+    faded = solve_link_budget(
+        prop, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0, fast_fade_db=10.0,
+    )
+    assert faded.rssi_dbm == pytest_approx(quiet.rssi_dbm - 10.0)
+
+
+def test_from_profile_parses_higher_fidelity_fields() -> None:
+    prop = LinkPropagation.from_profile(
+        {
+            "propagation": {
+                "peer": {"lat": 47.0, "lon": 13.0, "alt_m": 600.0},
+                "path_loss_exponent": 3.2,
+                "obstruction_distance_m": 4_000.0,
+                "obstruction_height_m": 850.0,
+                "channel_bandwidth_hz": 5e6,
+                "noise_figure_db": 6.0,
+                "antenna_boresight_deg": 270.0,
+                "antenna_half_beamwidth_deg": 25.0,
+                "antenna_front_to_back_db": 18.0,
+                "rician_k_db": 8.0,
+            }
+        }
+    )
+    assert prop is not None
+    assert prop.path_loss_exponent == 3.2
+    assert prop.obstruction_distance_m == 4_000.0
+    assert prop.channel_bandwidth_hz == 5e6
+    assert prop.antenna_boresight_deg == 270.0
+    assert prop.rician_k_db == 8.0
+    # An unset higher-fidelity field keeps its ADR 0053 default.
+    assert LinkPropagation.from_profile(
+        {"propagation": {"peer": {"lat": 1.0, "lon": 2.0}}}
+    ).path_loss_exponent == 2.0  # type: ignore[union-attr]
+
+
+def test_from_profile_sanitizes_non_physical_noise_config() -> None:
+    """PR #139 review: a non-positive channel bandwidth reads as unset and a
+    negative noise figure is clamped, so bad config cannot flatter the SNR."""
+    prop = LinkPropagation.from_profile(
+        {
+            "propagation": {
+                "peer": {"lat": 47.0, "lon": 13.0},
+                "channel_bandwidth_hz": -1.0,
+                "noise_figure_db": -3.0,
+            }
+        }
+    )
+    assert prop is not None
+    assert prop.channel_bandwidth_hz is None
+    assert prop.noise_figure_db == 0.0
+
+
+def test_solve_link_budget_fails_conservative_on_bad_noise_config() -> None:
+    """A directly-built LinkPropagation with a non-positive bandwidth must fall
+    back to the constant floor rather than the optimistic 1 Hz kTB floor."""
+    bad = LinkPropagation(
+        peer_lat=47.0,
+        peer_lon=13.10,
+        peer_alt_m=500.0,
+        noise_floor_dbm=-100.0,
+        channel_bandwidth_hz=0.0,
+        noise_figure_db=-50.0,
+    )
+    budget = solve_link_budget(
+        bad, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0,
+    )
+    assert budget.noise_floor_dbm == pytest_approx(-100.0)
