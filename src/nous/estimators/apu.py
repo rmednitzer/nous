@@ -1,16 +1,21 @@
-"""APU output estimator: per-source first-order Kalman smoothing.
+"""APU output estimator: per-source gated Kalman smoothing.
 
-Tracks the four APU sources (solar, fuel cell, vehicle tether, USB-C PD)
-plus the total. Each channel is a scalar Kalman filter whose process
-noise grows in :meth:`predict` and is shrunk by the matching sensor
-observation in :meth:`update`. The covariance bounds are loose relative
-to the power SoC estimator -- the APU mostly reports its own
-configuration, not a hidden physical state.
+Tracks the four APU sources (solar, fuel cell, vehicle tether, USB-C PD) plus
+the total. Each channel is a scalar Kalman filter whose process noise grows in
+:meth:`predict` and is folded toward the matching observation through a gated
+Kalman update in :meth:`update`. The covariance bounds are loose relative to
+the power SoC estimator: the APU mostly reports its own configuration, not a
+hidden physical state, so the gate is generous and exists mainly to reject a
+non-finite reading and to surface a persistent disagreement in the health
+block.
 """
 
 from __future__ import annotations
 
-from ..types import Estimate, Observation
+import math
+
+from ..types import Estimate, EstimatorHealth, Observation
+from .health import ChannelSpec, ScalarChannel, build_health
 
 __all__ = ["ApuEstimator"]
 
@@ -25,10 +30,14 @@ _FIELDS: tuple[str, ...] = (
 
 _DEFAULT_INITIAL_SIGMA = 2.0
 _DEFAULT_PROCESS_SIGMA_PER_S = 0.2
+_FALLBACK_SIGMA = 1.0
+# The APU reports configuration rather than a hidden state, so a wide gate
+# keeps legitimate setpoint changes flowing while still catching garbage.
+_APU_GATE_SIGMA = 8.0
 
 
 class ApuEstimator:
-    """Per-source Kalman smoothing for APU outputs."""
+    """Per-source gated Kalman smoothing for APU outputs."""
 
     name: str = "apu"
 
@@ -38,37 +47,53 @@ class ApuEstimator:
         process_sigma_per_s: float = _DEFAULT_PROCESS_SIGMA_PER_S,
     ) -> None:
         self._t = 0.0
-        self._values: dict[str, float] = dict.fromkeys(_FIELDS, 0.0)
-        self._vars: dict[str, float] = dict.fromkeys(_FIELDS, float(initial_sigma) ** 2)
-        self._q = float(process_sigma_per_s) ** 2
+        self._rejected = 0
+        spec = ChannelSpec(
+            process_var_per_s=float(process_sigma_per_s) ** 2,
+            gate_sigma=_APU_GATE_SIGMA,
+        )
+        self._channels: dict[str, ScalarChannel] = {
+            key: ScalarChannel(0.0, float(initial_sigma) ** 2, spec) for key in _FIELDS
+        }
 
     def predict(self, dt: float) -> None:
         if dt <= 0.0:
             return
         self._t += dt
-        bump = self._q * dt
-        for key in _FIELDS:
-            self._vars[key] += bump
+        for channel in self._channels.values():
+            channel.predict(dt)
 
     def update(self, obs: Observation) -> None:
-        payload = obs.payload
         noise = obs.noise
-        for key in _FIELDS:
+        payload = obs.payload
+        for key, channel in self._channels.items():
             if key not in payload:
                 continue
-            r = float(noise.get(f"{key}_sigma", 1.0)) ** 2
-            denom = self._vars[key] + r
-            if denom <= 0.0:
+            try:
+                z = float(payload[key])
+            except (TypeError, ValueError):
+                self._rejected += 1
                 continue
-            k = self._vars[key] / denom
-            self._values[key] = (1.0 - k) * self._values[key] + k * float(payload[key])
-            self._vars[key] = (1.0 - k) * self._vars[key]
-        self._t = float(obs.ts_s)
+            if not math.isfinite(z):
+                self._rejected += 1
+                continue
+            r = float(noise.get(f"{key}_sigma", _FALLBACK_SIGMA)) ** 2
+            channel.fuse(z, r)
+        try:
+            ts = float(obs.ts_s)
+        except (TypeError, ValueError):
+            return
+        if math.isfinite(ts) and ts >= 0.0:
+            self._t = ts
+
+    def health(self) -> EstimatorHealth:
+        return build_health(self._channels, rejected_extra=self._rejected)
 
     def state(self) -> Estimate:
         return Estimate(
             source=self.name,
             ts_s=self._t,
-            point=dict(self._values),
-            covariance=dict(self._vars),
+            point={key: c.value for key, c in self._channels.items()},
+            covariance={key: c.var for key, c in self._channels.items()},
+            health=self.health(),
         )

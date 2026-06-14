@@ -1,21 +1,26 @@
-"""Power state-of-charge estimator: coulomb-counting plus voltage Kalman update.
+"""Power state-of-charge estimator: gated Kalman over SoC and voltage.
 
-The estimator runs a 1-D scalar Kalman filter over each of SoC and
-terminal voltage. Process noise grows their covariances in
-:meth:`predict`; observation noise from
-:meth:`~nous.subsystems.power.PowerSubsystem.sensor_obs` shrinks them in
-:meth:`update`. The last observed ``current_a`` is stored verbatim and
-passed through in :meth:`state` -- it is not filtered and has no
-covariance entry. See ``docs/model-cards/estimator-power-soc.md`` for
-the covariance bound contract (BL-027 carries the full EKF; this v0.1
-build ships the linear-Gaussian baseline).
+The estimator runs a scalar Kalman filter over each of SoC and terminal
+voltage. Process noise grows their covariances in :meth:`predict`; an
+observation from
+:meth:`~nous.subsystems.power.PowerSubsystem.sensor_obs` folds in through a
+gated Kalman update in :meth:`update`. Each channel rejects a measurement
+whose normalised innovation exceeds the gate, floors its posterior variance
+so a converged belief stays honest about residual sensor noise, and adopts a
+sustained disagreement through a reset rather than fighting it forever (see
+:mod:`nous.estimators.health`). The last observed ``current_a`` is stored
+verbatim and passed through in :meth:`state` -- it is not filtered and has no
+covariance entry. See ``docs/model-cards/estimator-power-soc.md`` for the
+covariance bound contract (BL-027 carries the full coupled EKF; this build
+ships the gated linear-Gaussian baseline).
 """
 
 from __future__ import annotations
 
 import math
 
-from ..types import Estimate, Observation
+from ..types import Estimate, EstimatorHealth, Observation
+from .health import ChannelSpec, ScalarChannel, build_health, parse_bounded
 
 __all__ = ["PowerEstimator"]
 
@@ -26,10 +31,12 @@ _DEFAULT_SOC_SIGMA = 5.0
 _DEFAULT_VOLTAGE_SIGMA = 0.5
 _DEFAULT_SOC_PROCESS_SIGMA_PER_S = 0.05
 _DEFAULT_VOLTAGE_PROCESS_SIGMA_PER_S = 0.01
+_SOC_FALLBACK_SIGMA = 0.5
+_VOLTAGE_FALLBACK_SIGMA = 0.05
 
 
 class PowerEstimator:
-    """1-D Kalman filter over SoC and terminal voltage (BL-027)."""
+    """Gated scalar Kalman filter over SoC and terminal voltage (BL-027)."""
 
     name: str = "power"
 
@@ -43,75 +50,76 @@ class PowerEstimator:
         voltage_process_sigma_per_s: float = _DEFAULT_VOLTAGE_PROCESS_SIGMA_PER_S,
     ) -> None:
         self._t = 0.0
-        self._soc = float(initial_soc)
-        self._soc_var = float(soc_sigma) ** 2
-        self._voltage = float(initial_voltage)
-        self._voltage_var = float(voltage_sigma) ** 2
         self._current = 0.0
-        self._soc_q = float(soc_process_sigma_per_s) ** 2
-        self._voltage_q = float(voltage_process_sigma_per_s) ** 2
+        self._rejected = 0
+        self._channels: dict[str, ScalarChannel] = {
+            "soc_pct": ScalarChannel(
+                float(initial_soc),
+                float(soc_sigma) ** 2,
+                ChannelSpec(process_var_per_s=float(soc_process_sigma_per_s) ** 2),
+            ),
+            "voltage_v": ScalarChannel(
+                float(initial_voltage),
+                float(voltage_sigma) ** 2,
+                ChannelSpec(process_var_per_s=float(voltage_process_sigma_per_s) ** 2),
+            ),
+        }
 
     def predict(self, dt: float) -> None:
         if dt <= 0.0:
             return
         self._t += dt
-        self._soc_var += self._soc_q * dt
-        self._voltage_var += self._voltage_q * dt
+        for channel in self._channels.values():
+            channel.predict(dt)
 
     def update(self, obs: Observation) -> None:
-        payload = obs.payload
         noise = obs.noise
+        payload = obs.payload
 
-        soc = _finite(payload.get("soc_pct"))
-        if soc is not None and 0.0 <= soc <= 100.0:
-            r = float(noise.get("soc_pct_sigma", 0.5)) ** 2
-            denom = self._soc_var + r
-            if denom > 0.0:
-                k = self._soc_var / denom
-                self._soc = (1.0 - k) * self._soc + k * soc
-                self._soc_var = (1.0 - k) * self._soc_var
+        soc = parse_bounded(payload.get("soc_pct"), 0.0, 100.0)
+        if "soc_pct" in payload and soc is None:
+            self._rejected += 1
+        elif soc is not None:
+            r = float(noise.get("soc_pct_sigma", _SOC_FALLBACK_SIGMA)) ** 2
+            self._channels["soc_pct"].fuse(soc, r)
 
-        voltage = _finite(payload.get("voltage_v"))
-        if voltage is not None and voltage >= 0.0:
-            r = float(noise.get("voltage_v_sigma", 0.05)) ** 2
-            denom = self._voltage_var + r
-            if denom > 0.0:
-                k = self._voltage_var / denom
-                self._voltage = (1.0 - k) * self._voltage + k * voltage
-                self._voltage_var = (1.0 - k) * self._voltage_var
+        voltage = parse_bounded(payload.get("voltage_v"), 0.0, math.inf)
+        if "voltage_v" in payload and voltage is None:
+            self._rejected += 1
+        elif voltage is not None:
+            r = float(noise.get("voltage_v_sigma", _VOLTAGE_FALLBACK_SIGMA)) ** 2
+            self._channels["voltage_v"].fuse(voltage, r)
 
-        current = _finite(payload.get("current_a"))
+        current = payload.get("current_a")
         if current is not None:
-            self._current = current
+            try:
+                value = float(current)
+            except (TypeError, ValueError):
+                value = self._current
+            if math.isfinite(value):
+                self._current = value
 
-        ts = _finite(obs.ts_s)
-        if ts is not None and ts >= 0.0:
+        try:
+            ts = float(obs.ts_s)
+        except (TypeError, ValueError):
+            return
+        if math.isfinite(ts) and ts >= 0.0:
             self._t = ts
 
+    def health(self) -> EstimatorHealth:
+        return build_health(self._channels, rejected_extra=self._rejected)
+
     def state(self) -> Estimate:
+        soc = self._channels["soc_pct"]
+        voltage = self._channels["voltage_v"]
         return Estimate(
             source=self.name,
             ts_s=self._t,
             point={
-                "soc_pct": self._soc,
-                "voltage_v": self._voltage,
+                "soc_pct": soc.value,
+                "voltage_v": voltage.value,
                 "current_a": self._current,
             },
-            covariance={
-                "soc_pct": self._soc_var,
-                "voltage_v": self._voltage_var,
-            },
+            covariance={"soc_pct": soc.var, "voltage_v": voltage.var},
+            health=self.health(),
         )
-
-
-def _finite(value: object) -> float | None:
-    """Return ``float(value)`` iff it is finite and convertible, else ``None``."""
-    if value is None:
-        return None
-    try:
-        v = float(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(v):
-        return None
-    return v

@@ -154,7 +154,16 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
 
     @mcp.tool()
     async def self_estimator_status(ctx: Context | None = None) -> str:
-        """Estimator covariances, last update times, divergence flags."""
+        """Estimator means, covariances, and per-filter health.
+
+        Each row carries the filtered ``point`` and ``covariance`` plus a
+        ``health`` block (ADR 0042): ``healthy`` and ``fused`` flags, the
+        ``rejected_updates`` and ``reset_count`` totals, a ``dead_reckoning``
+        flag for a filter coasting without an accepted measurement, and the
+        per-channel innovation ``test_ratio`` (a value above 1 means the last
+        reading fell outside the gate) and its signed, smoothed
+        ``test_ratio_filtered``.
+        """
 
         async def _work() -> str:
             rows = []
@@ -178,6 +187,11 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                         "covariance": {
                             k: round(float(v), 6) for k, v in state.covariance.items()
                         },
+                        "health": (
+                            state.health.model_dump()
+                            if state.health is not None
+                            else None
+                        ),
                     }
                 )
             return json.dumps({"estimators": rows})

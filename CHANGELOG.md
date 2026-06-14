@@ -6,6 +6,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (estimators: innovation gating and health, ADR 0042)
+
+- Innovation gating and a health surface for the scalar Kalman estimators
+  (ADR 0042, BL-074). A shared primitive, `ScalarChannel` in
+  `src/nous/estimators/health.py`, centralises the per-channel recursion every
+  estimator open-coded and adds the diagnostics PX4's EKF2 publishes: a
+  normalised innovation squared gate (`test_ratio = innovation^2 /
+  (gate_sigma^2 * S)`, a reading above the gate is rejected), a signed,
+  exponentially weighted test ratio so a persistent bias is legible before it
+  trips the gate, a posterior-variance floor so a converged belief stops
+  reporting the false-certainty zero (the position filter's lat/lon variance
+  no longer collapses to `0.0`), and a counted reset that adopts a sustained
+  shift after `reset_after` rejections rather than fighting it forever. A
+  channel seeds through the gate on its first fusion.
+- `Estimate` gains an optional `EstimatorHealth` block (`healthy`, `fused`,
+  `dead_reckoning`, `rejected_updates`, `reset_count`, and the per-channel
+  `test_ratio`, `test_ratio_filtered`, and `innovation`). `self_estimator_status`
+  now serialises it, so the tool finally delivers the divergence flags its
+  description always promised. The `Estimator` Protocol (`predict` / `update` /
+  `state`) is unchanged: health rides inside the returned `Estimate`, so every
+  consumer that reads only `point` and `covariance` is unaffected. The comms
+  particle filter reports a compatible block from particle-weight collapse, and
+  the position filter raises `dead_reckoning` when it coasts without a fix.
+  Pinned by `tests/unit/test_estimator_health.py`.
+
 ### Changed (engine lifecycle: start completes to IDLE, ADR 0039)
 
 - `Engine.start()` now drives `STOWED -> BOOT -> IDLE` (ADR 0039, BL-070)

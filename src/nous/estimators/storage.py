@@ -1,17 +1,19 @@
 """Storage Kalman filter over (used_gib, wear_pct).
 
-A linear Kalman filter over the two scalars the storage subsystem
-reports. Wear and used-space are slowly varying quantities; the
-per-channel process variance per second is correspondingly small so
-the filter is dominated by the observation when sensor updates are
-available, and decays gracefully toward the prior when they are not.
+A scalar Kalman filter over the two values the storage subsystem reports.
+Wear and used-space are slowly varying, so the per-channel process variance
+is small and the filter is dominated by the observation when updates are
+available. Each channel gates inconsistent readings, floors its posterior
+variance, and adopts a sustained shift through a reset (see
+:mod:`nous.estimators.health`).
 """
 
 from __future__ import annotations
 
 import math
 
-from ..types import Estimate, Observation
+from ..types import Estimate, EstimatorHealth, Observation
+from .health import ChannelSpec, ScalarChannel, build_health
 
 __all__ = ["StorageKalman"]
 
@@ -25,7 +27,7 @@ _FALLBACK_WEAR_SIGMA = 0.1
 
 
 class StorageKalman:
-    """1-D scalar Kalman filter over (used_gib, wear_pct)."""
+    """Gated scalar Kalman filter over (used_gib, wear_pct)."""
 
     name: str = "storage"
 
@@ -38,34 +40,46 @@ class StorageKalman:
         wear_sigma: float = _DEFAULT_WEAR_SIGMA,
     ) -> None:
         self._t = 0.0
-        self._used_gib = float(initial_used_gib)
-        self._wear_pct = float(initial_wear_pct)
-        self._var_used = float(used_sigma) ** 2
-        self._var_wear = float(wear_sigma) ** 2
+        self._rejected = 0
+        self._fallback: dict[str, float] = {
+            "used_gib": _FALLBACK_USED_SIGMA,
+            "wear_pct": _FALLBACK_WEAR_SIGMA,
+        }
+        self._channels: dict[str, ScalarChannel] = {
+            "used_gib": ScalarChannel(
+                float(initial_used_gib),
+                float(used_sigma) ** 2,
+                ChannelSpec(process_var_per_s=_USED_PROCESS_VARIANCE_PER_S),
+            ),
+            "wear_pct": ScalarChannel(
+                float(initial_wear_pct),
+                float(wear_sigma) ** 2,
+                ChannelSpec(process_var_per_s=_WEAR_PROCESS_VARIANCE_PER_S),
+            ),
+        }
 
     def predict(self, dt: float) -> None:
         if dt <= 0.0:
             return
         self._t += dt
-        self._var_used += _USED_PROCESS_VARIANCE_PER_S * dt
-        self._var_wear += _WEAR_PROCESS_VARIANCE_PER_S * dt
+        for channel in self._channels.values():
+            channel.predict(dt)
 
     def update(self, obs: Observation) -> None:
         noise = obs.noise or {}
-        if "used_gib" in obs.payload:
-            r = float(noise.get("used_gib_sigma", _FALLBACK_USED_SIGMA)) ** 2
-            k = self._var_used / (self._var_used + max(r, 1e-9))
-            self._used_gib = self._used_gib + k * (
-                float(obs.payload["used_gib"]) - self._used_gib
-            )
-            self._var_used = (1.0 - k) * self._var_used
-        if "wear_pct" in obs.payload:
-            r = float(noise.get("wear_pct_sigma", _FALLBACK_WEAR_SIGMA)) ** 2
-            k = self._var_wear / (self._var_wear + max(r, 1e-9))
-            self._wear_pct = self._wear_pct + k * (
-                float(obs.payload["wear_pct"]) - self._wear_pct
-            )
-            self._var_wear = (1.0 - k) * self._var_wear
+        for key, channel in self._channels.items():
+            if key not in obs.payload:
+                continue
+            try:
+                z = float(obs.payload[key])
+            except (TypeError, ValueError):
+                self._rejected += 1
+                continue
+            if not math.isfinite(z):
+                self._rejected += 1
+                continue
+            r = float(noise.get(f"{key}_sigma", self._fallback[key])) ** 2
+            channel.fuse(z, r)
         try:
             ts = float(obs.ts_s)
         except (TypeError, ValueError):
@@ -73,10 +87,14 @@ class StorageKalman:
         if math.isfinite(ts) and ts >= 0.0:
             self._t = ts
 
+    def health(self) -> EstimatorHealth:
+        return build_health(self._channels, rejected_extra=self._rejected)
+
     def state(self) -> Estimate:
         return Estimate(
             source=self.name,
             ts_s=self._t,
-            point={"used_gib": self._used_gib, "wear_pct": self._wear_pct},
-            covariance={"used_gib": self._var_used, "wear_pct": self._var_wear},
+            point={key: c.value for key, c in self._channels.items()},
+            covariance={key: c.var for key, c in self._channels.items()},
+            health=self.health(),
         )

@@ -1,12 +1,14 @@
 """Thermal Kalman filter (junction + enclosure two-state).
 
-A linear Kalman filter over a two-state thermal model is the eventual
-home for this estimator (BL-028). The L1 wiring here keeps the same
-predict / update / state contract as the power estimator and folds
-each sensor observation into the belief via a per-channel Kalman
-gain: ``belief = (1 - k) * belief + k * obs``, with the posterior
-variance ``var = (1 - k) * var``. The result is a calibrated belief
-over ``(junction_c, enclosure_c)`` that the self-model and
+A linear Kalman filter over a two-state thermal model is the eventual home
+for this estimator (BL-028). The wiring here keeps the predict / update /
+state contract shared across the scalar estimators and folds each sensor
+observation into the belief through a gated Kalman update: a reading whose
+normalised innovation exceeds the gate is rejected, the posterior variance is
+floored so a converged belief stays honest, and a sustained step (an injected
+thermal load, a profile change) is adopted through a reset rather than fought
+forever. The result is a calibrated, self-reporting belief over
+``(junction_c, enclosure_c)`` that the self-model and
 ``self_estimator_status`` can read without owning subsystem state.
 """
 
@@ -14,7 +16,8 @@ from __future__ import annotations
 
 import math
 
-from ..types import Estimate, Observation
+from ..types import Estimate, EstimatorHealth, Observation
+from .health import ChannelSpec, ScalarChannel, build_health
 
 __all__ = ["ThermalKalman"]
 
@@ -27,15 +30,7 @@ _FALLBACK_NOISE_SIGMA = 1.0
 
 
 class ThermalKalman:
-    """L1 two-state thermal filter (junction + enclosure).
-
-    Predict adds process noise per second; update folds each channel of
-    the noisy sensor reading toward the prior with a Kalman gain. The
-    update also resynchronises ``_t`` to ``obs.ts_s`` so the estimator's
-    timestamp matches the observation stream even if ``predict`` was
-    skipped or the tick cadence drifted (matches the PowerEstimator /
-    ApuEstimator contract).
-    """
+    """Two-state thermal filter (junction + enclosure) with innovation gating."""
 
     name: str = "thermal"
 
@@ -46,34 +41,35 @@ class ThermalKalman:
         initial_enclosure_c: float = _DEFAULT_ENCLOSURE_C,
     ) -> None:
         self._t = 0.0
-        self._junction_c = float(initial_junction_c)
-        self._enclosure_c = float(initial_enclosure_c)
-        self._var_j = _INITIAL_VARIANCE
-        self._var_e = _INITIAL_VARIANCE
+        self._rejected = 0
+        spec = ChannelSpec(process_var_per_s=_PROCESS_VARIANCE_PER_S)
+        self._channels: dict[str, ScalarChannel] = {
+            "junction_c": ScalarChannel(float(initial_junction_c), _INITIAL_VARIANCE, spec),
+            "enclosure_c": ScalarChannel(float(initial_enclosure_c), _INITIAL_VARIANCE, spec),
+        }
 
     def predict(self, dt: float) -> None:
         if dt <= 0.0:
             return
         self._t += dt
-        self._var_j += _PROCESS_VARIANCE_PER_S * dt
-        self._var_e += _PROCESS_VARIANCE_PER_S * dt
+        for channel in self._channels.values():
+            channel.predict(dt)
 
     def update(self, obs: Observation) -> None:
         noise = obs.noise or {}
-        if "junction_c" in obs.payload:
-            r = float(noise.get("junction_c_sigma", _FALLBACK_NOISE_SIGMA)) ** 2
-            k = self._var_j / (self._var_j + max(r, 1e-6))
-            self._junction_c = self._junction_c + k * (
-                float(obs.payload["junction_c"]) - self._junction_c
-            )
-            self._var_j = (1.0 - k) * self._var_j
-        if "enclosure_c" in obs.payload:
-            r = float(noise.get("enclosure_c_sigma", _FALLBACK_NOISE_SIGMA)) ** 2
-            k = self._var_e / (self._var_e + max(r, 1e-6))
-            self._enclosure_c = self._enclosure_c + k * (
-                float(obs.payload["enclosure_c"]) - self._enclosure_c
-            )
-            self._var_e = (1.0 - k) * self._var_e
+        for key, channel in self._channels.items():
+            if key not in obs.payload:
+                continue
+            try:
+                z = float(obs.payload[key])
+            except (TypeError, ValueError):
+                self._rejected += 1
+                continue
+            if not math.isfinite(z):
+                self._rejected += 1
+                continue
+            r = float(noise.get(f"{key}_sigma", _FALLBACK_NOISE_SIGMA)) ** 2
+            channel.fuse(z, r)
         try:
             ts = float(obs.ts_s)
         except (TypeError, ValueError):
@@ -81,13 +77,14 @@ class ThermalKalman:
         if math.isfinite(ts) and ts >= 0.0:
             self._t = ts
 
+    def health(self) -> EstimatorHealth:
+        return build_health(self._channels, rejected_extra=self._rejected)
+
     def state(self) -> Estimate:
         return Estimate(
             source=self.name,
             ts_s=self._t,
-            point={
-                "junction_c": self._junction_c,
-                "enclosure_c": self._enclosure_c,
-            },
-            covariance={"junction_c": self._var_j, "enclosure_c": self._var_e},
+            point={key: c.value for key, c in self._channels.items()},
+            covariance={key: c.var for key, c in self._channels.items()},
+            health=self.health(),
         )

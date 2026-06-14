@@ -1,18 +1,20 @@
 """Compute Kalman filter over load fraction and electrical draw.
 
-A linear Kalman filter over the two scalars the compute subsystem
-reports (BL-031a is the full multi-state EKF). Predict inflates the
-per-channel variance with elapsed time; update folds the noisy
-observation toward the prior via a Kalman gain and resynchronises the
-estimator clock to ``obs.ts_s`` (matching the PowerEstimator and
-ThermalKalman contracts).
+A scalar Kalman filter over the two values the compute subsystem reports
+(BL-031a is the full multi-state EKF). Predict inflates the per-channel
+variance with elapsed time; update folds the observation through a gated
+Kalman step that rejects an inconsistent reading, floors the posterior
+variance, and adopts a sustained load step through a reset (see
+:mod:`nous.estimators.health`), then resynchronises the estimator clock to
+``obs.ts_s``.
 """
 
 from __future__ import annotations
 
 import math
 
-from ..types import Estimate, Observation
+from ..types import Estimate, EstimatorHealth, Observation
+from .health import ChannelSpec, ScalarChannel, build_health
 
 __all__ = ["ComputeKalman"]
 
@@ -28,7 +30,7 @@ _FALLBACK_DRAW_SIGMA = 0.5
 
 
 class ComputeKalman:
-    """1-D scalar Kalman filter over (load_pct, draw_w)."""
+    """Gated scalar Kalman filter over (load_pct, draw_w)."""
 
     name: str = "compute"
 
@@ -41,34 +43,46 @@ class ComputeKalman:
         draw_sigma: float = _DEFAULT_DRAW_SIGMA,
     ) -> None:
         self._t = 0.0
-        self._load_pct = float(initial_load_pct)
-        self._draw_w = float(initial_draw_w)
-        self._var_load = float(load_sigma) ** 2
-        self._var_draw = float(draw_sigma) ** 2
+        self._rejected = 0
+        self._fallback: dict[str, float] = {
+            "load_pct": _FALLBACK_LOAD_SIGMA,
+            "draw_w": _FALLBACK_DRAW_SIGMA,
+        }
+        self._channels: dict[str, ScalarChannel] = {
+            "load_pct": ScalarChannel(
+                float(initial_load_pct),
+                float(load_sigma) ** 2,
+                ChannelSpec(process_var_per_s=_LOAD_PROCESS_VARIANCE_PER_S),
+            ),
+            "draw_w": ScalarChannel(
+                float(initial_draw_w),
+                float(draw_sigma) ** 2,
+                ChannelSpec(process_var_per_s=_DRAW_PROCESS_VARIANCE_PER_S),
+            ),
+        }
 
     def predict(self, dt: float) -> None:
         if dt <= 0.0:
             return
         self._t += dt
-        self._var_load += _LOAD_PROCESS_VARIANCE_PER_S * dt
-        self._var_draw += _DRAW_PROCESS_VARIANCE_PER_S * dt
+        for channel in self._channels.values():
+            channel.predict(dt)
 
     def update(self, obs: Observation) -> None:
         noise = obs.noise or {}
-        if "load_pct" in obs.payload:
-            r = float(noise.get("load_pct_sigma", _FALLBACK_LOAD_SIGMA)) ** 2
-            k = self._var_load / (self._var_load + max(r, 1e-6))
-            self._load_pct = self._load_pct + k * (
-                float(obs.payload["load_pct"]) - self._load_pct
-            )
-            self._var_load = (1.0 - k) * self._var_load
-        if "draw_w" in obs.payload:
-            r = float(noise.get("draw_w_sigma", _FALLBACK_DRAW_SIGMA)) ** 2
-            k = self._var_draw / (self._var_draw + max(r, 1e-6))
-            self._draw_w = self._draw_w + k * (
-                float(obs.payload["draw_w"]) - self._draw_w
-            )
-            self._var_draw = (1.0 - k) * self._var_draw
+        for key, channel in self._channels.items():
+            if key not in obs.payload:
+                continue
+            try:
+                z = float(obs.payload[key])
+            except (TypeError, ValueError):
+                self._rejected += 1
+                continue
+            if not math.isfinite(z):
+                self._rejected += 1
+                continue
+            r = float(noise.get(f"{key}_sigma", self._fallback[key])) ** 2
+            channel.fuse(z, r)
         try:
             ts = float(obs.ts_s)
         except (TypeError, ValueError):
@@ -76,10 +90,14 @@ class ComputeKalman:
         if math.isfinite(ts) and ts >= 0.0:
             self._t = ts
 
+    def health(self) -> EstimatorHealth:
+        return build_health(self._channels, rejected_extra=self._rejected)
+
     def state(self) -> Estimate:
         return Estimate(
             source=self.name,
             ts_s=self._t,
-            point={"load_pct": self._load_pct, "draw_w": self._draw_w},
-            covariance={"load_pct": self._var_load, "draw_w": self._var_draw},
+            point={key: c.value for key, c in self._channels.items()},
+            covariance={key: c.var for key, c in self._channels.items()},
+            health=self.health(),
         )
