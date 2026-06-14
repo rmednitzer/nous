@@ -22,7 +22,7 @@ import pytest
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyHttpUrl
 
-from nous.anthropic_client import CallCap
+from nous.anthropic_client import CallCap, CapExhausted
 from nous.audit import redact
 from nous.auth.oauth import FileOAuthProvider
 from nous.estimators.biometrics import BiometricsKalman
@@ -95,6 +95,53 @@ class TestC1AnthropicCapFsyncsInsideLock:
         second = CallCap(tmp_path / "count", cap=10)
         count, _ = second.increment()
         assert count == 2
+
+
+class TestCap1PeekAgreesWithIncrement:
+    """CAP-1: the status read must not advertise a slot the spend path denies.
+
+    Original defect (``docs/audit-2026-06-14.md`` CAP-1): ``CallCap.peek``,
+    which feeds ``anthropic_cap_status``, failed open on a corrupt counter
+    (returning ``count=0`` so the tool reported the cap healthy and
+    available), while ``CallCap.increment`` failed closed on the same file
+    by raising ``CapExhausted``. A controller polling the status tool was
+    therefore told a cloud call would succeed at the instant every
+    ``inference_cloud`` call was being silently downgraded to the local
+    mock. A second, smaller drift: increment leaked a raw ``ValueError`` on
+    a non-integer ``count`` instead of ``CapExhausted``.
+
+    Fix (ADR 0049): both readers parse through one ``_parse_count`` helper.
+    A counter that makes increment refuse now makes peek report
+    ``corrupt=True`` (and the status tool report unavailable/exhausted), and
+    increment fails closed uniformly with ``CapExhausted``.
+    """
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "not valid json",
+            '{"date": "REPLACE", "count": "lots"}',
+            '{"date": "REPLACE", "count": [1, 2]}',
+        ],
+    )
+    def test_corrupt_counter_refused_and_reported_corrupt(
+        self, tmp_path: Path, raw: str
+    ) -> None:
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
+        path = tmp_path / "count"
+        path.write_text(raw.replace("REPLACE", today), encoding="utf-8")
+
+        assert CallCap(path, cap=5).peek().corrupt is True
+        with pytest.raises(CapExhausted):
+            CallCap(path, cap=5).increment()
+
+    def test_intact_counter_reported_not_corrupt(self, tmp_path: Path) -> None:
+        path = tmp_path / "count"
+        cap = CallCap(path, cap=5)
+        cap.increment()
+        reading = cap.peek()
+        assert reading.corrupt is False
+        assert reading.count == 1
 
 
 class TestC2RedactionRecurses:

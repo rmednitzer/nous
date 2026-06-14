@@ -51,3 +51,4 @@
 | 0046 | [Declarative mode-requirements gate](0046-declarative-mode-requirements-gate.md) | Accepted | 2026-06-14 |
 | 0047 | [Comms store-and-forward outbox with precedence triage](0047-comms-store-and-forward-outbox.md) | Accepted | 2026-06-14 |
 | 0048 | [Stamp the audit exit_code on the runner's caught-exception path](0048-runner-exit-code-for-caught-errors.md) | Accepted | 2026-06-14 |
+| 0049 | [Make the cap status read fail closed on a corrupt counter](0049-cap-status-fail-closed-on-corrupt-counter.md) | Accepted | 2026-06-14 |

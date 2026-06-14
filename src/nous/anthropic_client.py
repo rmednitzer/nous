@@ -28,6 +28,7 @@ import fcntl
 import json
 import os
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -43,7 +44,13 @@ from anthropic.types import (
 
 from .config import Settings, get_settings
 
-__all__ = ["AnthropicClient", "CallCap", "CapExhausted", "build_client"]
+__all__ = [
+    "AnthropicClient",
+    "CallCap",
+    "CapExhausted",
+    "CapReading",
+    "build_client",
+]
 
 _ADAPTIVE_THINKING: ThinkingConfigAdaptiveParam = {"type": "adaptive"}
 
@@ -78,6 +85,57 @@ def _join_text(message: Message) -> str:
 
 class CapExhausted(RuntimeError):
     """Raised when the daily Anthropic call cap is exhausted."""
+
+
+class _CorruptCounter(Exception):
+    """Internal: the persisted daily counter cannot be safely parsed.
+
+    Both :meth:`CallCap.increment` (the spend path) and :meth:`CallCap.peek`
+    (the status path) route the on-disk line through :func:`_parse_count`, so
+    this exception is the single point at which "the counter is unusable" is
+    decided. Increment converts it into :class:`CapExhausted` and refuses the
+    call; peek reports it as a corrupt reading. They cannot drift (audit
+    CAP-1, ADR 0049).
+    """
+
+
+def _parse_count(raw: str, today: str) -> int:
+    """Return today's call count from one persisted JSON line.
+
+    Returns ``0`` for the cases :meth:`CallCap.increment` treats as a fresh
+    day: an empty line, valid JSON that is not an object, or a line whose
+    ``date`` is not ``today``. Raises :class:`_CorruptCounter` for the cases
+    increment must refuse rather than silently reset, since a corrupt counter
+    would otherwise let an attacker bypass the cap with one bad write (SC-5):
+    non-JSON, or a ``count`` that is not integer-coercible.
+    """
+    if not raw:
+        return 0
+    try:
+        loaded = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise _CorruptCounter(str(exc)) from exc
+    if not isinstance(loaded, dict) or loaded.get("date") != today:
+        return 0
+    try:
+        return int(loaded.get("count", 0))
+    except (TypeError, ValueError) as exc:
+        raise _CorruptCounter(f"non-integer count: {loaded.get('count')!r}") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class CapReading:
+    """A non-mutating read of the daily counter.
+
+    ``corrupt`` is ``True`` when the persisted counter cannot be parsed, the
+    same condition under which :meth:`CallCap.increment` refuses the call.
+    A corrupt counter is reported as exhausted by ``anthropic_cap_status`` so
+    the polled status never advertises a slot the spend path would deny.
+    """
+
+    count: int
+    cap: int
+    corrupt: bool = False
 
 
 class CallCap:
@@ -120,27 +178,20 @@ class CallCap:
             try:
                 fh.seek(0)
                 raw = fh.read().strip()
-                state: dict[str, Any] = {"date": today, "count": 0}
-                if raw:
-                    try:
-                        loaded = json.loads(raw)
-                    except json.JSONDecodeError as exc:
-                        raise CapExhausted(
-                            f"daily counter at {self._path} is corrupt: {exc}"
-                        ) from exc
-                    if isinstance(loaded, dict):
-                        state = loaded
-                if state.get("date") != today:
-                    state = {"date": today, "count": 0}
-                count = int(state.get("count", 0))
+                try:
+                    count = _parse_count(raw, today)
+                except _CorruptCounter as exc:
+                    raise CapExhausted(
+                        f"daily counter at {self._path} is corrupt: {exc}"
+                    ) from exc
                 if self._cap and count >= self._cap:
                     raise CapExhausted(
                         f"daily Anthropic call cap reached ({count}/{self._cap})"
                     )
-                state["count"] = count + 1
+                new_count = count + 1
                 fh.seek(0)
                 fh.truncate()
-                fh.write(json.dumps(state))
+                fh.write(json.dumps({"date": today, "count": new_count}))
                 fh.flush()
                 try:
                     os.fsync(fh.fileno())
@@ -148,29 +199,29 @@ class CallCap:
                     raise CapExhausted(
                         f"daily counter at {self._path} could not be fsynced: {exc}"
                     ) from exc
-                return count + 1, self._cap
+                return new_count, self._cap
             finally:
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
-    def peek(self) -> tuple[int, int]:
-        """Return ``(count_today, cap)`` without mutating the counter."""
+    def peek(self) -> CapReading:
+        """Return a non-mutating :class:`CapReading` of today's counter.
+
+        A corrupt counter is reported as ``corrupt`` rather than as a fresh
+        ``count=0``: it is exactly the state under which :meth:`increment`
+        refuses the call, so a polled status must not advertise a slot the
+        spend path would deny (audit CAP-1, ADR 0049). The parse goes through
+        the same :func:`_parse_count` that increment uses, so the two cannot
+        disagree.
+        """
         today = datetime.now(UTC).strftime("%Y-%m-%d")
         try:
             raw = self._path.read_text(encoding="utf-8").strip()
         except OSError:
-            return 0, self._cap
-        if not raw:
-            return 0, self._cap
+            return CapReading(count=0, cap=self._cap)
         try:
-            state = json.loads(raw)
-        except json.JSONDecodeError:
-            return 0, self._cap
-        if not isinstance(state, dict) or state.get("date") != today:
-            return 0, self._cap
-        try:
-            return int(state.get("count", 0)), self._cap
-        except (TypeError, ValueError):
-            return 0, self._cap
+            return CapReading(count=_parse_count(raw, today), cap=self._cap)
+        except _CorruptCounter:
+            return CapReading(count=0, cap=self._cap, corrupt=True)
 
 
 class AnthropicClient:

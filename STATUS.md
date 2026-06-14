@@ -103,7 +103,7 @@ re-audit).
 | `src/nous/runner.py` | stable | Audited execution wrapper. The audit `exit_code` is two-valued: `None` for a normal return, `1` for an abnormal outcome (a policy denial or a caught worker error), with `denied` separating the two (ADR 0048). Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/safety/enforcer.py` | in-progress | Runtime safety enforcer (ADR 0022): `SafetyEnforcer.check` returns a structured `SafetyResult` (approved / clamped / evidence) and counts per-constraint and total violations; `floor_threshold` and `ceiling_clamp` cover the SC-2 refusal and throttle-clamp shapes. The FSM now routes its entry gates through it (SC-2 thermal + SC-8 power, registered via `register_fsm_constraints`), the engine mirrors every check to the audit log under `Tier.SAFETY`, and the tick-driven auto-safing (ADR 0027/0028) drives the FSM toward safety on a violation. |
-| `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. The cloud call carries model-tier selection, capability-guarded adaptive thinking, and streaming for long generations (BL-069 / ADR 0035); changes require an ADR. |
+| `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. The cloud call carries model-tier selection, capability-guarded adaptive thinking, and streaming for long generations (BL-069 / ADR 0035). The cap counter's spend path (`increment`) and status path (`peek`) parse through one helper so they fail closed together on a corrupt counter; `peek` returns a `CapReading` (ADR 0049). Changes require an ADR. |
 | `src/nous/engine.py` | in-progress | Tick orchestration; all ten L1 subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) wired through the tick loop. The sensors subsystem is the authoritative ambient source for thermal; the comms aggregator drives `state.comms_state` each tick. `start()` completes bring-up to the IDLE standby posture (STOWED -> BOOT -> IDLE; ADR 0039), so a started engine settles in IDLE rather than the transient BOOT. Per-tick observer hooks (`add_tick_hook` / `remove_tick_hook`, ADR 0040) run after the mode settles, with exceptions contained and counted on `tick_hook_errors` so an observer bug never kills the auto-safing tick. |
 | `src/nous/subsystems/power.py` | in-progress | Li-ion + Peukert + thermal derate (BL-003). |
 | `src/nous/subsystems/apu.py` | in-progress | Solar PV (MPPT) + methanol fuel cell + vehicle tether + USB-C PD-in (BL-005a). |
@@ -136,7 +136,11 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 914 tests pass at HEAD: BL-080 / ADR 0048 added
+  feature branch before merge. 924 tests pass at HEAD: BL-081 / ADR 0049 added
+  ten (the cap-status fail-closed-on-corruption coverage across
+  `tests/unit/test_anthropic_client.py`, `tests/unit/test_anthropic_status.py`,
+  and `tests/regression/test_audit_findings.py`, closing the 2026-06-14 audit's
+  CAP-1), on top of the 914 from BL-080 / ADR 0048, which added
   two (the runner caught-exception `exit_code=1` regression in
   `tests/regression/test_audit_findings.py`, closing the 2026-06-14 audit's
   RUN-1), on top of the 912 from BL-079, which added two (the

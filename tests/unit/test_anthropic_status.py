@@ -28,7 +28,31 @@ def test_cap_status_reports_fresh_counter(tmp_path: Path) -> None:
     assert payload["cap"] == 5
     assert payload["remaining"] == 5
     assert payload["exhausted"] is False
+    assert payload["corrupt"] is False
     assert payload["api_key_configured"] is True
+
+
+def test_cap_status_reports_corrupt_counter(tmp_path: Path) -> None:
+    settings = _settings(tmp_path, cap=5)
+    (tmp_path / ".anthropic_daily_count").write_text("not valid json")
+    payload = cap_status(settings)
+    assert payload["corrupt"] is True
+    assert payload["available"] is False
+    assert payload["exhausted"] is True
+    assert payload["remaining"] == 0
+    assert payload["count_today"] is None
+
+
+def test_cap_status_corrupt_overrides_disabled_cap(tmp_path: Path) -> None:
+    # increment() refuses a corrupt counter even when the cap is disabled (the
+    # corruption check precedes the cap check), so the status must not report
+    # the cap as merely disabled-and-available.
+    settings = _settings(tmp_path, cap=0)
+    (tmp_path / ".anthropic_daily_count").write_text("{garbage")
+    payload = cap_status(settings)
+    assert payload["corrupt"] is True
+    assert payload["available"] is False
+    assert payload["exhausted"] is True
 
 
 def test_cap_status_reflects_increment(tmp_path: Path) -> None:
