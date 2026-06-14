@@ -43,12 +43,13 @@ class Adapter(Protocol):
 class StaleEstimateError(RuntimeError):
     """Raised by an adapter when it refuses to encode under SC-4.
 
-    The usual cause is a source estimate older than ``max_age_s``. A
-    ``reason`` is attached instead when the refusal is a configuration
-    fault (an invalid ``max_age_s``) rather than genuine staleness, so the
-    message names the real problem rather than reporting a fabricated age
-    (audit ITP-1, ADR 0052). ``reason`` defaults to ``None`` for a genuine
-    staleness refusal, whose message is unchanged.
+    The usual cause is a source estimate older than ``max_age_s``. When the
+    refusal is a configuration fault (an invalid ``max_age_s``) rather than
+    genuine staleness, a ``reason`` is passed: it replaces the message text
+    so the message names the misconfiguration, while ``age_s`` still records
+    the computed source age on the exception object (audit ITP-1, ADR 0052).
+    ``reason`` defaults to ``None`` for a genuine staleness refusal, whose
+    message is unchanged.
     """
 
     def __init__(
@@ -108,9 +109,9 @@ def assert_fresh(
     the encoded payload, satisfying the "must include the source
     timestamp" half of SC-4. An invalid ``max_age_s`` (non-positive or
     NaN) is a configuration fault: the gate still refuses (fail closed),
-    but the raised :class:`StaleEstimateError` names the misconfiguration
-    and the real source age rather than a fabricated zero (audit ITP-1,
-    ADR 0052).
+    but the raised :class:`StaleEstimateError` names the misconfiguration in
+    its message and carries the real source age on ``age_s``, rather than
+    the fabricated zero it reported before (audit ITP-1, ADR 0052).
     """
     ts_source = resolve_ts(data, now_s=now_s)
     ts_now = float(now_s) if now_s is not None else time.time()
