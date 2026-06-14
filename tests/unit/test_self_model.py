@@ -167,3 +167,26 @@ def test_monte_carlo_quantiles_respect_endurance_floor(engine: Engine) -> None:
     a = assess("low soc", engine=engine, mode="monte_carlo")
     assert a.endurance is not None
     assert a.endurance.p5 >= 0.0
+
+
+def test_monte_carlo_p50_is_the_sample_median_not_the_point(engine: Engine) -> None:
+    """ASSESS-1: the Monte Carlo band's p50 is the empirical sample median, so
+    the centre and the tails come from one sample. The old behaviour pinned
+    p50 to the deterministic point exactly; the sample median of a
+    non-degenerate posterior does not equal that point, while the Gaussian
+    fallback (median == mean) still reports the point."""
+    for _ in range(4):
+        engine.tick()
+
+    mc = assess("status", engine=engine, mode="monte_carlo", seed=7)
+    assert mc.thermal_headroom is not None
+    cap = mc.thermal_headroom
+    # The thermal posterior has spread, so the Monte Carlo branch runs.
+    assert cap.p5 < cap.p95
+    assert cap.p5 <= cap.p50 <= cap.p95
+    # The centre is the sample median, not the deterministic point.
+    assert cap.p50 != cap.point
+
+    gauss = assess("status", engine=engine, mode="gaussian", seed=7)
+    assert gauss.thermal_headroom is not None
+    assert gauss.thermal_headroom.p50 == pytest.approx(gauss.thermal_headroom.point)

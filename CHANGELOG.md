@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (self-model: Monte Carlo `p50` is the sample median, not the deterministic point, BL-087)
+
+- Each capability's Monte Carlo branch in `self_model/assess.py` computed the
+  5th, 50th, and 95th percentiles from the sample but published
+  `Capability.p50 = point` and discarded the sample median (audit 2026-06-14
+  ASSESS-1), so a band mixed sampled tails with a deterministic centre. The
+  three branches (endurance, thermal headroom, inference capacity) now bind
+  `p5, p50, p95 = _quantiles(samples)` and publish the empirical median,
+  lighting up the previously dead `_quantiles` helper. The Gaussian fallback,
+  whose median equals its mean, still reports the deterministic point as `p50`,
+  so the v0.1 contract is unchanged for `mode="gaussian"`. The p5 and p95 clamps
+  that bracket the point are kept, so the band still contains the point; only
+  the centre changed. Low-blast and additive (no ADR): `cap.p50` is
+  display-only, the FSM-facing `last_capabilities` snapshot reads `cap.point`,
+  so no admission or transition path moves. This closes the last open finding of
+  the 2026-06-14 audit. Pinned by `tests/unit/test_self_model.py`.
+
 ### Fixed (interop: name the freshness gate's config fault distinctly from staleness, BL-086 / ADR 0052)
 
 - `assert_fresh` (`interop/base.py`) reported a fabricated `0.00s old` age when an
