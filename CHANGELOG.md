@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (audit: exit_code on the runner's caught-exception path, BL-080 / ADR 0048)
+
+- The audited runner now stamps `exit_code=1` on a caught worker exception, so
+  an audit consumer can tell it apart from a normal return on the typed field
+  rather than the `[error ...]` body prefix (audit 2026-06-14 RUN-1). The M1 fix
+  had stamped `exit_code=1` on the policy-denial path and assumed `exit_code is
+  not None` would bucket denials and worker errors apart from normal returns,
+  but the exception path left `exit_code=None`, identical to a normal return.
+  The contract is now two-valued: `None` is a normal return, `1` is any abnormal
+  outcome, and the `denied` flag separates a policy refusal (`denied=True`) from
+  a caught error (`denied=False`). Four lines in `runner.py`; the body mapping,
+  truncation, redaction, and BL-016 hash chain are untouched. High-blast
+  surface, so behind ADR 0048. Pinned by `tests/unit/test_runner.py` and
+  `tests/regression/test_audit_findings.py`.
+
 ### Fixed (engine: restart the safety law on profile reload, BL-079)
 
 - `Engine.reload_profile` rebuilt every subsystem and estimator but left the

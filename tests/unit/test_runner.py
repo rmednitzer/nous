@@ -5,7 +5,8 @@ Closes ``AUDIT.md`` H1 for the runner half. The existing
 isolation; this file exercises the full execution path through
 ``runner.run``: the four tiers, the three policy modes, the
 denial-path audit record (now with ``exit_code=1`` per the M1 fix),
-exception-to-body mapping, the truncation budget, the redaction
+the exception-to-body mapping and its ``exit_code=1`` (ADR 0048, RUN-1),
+the truncation budget, the redaction
 allowlist wired through to the audit log, and the request / client
 identifier plumbing.
 """
@@ -142,8 +143,11 @@ def test_exception_in_work_maps_to_error_body(audit: AuditLogger) -> None:
     )
     assert body == "[error RuntimeError: boom]"
     record = _last_record(audit)
+    # A caught worker error is abnormal (exit_code 1) but not a denial, so a
+    # consumer separates it from a normal return (exit_code None) and from a
+    # policy refusal (exit_code 1, denied True) on the typed fields (ADR 0048).
     assert record["denied"] is False
-    assert record.get("exit_code") is None
+    assert record["exit_code"] == 1
 
 
 def test_body_truncated_to_max_output(audit: AuditLogger) -> None:
