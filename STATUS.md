@@ -125,7 +125,7 @@ re-audit).
 | `src/nous/estimators/sensors.py` | in-progress | Multi-channel Kalman over (temp_c, humidity_pct, baro_kpa); validates against physical bounds, rejects without poisoning the central estimate. |
 | `src/nous/estimators/biometrics.py` | in-progress | Multi-channel Kalman over biometric channels with physiological-bounds validation; `hydration_pct` added as a fourth tracked channel in BL-011. |
 | `src/nous/self_model/*` | in-progress | `assess` / `explain` / `viability` (BL-018) read live estimator state and emit capability claims. BL-035 lands the Monte Carlo-based calibrated quantile mapping (default `mode="monte_carlo"`; legacy `"gaussian"` opt-out retained). `situation` (the `self_model_situation` tool, BL-061 / ADR 0038) fuses those claims with provenance, staleness, the FSM posture, the safety posture, and ranked degraded-mode recommendations in one read. |
-| `src/nous/interop/*` | in-progress | Real adapter implementations for CoT, SensorThings, MISB KLV, NMEA 0183, STANAG 4774/4778, MQTT. `nous.interop.REGISTRY` exposes them; `interop_encode` / `interop_decode` MCP tools (T1) round-trip via the audited runner (BL-041). |
+| `src/nous/interop/*` | in-progress | Real adapter implementations for CoT, SensorThings, MISB KLV, NMEA 0183, STANAG 4774/4778, MQTT. `nous.interop.REGISTRY` exposes them; `interop_encode` / `interop_decode` MCP tools (T1) round-trip via the audited runner (BL-041). The shared SC-4 freshness gate (`assert_fresh` in the `interop/base.py` Protocol) refuses a stale or invalid-`max_age` encode and names a configuration fault distinctly from staleness (ADR 0052); changes to the Protocol require an ADR. |
 | `src/nous/anthropic_status.py` | in-progress | Surfaces the daily cap state for `anthropic_cap_status` (BL-021); `cap_exhausted_payload(exc, settings=...)` renders `CapExhausted` as the same JSON shape. |
 | `src/nous/auth/oauth.py` | in-progress | File-backed issuer shape. |
 | `src/nous/scenarios/*` | in-progress | `loader` parses YAML from disk into typed `Scenario` objects; `injectors` mutate the live engine for ten action kinds (FSM, biometrics, thermal, APU, comms, sensors, position, velocity, compute, inference); `runner` drives the engine through a scenario timeline and returns a JSON-safe report (BL-014); `session` runs the same timeline as a stateful session riding the engine tick hook, with pause / resume / reset and a status read (BL-071, ADR 0040). |
@@ -136,7 +136,10 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 938 tests pass at HEAD: BL-085 / ADR 0051 added
+  feature branch before merge. 941 tests pass at HEAD: BL-086 / ADR 0052 added
+  three (the interop freshness-gate config-fault naming in
+  `tests/unit/test_interop_adapters.py`, closing the 2026-06-14 audit's ITP-1 /
+  FRESH-1), on top of the 938 from BL-085 / ADR 0051, which added
   three (the comms `tx` achieved-rate throughput in
   `tests/unit/test_comms_subsystem.py`, closing the 2026-06-14 audit's COMMS-3),
   on top of the 935 from BL-084, which added four (the

@@ -11,17 +11,47 @@ length fields must be correct.
 
 from __future__ import annotations
 
+import math
 import time
 
 import pytest
 
-from nous.interop.base import StaleEstimateError
+from nous.interop.base import StaleEstimateError, assert_fresh
 from nous.interop.cot import CotAdapter
 from nous.interop.misb_klv import MisbKlvAdapter
 from nous.interop.mqtt import MqttAdapter
 from nous.interop.nmea0183 import Nmea0183Adapter
 from nous.interop.sensorthings import SensorThingsAdapter
 from nous.interop.stanag_4774 import Stanag4774Adapter
+
+
+def test_assert_fresh_invalid_max_age_names_the_misconfiguration() -> None:
+    # ITP-1 (ADR 0052): a non-positive or NaN max_age_s is a configuration
+    # fault, not a stale estimate. The gate still refuses (fail closed), but
+    # the error names the misconfiguration instead of a fabricated 0.0s age.
+    with pytest.raises(StaleEstimateError) as raised:
+        assert_fresh("cot", {"ts_s": 100.0}, max_age_s=-5.0, now_s=100.0)
+    exc = raised.value
+    assert exc.reason is not None
+    assert "max_age_s" in str(exc)
+    assert "0.00s old" not in str(exc)  # no fabricated staleness age
+    with pytest.raises(StaleEstimateError):
+        assert_fresh("cot", {"ts_s": 100.0}, max_age_s=math.nan, now_s=100.0)
+
+
+def test_assert_fresh_zero_timestamp_is_a_valid_epoch() -> None:
+    # FRESH-1 (ADR 0052): ts_s=0.0 is a valid epoch (the sim clock starts
+    # there), not "missing". With now_s on the same clock it reads fresh.
+    ts = assert_fresh("cot", {"ts_s": 0.0}, max_age_s=10.0, now_s=0.0)
+    assert ts == 0.0
+
+
+def test_stale_estimate_error_default_message_unchanged() -> None:
+    # The genuine-staleness message keeps its shape; reason defaults to None.
+    err = StaleEstimateError("cot", 100.0, 10.0)
+    assert err.reason is None
+    assert "source estimate is 100.00s old" in str(err)
+    assert "max_age_s=10.00" in str(err)
 
 
 def test_cot_encode_stamps_source_timestamp() -> None:
