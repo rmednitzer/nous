@@ -136,7 +136,10 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 930 tests pass at HEAD: BL-082 / ADR 0050 added
+  feature branch before merge. 931 tests pass at HEAD: BL-083 added one (the
+  comms log-throughput scale-invariance guard in
+  `tests/unit/test_comms_estimator.py`, closing the 2026-06-14 audit's COMMS-4),
+  on top of the 930 from BL-082 / ADR 0050, which added
   two (the audit chain-head-tracks-the-on-disk-tail guard in
   `tests/regression/test_audit_findings.py`, closing the 2026-06-14 audit's
   AUD-1), on top of the 928 from BL-081 / ADR 0049, which added

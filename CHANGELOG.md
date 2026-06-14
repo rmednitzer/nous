@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (estimators: make the comms log-throughput sigma an explicit constant, BL-083)
+
+- Simplified the comms particle filter's connected-likelihood z-score (audit
+  2026-06-14 COMMS-4). It divided the log-throughput residual by `sigma /
+  max(expected, 1.0)` where `sigma = _THROUGHPUT_OBS_SIGMA_FRAC * max(expected,
+  1.0)`, so the `max(expected, 1.0)` terms always cancelled and the divisor was
+  the constant `_THROUGHPUT_OBS_SIGMA_FRAC` for every link. The dead `sigma`
+  intermediate is removed and the divisor is the constant directly, with a
+  comment noting the log-space sigma is a deliberate fixed fraction. Exactly
+  behaviour-preserving (the cancellation was algebraic); the particle filter and
+  its convergence are untouched. Pinned by `tests/unit/test_comms_estimator.py`
+  (`test_connected_likelihood_depends_only_on_log_ratio`). The remaining LOW
+  audit findings were dispositioned by review (TICK-1 intentional per ADR 0036,
+  DOC-3 backlog text already accurate); see `docs/audit-2026-06-14.md`.
+
 ### Documented (audit: chain head tracks the on-disk tail, BL-082 / ADR 0050)
 
 - Recorded the invariant that `AuditLogger`'s hash-chain head tracks the on-disk
