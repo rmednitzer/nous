@@ -1,0 +1,122 @@
+schema_version: "0.1.1"
+name: propagation-demo
+description: >
+  BL-048 / ADR 0053 demonstration profile. Identical to jetson-agx-orin
+  except the comms inventory is a single relay link with a propagation
+  block, so the link's RSSI, packet loss, and SNR-derived capacity are
+  solved each tick from the geometry between the device and a fixed
+  ground relay rather than held at a static nominal. Drive the device
+  east (away from the relay, which sits just to the west) and watch the
+  link degrade from CONNECTED to DENIED. See tests/integration/test_propagation_demo.py.
+
+# Hardware sections are copied verbatim from jetson-agx-orin; only the
+# comms section differs. The schema_version is bumped to 0.1.1 to mark
+# the additive propagation fields (ADR 0007 / ADR 0012).
+
+power:
+  battery_wh: 588
+  voltage_v_nominal: 14.4
+  voltage_v_min: 12.0
+  voltage_v_max: 16.8
+  internal_resistance_ohm: 0.05
+  rated_current_a: 5.0
+  peukert_k: 1.04
+  soc_pct_low_threshold: 20
+  soc_pct_critical_threshold: 5
+  cycle_life: 500
+  thermal_derate_c: 45
+  thermal_derate_slope_per_c: 0.02
+  charge_limit_w: 100
+
+apu:
+  solar_w_peak: 60
+  fuelcell_w_continuous: 25
+  solar:
+    panel_w_peak: 60
+    mppt_efficiency: 0.92
+    panel_temp_derate_per_c_above_25: 0.004
+  fuel_cell:
+    continuous_w: 25
+    fuel_capacity_g: 790
+    efficiency: 0.25
+    wh_per_g_fuel: 1.4
+  vehicle:
+    bus_voltage_v: 28.0
+    current_limit_a: 5.0
+  usb_c_pd:
+    profiles_w: [15, 27, 45, 60, 100]
+    default_profile_w: 60
+
+thermal:
+  ambient_c_default: 25
+  junction_temp_max: 95
+  junction_temp_throttle: 85
+  thermal_resistance_c_per_w: 0.30
+  enclosure_to_ambient_resistance_c_per_w: 0.5
+  enclosure_mass_kg: 1.2
+  enclosure_specific_heat_j_per_kg_k: 900
+  junction_heat_capacity_j_per_k: 5.0
+  headroom_threshold_c: 5.0
+
+compute:
+  draw_w_idle: 8
+  draw_w_load: 60
+  load_curve:
+    - { load_pct: 0,   draw_w: 8 }
+    - { load_pct: 25,  draw_w: 18 }
+    - { load_pct: 50,  draw_w: 35 }
+    - { load_pct: 75,  draw_w: 50 }
+    - { load_pct: 100, draw_w: 60 }
+  inference_local:
+    tok_per_s_p50: 200
+    energy_j_per_tok: 0.12
+
+storage:
+  capacity_gib: 1024
+  wear_pct_initial: 0.0
+  write_amplification: 1.2
+
+sensors:
+  position:
+    lat_sigma: 3.0e-5
+    lon_sigma: 3.0e-5
+    alt_m_sigma: 5.0
+    fix_rate_hz: 10
+  environmental:
+    temp_c_sigma: 0.2
+    humidity_pct_sigma: 1.0
+    baro_kpa_sigma: 0.1
+  biometrics:
+    heart_rate_bpm_sigma: 2.0
+    core_temp_c_sigma: 0.05
+    hydration_pct_sigma: 1.0
+
+comms:
+  links:
+    - id: relay
+      bandwidth_bps: 2000000
+      rssi_dbm_nominal: -80          # seed value before the first tick solves the budget
+      loss_pct_nominal: 0.5
+      max_age_s: 60
+      # ADR 0053 link budget. The relay sits ~1.5 km west of the device's
+      # start (47.0, 13.0), so the link starts healthy and degrades as the
+      # device drives east. All fields are optional with model defaults.
+      propagation:
+        peer: { lat: 47.0, lon: 12.98, alt_m: 520 }
+        tx_power_dbm: 20.0           # 100 mW
+        frequency_hz: 2.4e9
+        tx_gain_dbi: 2.0
+        rx_gain_dbi: 2.0
+        excess_loss_db: 5.0          # constant terrain / obstruction margin
+        shadowing_sigma_db: 0.0      # deterministic geometry for the demo
+        noise_floor_dbm: -100.0
+        snr_floor_db: 5.0            # below this the link carries nothing
+        snr_full_db: 20.0            # at/above this the link is at rated rate
+        good_rssi_dbm: -85.0         # at/above this, packet loss is the floor
+        sensitivity_dbm: -115.0      # at/below this, 100% packet loss
+        loss_floor_pct: 0.5
+  outbox:
+    enabled: true
+    max_packages: 256
+    max_bytes: 1048576
+    default_ttl_s: 300

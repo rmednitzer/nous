@@ -101,5 +101,8 @@ effort for a need the single-hop outbox already meets.
   the outbox becomes its single-hop special case or is absorbed into it.
 - A propagation-aware comms model (BL-048) makes per-link delivery probabilistic,
   so the flush needs to model partial delivery rather than all-or-nothing `tx`.
+  Addressed by ADR 0053: the flush now models per-link Bernoulli packet loss on a
+  propagation link when an RNG is injected, deferring a lost package and closing
+  the link for the rest of that flush so the precedence order holds.
 - The queue depth or the per-tick drain cost shows up in the tick budget
   (BL-073), which would push the drain off the hot tick path.

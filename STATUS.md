@@ -111,7 +111,7 @@ re-audit).
 | `src/nous/subsystems/compute.py` | in-progress | Load fraction + profile-driven draw curve (BL-007). Authoritative load source for power and thermal. Auto-clips delivered load when thermal reports throttling. |
 | `src/nous/subsystems/inference.py` | in-progress | Local-path inference (BL-013): profile-derived latency and energy per request; running totals; `set_continuous_rate` writes through to compute. Cloud path registered via `inference_cloud` (ADR-0034): the `InferenceFallback` ladder routes to the capped Anthropic client and degrades to this mock when the cap is exhausted, comms are down, or the call fails. |
 | `src/nous/subsystems/storage.py` | in-progress | NAND wear and capacity accounting (BL-008): one-shot `write(gib)` and sustained `set_write_rate`; wear inflated by `write_amplification` against a TBW endurance budget. |
-| `src/nous/subsystems/comms.py` | in-progress | Per-link envelopes (BL-012): live RSSI / loss / throughput / age per radio; `tx` resets age; `set_link_state` for scenario overrides; aggregator drives FSM `state.comms_state`. |
+| `src/nous/subsystems/comms.py` | in-progress | Per-link envelopes (BL-012): live RSSI / loss / throughput / age per radio; `tx` resets age and caps the rate at the SNR-derived capacity; `set_link_state` for scenario overrides; aggregator drives FSM `state.comms_state`. A link with a `propagation` block solves its RSSI, loss, and capacity each tick from a first-order link budget over the device-to-peer geometry (BL-048 / ADR 0053); a static link stays at its nominal. |
 | `src/nous/subsystems/position.py` | in-progress | Lat / lon / alt ground truth (BL-010) with dead-reckoning, GNSS fix gating, IMU drift bias. Profile sigmas advertised on the GNSS observation. |
 | `src/nous/subsystems/sensors.py` | in-progress | Ambient temperature, humidity, baro pressure (BL-009). Authoritative ambient source for the thermal subsystem each tick. |
 | `src/nous/subsystems/biometrics.py` | in-progress | Parametric biometrics ground truth (BL-011): HR / core temp / hydration / cognitive load with physiological clamps; profile sigmas advertised on the observation. L2 physiology model still out of scope. |
@@ -136,7 +136,14 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 942 tests pass at HEAD: BL-087 added one (the
+  feature branch before merge. 972 tests pass at HEAD: BL-048 / ADR 0053 added
+  thirty (the propagation link-budget physics and an SNR-monotone property in
+  `tests/unit/test_propagation.py`, the propagation-link, per-link-capacity, and
+  lossy-flush additions across `tests/unit/test_comms_subsystem.py` /
+  `test_comms_estimator.py` / `test_comms_outbox.py`, the strengthened
+  SNR-monotone invariant in `tests/unit/test_subsystem_invariants.py`, and the
+  demo end-to-end in `tests/integration/test_propagation_demo.py`, closing
+  BL-048), on top of the 942 from BL-087, which added one (the
   Monte Carlo `p50` sample-median guard in `tests/unit/test_self_model.py`,
   closing the 2026-06-14 audit's ASSESS-1, the last of the audit's findings), on
   top of the 941 from BL-086 / ADR 0052, which added

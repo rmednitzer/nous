@@ -242,8 +242,16 @@ class Engine:
             self.profile, compute=self.compute, rng=self.rng
         )
         self.storage = StorageSubsystem(self.profile, rng=self.rng)
-        self.comms = CommsSubsystem(self.profile, rng=self.rng)
-        self.outbox = CommsOutbox(self.profile)
+        self.comms = CommsSubsystem(
+            self.profile,
+            rng=self.rng,
+            position_fn=lambda: (
+                self.position.lat,
+                self.position.lon,
+                self.position.alt_m,
+            ),
+        )
+        self.outbox = CommsOutbox(self.profile, rng=self.rng)
         self.position = PositionSubsystem(self.profile, rng=self.rng)
         self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
         self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
@@ -381,8 +389,16 @@ class Engine:
             self.profile, compute=self.compute, rng=self.rng
         )
         self.storage = StorageSubsystem(self.profile, rng=self.rng)
-        self.comms = CommsSubsystem(self.profile, rng=self.rng)
-        self.outbox = CommsOutbox(self.profile)
+        self.comms = CommsSubsystem(
+            self.profile,
+            rng=self.rng,
+            position_fn=lambda: (
+                self.position.lat,
+                self.position.lon,
+                self.position.alt_m,
+            ),
+        )
+        self.outbox = CommsOutbox(self.profile, rng=self.rng)
         self.position = PositionSubsystem(self.profile, rng=self.rng)
         self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
         self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)

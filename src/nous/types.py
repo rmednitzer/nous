@@ -102,6 +102,8 @@ class LinkEstimate(BaseModel):
     rssi_dbm: float
     loss_pct: float
     throughput_bps: float
+    bandwidth_bps: float = 0.0
+    capacity_bps: float = 0.0
 
 
 class TickContext(BaseModel):

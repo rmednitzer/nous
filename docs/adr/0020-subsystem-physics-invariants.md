@@ -53,7 +53,9 @@ Hypothesis with the engine RNG injected per case:
   throttle state. Throttling never increases draw or load.
 - **Comms link envelope.** Throughput is monotonic in SNR
   (loss-monotone in the reverse direction). Link age is monotonic in
-  ticks-since-last-tx.
+  ticks-since-last-tx. The throughput-monotone-in-SNR invariant was a
+  placeholder until BL-048 / ADR 0053 landed the link budget; it is now
+  enforced for a propagation link by `test_comms_capacity_monotone_as_device_moves_away`.
 - **Position.** Under predict-only (fix lost), the Kalman covariance is
   monotone non-decreasing in elapsed time. Under observation, the
   posterior covariance is monotone non-increasing.

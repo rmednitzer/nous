@@ -232,3 +232,53 @@ def test_connected_likelihood_depends_only_on_log_ratio() -> None:
     # A wider ratio is less likely than a tight one (the residual still bites).
     wide = _likelihood_given_connected(8_000.0, 1_000.0, loss_pct=0.0, flag=True)
     assert wide < small
+
+
+def test_capacity_far_above_observed_throughput_lowers_connected_likelihood() -> None:
+    """BL-048 / ADR 0053: with the modeled capacity as the expected throughput, a
+    link carrying far less than its capacity scores lower on the connected
+    hypothesis than one carrying its full capacity. This is the scale
+    sensitivity ADR 0051 recorded as absent under the self-referential expected
+    throughput."""
+    from nous.estimators.comms import _likelihood_given_connected
+
+    matched = _likelihood_given_connected(20_000.0, 20_000.0, loss_pct=0.0, flag=True)
+    starved = _likelihood_given_connected(
+        20_000.0, 2_000_000.0, loss_pct=0.0, flag=True
+    )
+    assert starved < matched
+
+
+def test_estimate_carries_modeled_capacity_from_observation() -> None:
+    f = CommsParticleFilter(seed=1)
+    f.update(
+        _obs(
+            {
+                "link_id": "relay",
+                "rssi_dbm": -78.0,
+                "loss_pct": 2.0,
+                "throughput_bps": 50_000.0,
+                "capacity_bps": 1_000_000.0,
+                "connected": True,
+            }
+        )
+    )
+    est = f.links()[0]
+    assert est.capacity_bps == pytest.approx(1_000_000.0)
+
+
+def test_estimate_capacity_is_zero_without_a_capacity_channel() -> None:
+    f = CommsParticleFilter(seed=1)
+    f.update(
+        _obs(
+            {
+                "link_id": "relay",
+                "rssi_dbm": -78.0,
+                "loss_pct": 2.0,
+                "throughput_bps": 50_000.0,
+                "connected": True,
+            }
+        )
+    )
+    est = f.links()[0]
+    assert est.capacity_bps == pytest.approx(0.0)

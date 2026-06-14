@@ -352,3 +352,59 @@ def test_outbox_package_to_dict_is_json_safe() -> None:
     assert body["precedence"] == "immediate"
     assert body["enqueued_ts_s"] == 1.235
     assert body["expiry_ts_s"] == 11.235
+
+
+# -- BL-048 / ADR 0053: probabilistic delivery over a lossy propagation link --
+
+
+def _lossy_relay_comms() -> CommsSubsystem:
+    """A propagation link driven far enough away to carry a high packet loss."""
+    link: Mapping[str, Any] = {
+        "id": "relay",
+        "bandwidth_bps": 2_000_000,
+        "rssi_dbm_nominal": -80,
+        "loss_pct_nominal": 0.5,
+        "max_age_s": 600.0,
+        "propagation": {
+            "peer": {"lat": 47.0, "lon": 12.98, "alt_m": 520},
+            "tx_power_dbm": 20.0,
+            "frequency_hz": 2.4e9,
+            "excess_loss_db": 5.0,
+            "noise_floor_dbm": -100.0,
+            "good_rssi_dbm": -85.0,
+            "sensitivity_dbm": -115.0,
+        },
+    }
+    comms = CommsSubsystem(
+        {"comms": {"links": [link]}},
+        position_fn=lambda: (47.0, 13.30, 500.0),
+    )
+    comms.step(1.0)  # solve the budget; the relay is now lossy
+    return comms
+
+
+def test_lossy_propagation_link_defers_some_deliveries() -> None:
+    import numpy as np
+
+    comms = _lossy_relay_comms()
+    relay = comms.link("relay")
+    assert relay is not None and relay.loss_pct > 10.0
+
+    profile: dict[str, Any] = {"comms": {"links": []}}
+    ob = CommsOutbox(profile, rng=np.random.default_rng(0))
+    for _ in range(20):
+        ob.enqueue("relay", 100, now_s=0.0)
+    result = ob.flush(comms, now_s=0.0)
+    # The channel lost at least one transmission, so not everything shipped.
+    assert len(result.deferred) >= 1
+
+
+def test_without_rng_flush_is_all_or_nothing() -> None:
+    comms = _lossy_relay_comms()
+    profile: dict[str, Any] = {"comms": {"links": []}}
+    ob = CommsOutbox(profile)  # no rng: probabilistic loss is off
+    for _ in range(20):
+        ob.enqueue("relay", 100, now_s=0.0)
+    result = ob.flush(comms, now_s=0.0)
+    assert len(result.delivered) == 20
+    assert result.deferred == []

@@ -46,8 +46,10 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
 if TYPE_CHECKING:
-    from ..subsystems.comms import CommsSubsystem
+    from ..subsystems.comms import CommsSubsystem, Link
 
 __all__ = [
     "CommsOutbox",
@@ -191,12 +193,21 @@ class CommsOutbox:
     working unchanged.
     """
 
-    def __init__(self, profile: Mapping[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        profile: Mapping[str, Any] | None = None,
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         cfg = _outbox_cfg(profile)
         self.enabled: bool = cfg["enabled"]
         self.max_packages: int = cfg["max_packages"]
         self.max_bytes: int = cfg["max_bytes"]
         self.default_ttl_s: float | None = cfg["default_ttl_s"]
+        # BL-048 / ADR 0053: the engine RNG seam for probabilistic delivery over
+        # a lossy propagation link. ``None`` (the default, and every bare-profile
+        # test) keeps the flush all-or-nothing.
+        self._rng = rng
         self._packages: list[OutboxPackage] = []
         self._next_id = 1
         self._queued_bytes = 0
@@ -327,6 +338,15 @@ class CommsOutbox:
                 closed.add(pkg.link_id)
                 result.deferred.append(pkg.package_id)
                 continue
+            if self._delivery_lost(link):
+                # BL-048 / ADR 0053: a propagation link with packet loss can drop
+                # this transmission. The package stays queued (a retry next tick)
+                # and the link closes for the rest of this flush, so the loss
+                # does not let a lower-precedence package jump ahead.
+                pkg.attempts += 1
+                closed.add(pkg.link_id)
+                result.deferred.append(pkg.package_id)
+                continue
             accepted = comms.tx(pkg.link_id, pkg.size_bytes)
             if accepted <= 0:
                 pkg.attempts += 1
@@ -365,6 +385,20 @@ class CommsOutbox:
             link.link_id: link_per_tick_budget(link.bandwidth_bps, dt) for link in comms
         }
         return self.flush(comms, now_s=now_s, link_budget_bytes=budget)
+
+    def _delivery_lost(self, link: Link) -> bool:
+        """Bernoulli packet-loss draw for a lossy propagation link.
+
+        Active only when an RNG is injected and the link carries a propagation
+        model (a static link's nominal loss is an envelope, not a per-tick loss
+        process), so the all-or-nothing flush is unchanged everywhere else.
+        """
+        if self._rng is None or link.propagation is None:
+            return False
+        loss = max(0.0, min(100.0, float(link.loss_pct)))
+        if loss <= 0.0:
+            return False
+        return float(self._rng.random()) < loss / 100.0
 
     # -- reads -----------------------------------------------------------
 
