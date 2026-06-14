@@ -115,3 +115,12 @@ comms:
       rssi_dbm_nominal: -85
       loss_pct_nominal: 1.0
       max_age_s: 60
+  # Store-and-forward outbox (BL-077, ADR 0047). Optional: with this section
+  # absent the outbox runs at the same defaults. Packages queued while a link
+  # is degraded or denied are held and drained in precedence order as the link
+  # recovers, instead of being dropped.
+  outbox:
+    enabled: true
+    max_packages: 256
+    max_bytes: 1048576        # 1 MiB total store-and-forward budget
+    default_ttl_s: 300        # drop a queued package unsent after 5 minutes

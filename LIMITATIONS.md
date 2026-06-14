@@ -167,15 +167,22 @@ instance) is not supported.
 **Tracking.** Out of scope for v0.1. Multi-tenant is `[planned]` for L3 in
 [BL-045].
 
-## L12. No mesh, no DTN
+## L12. Single-hop store-and-forward only, no mesh or DTN
 
-**State.** Comms are point-to-point. There is no mesh networking, no
-delay-tolerant networking (DTN), and no store-and-forward.
+**State.** Comms are point-to-point. A single-hop store-and-forward outbox
+now holds outbound packages when a link is degraded or denied and drains
+them in precedence order as the link recovers (BL-077, ADR 0047), so C2
+traffic can survive a radio blackout on the link it was queued for. What is
+still absent is the full delay-tolerant-networking layer: no mesh routing,
+no multi-hop custody transfer, no BPv7 bundle format, and no replay.
 
-**Implication.** A scenario that needs DTN (e.g. C2 traffic surviving a
-long radio blackout) has to live with the link being denied.
+**Implication.** A package queued for a denied link is held and delivered
+when that link returns, but there is no second path: a scenario that needs
+the message to reach the controller over a different node or a relayed hop,
+rather than over the original link recovering, is not modelled.
 
-**Tracking.** Out of scope for v0.1.
+**Tracking.** Single-hop outbox done under BL-077; the full DTN layer is
+BL-056 (planned, L3).
 
 ## L13. Linear-Gaussian estimators only
 

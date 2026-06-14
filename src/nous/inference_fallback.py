@@ -13,8 +13,11 @@ Order of preference (when ``call_cloud`` is requested):
 2. ``cloud`` if the cap is not exhausted and the comms estimator's
    label is ``LIMITED`` (best effort).
 3. ``local_mock`` (always available -- the simulator's deterministic
-   fallback). Returns a structured response that downstream controllers
-   can treat as a degraded answer rather than a transient error.
+   fallback). A ``DENIED`` or ``DEGRADED`` comms label routes here
+   directly without attempting the cloud, as do an exhausted cap and a
+   failed cloud call. Returns a structured response that downstream
+   controllers can treat as a degraded answer rather than a transient
+   error.
 
 A controller that requested ``call_cloud`` but ended up on the local
 mock is informed via the ``path`` field on the response. The runner
