@@ -839,7 +839,8 @@ class TestRun1CaughtErrorStampsExitCode:
                 policy_mode=PolicyMode.OPEN,
             )
         )
-        assert body == "[error RuntimeError: boom]"
+        # Body is the class name only since ADR 0055; the message is redacted.
+        assert body == "[error RuntimeError]"
         audit.flush()
         record = json.loads(
             Path(audit.path).read_text(encoding="utf-8").strip().splitlines()[-1]
@@ -873,4 +874,61 @@ class TestRun1CaughtErrorStampsExitCode:
             Path(audit.path).read_text(encoding="utf-8").strip().splitlines()[-1]
         )
         assert record.get("exit_code") is None
+        assert record["denied"] is False
+
+
+class TestHigh1RunnerRedactsCaughtExceptionBody:
+    """HIGH-1: a caught worker error must not return its message to the caller.
+
+    Original defect (``docs/audit-2026-06-14b.md`` HIGH-1): the runner's
+    caught-exception body was ``f"[error {cls}: {exc}]"``, the raw ``str(exc)``
+    truncated but never redacted, and that body is returned to the MCP caller.
+    A backend failure on a read-only call (``state_get`` / ``state_history``
+    reach the database) raises an exception whose message can embed the
+    ``NOUS_DB_URL`` data source: host, user, and password. So an admitted
+    read-only caller could read a credential out of an error body.
+
+    Fix (ADR 0055): the body carries only the exception class; the full detail
+    goes to stderr. The ADR 0048 ``exit_code=1`` / ``denied=False`` contract is
+    unchanged.
+    """
+
+    def test_credential_shaped_message_does_not_reach_the_caller(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        import asyncio
+
+        from nous.audit import AuditLogger
+        from nous.policy import PolicyMode
+        from nous.runner import run
+
+        audit = AuditLogger(tmp_path / "audit.jsonl")
+        secret = "postgresql://nous:hunter2@db.internal:5432/nous"
+
+        async def _raises() -> str:
+            raise RuntimeError(f"could not connect: {secret}")
+
+        body = asyncio.run(
+            run(
+                tool="device_info",
+                args={},
+                work=_raises,
+                audit=audit,
+                policy_mode=PolicyMode.READONLY,
+            )
+        )
+        # The secret, the URL, and the message never reach the caller.
+        assert "hunter2" not in body
+        assert secret not in body
+        assert "could not connect" not in body
+        # The class name survives, enough to route to the right *_status read.
+        assert body == "[error RuntimeError]"
+        # The full detail is on stderr for an operator with host access.
+        assert secret in capsys.readouterr().err
+        # The ADR 0048 typed contract is intact: abnormal, not a denial.
+        audit.flush()
+        record = json.loads(
+            Path(audit.path).read_text(encoding="utf-8").strip().splitlines()[-1]
+        )
+        assert record["exit_code"] == 1
         assert record["denied"] is False

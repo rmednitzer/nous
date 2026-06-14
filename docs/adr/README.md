@@ -57,3 +57,4 @@
 | 0052 | [Name the interop freshness gate's configuration faults distinctly from staleness](0052-interop-freshness-gate-failure-modes.md) | Accepted | 2026-06-14 |
 | 0053 | [Propagation-aware comms link quality](0053-propagation-aware-comms-model.md) | Accepted | 2026-06-14 |
 | 0054 | [Higher-fidelity comms propagation (path loss, diffraction, noise, antenna, fading)](0054-higher-fidelity-propagation.md) | Accepted | 2026-06-14 |
+| 0055 | [Redact the runner's caught-exception body to the exception class](0055-runner-redacts-caught-exception-body.md) | Accepted | 2026-06-14 |

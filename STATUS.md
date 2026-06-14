@@ -87,7 +87,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0054` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0055` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -101,7 +101,7 @@ re-audit).
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). The chain head tracks the on-disk tail, not the fsync confirmation, so it advances for every emitted record while durability is tracked separately (ADR 0050). Changes require an ADR. |
 | `src/nous/audit_anchor.py` | in-progress | Daily anchor over the chain head (ADR 0026 / BL-031): `AnchorLog` appends one hash-linked anchor per UTC day, and `verify_anchors` (the `audit_anchor_verify` tool) cross-checks anchored heads against the chain across logrotate segments to catch tail truncation within the retention window. |
-| `src/nous/runner.py` | stable | Audited execution wrapper. The audit `exit_code` is two-valued: `None` for a normal return, `1` for an abnormal outcome (a policy denial or a caught worker error), with `denied` separating the two (ADR 0048). Changes require an ADR. |
+| `src/nous/runner.py` | stable | Audited execution wrapper. The audit `exit_code` is two-valued: `None` for a normal return, `1` for an abnormal outcome (a policy denial or a caught worker error), with `denied` separating the two (ADR 0048). A caught worker error's body carries only the exception class; the full detail goes to stderr so a backend error message cannot leak credentials to the caller (ADR 0055). Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/safety/enforcer.py` | in-progress | Runtime safety enforcer (ADR 0022): `SafetyEnforcer.check` returns a structured `SafetyResult` (approved / clamped / evidence) and counts per-constraint and total violations; `floor_threshold` and `ceiling_clamp` cover the SC-2 refusal and throttle-clamp shapes. The FSM now routes its entry gates through it (SC-2 thermal + SC-8 power, registered via `register_fsm_constraints`), the engine mirrors every check to the audit log under `Tier.SAFETY`, and the tick-driven auto-safing (ADR 0027/0028) drives the FSM toward safety on a violation. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. The cloud call carries model-tier selection, capability-guarded adaptive thinking, and streaming for long generations (BL-069 / ADR 0035). The cap counter's spend path (`increment`) and status path (`peek`) parse through one helper so they fail closed together on a corrupt counter; `peek` returns a `CapReading` (ADR 0049). Changes require an ADR. |
@@ -137,7 +137,11 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 991 tests pass at HEAD: BL-088 / ADR 0054 added
+  feature branch before merge. 993 tests pass at HEAD: BL-090 / ADR 0055 added
+  two (the runner caught-exception redaction regression in
+  `tests/regression/test_audit_findings.py`, closing the 2026-06-14b audit's
+  HIGH-1, plus a single-line stderr-echo check in `tests/unit/test_runner.py`),
+  on top of the 991 from BL-088 / ADR 0054, which added
   eighteen (the higher-fidelity link-budget functions, the log-distance / knife
   edge / antenna / kTB-noise / Rician-fade physics, the
   reduces-to-ADR-0053-at-defaults checks, and the fail-conservative noise-config
