@@ -501,8 +501,10 @@ class AuditLogger:
                 with contextlib.suppress(Exception):
                     self.last_write_ts_s = time.time()
         except OSError as exc:
-            # The emit itself raised: nothing reached the file, so the head
-            # must not advance -- the next record links to the prior line.
+            # The write path raised, so we cannot assume a complete, linkable
+            # record was appended (a flush can fail mid-write). The head must
+            # not advance: the next record links to the last record we know
+            # reached the file, and the sink is marked degraded.
             self.fsync_failures += 1
             self.degraded = True
             self.degraded_reason = str(exc)
