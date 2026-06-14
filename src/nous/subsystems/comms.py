@@ -178,8 +178,10 @@ class CommsSubsystem:
         A transmission on a link that the controller has forced down is
         rejected (returns 0). Otherwise ``age_s`` is reset to 0 and
         ``throughput_bps`` is updated to the achieved rate: the bits sent over
-        the interval since this link last transmitted, capped at the link
-        bandwidth (audit COMMS-3, ADR 0051).
+        the interval since this link last transmitted, capped at the link's
+        sustainable ``capacity_bps`` (the rated bandwidth for a static link, the
+        SNR-derived capacity for a propagation link; achieved-rate audit COMMS-3 /
+        ADR 0051, the capacity cap per BL-048 / ADR 0053).
         """
         link = self._links.get(link_id)
         if link is None:

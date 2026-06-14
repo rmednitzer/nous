@@ -368,9 +368,11 @@ class CommsOutbox:
 
         Called from the engine tick after the comms subsystem has stepped, so a
         link that recovered this tick drains immediately. The per-link budget is
-        ``bandwidth_bps * dt / 8`` bytes, which rate-limits a slow link (a
-        recovered LoRa link clears a few kilobytes a tick, not its whole
-        backlog) while a fat link clears everything that fits.
+        ``capacity_bps * dt / 8`` bytes, the link's SNR-derived sustainable rate
+        (equal to the rated bandwidth for a static link, and shrinking on a
+        degraded propagation link per BL-048 / ADR 0053), which rate-limits a
+        slow link (a recovered LoRa link clears a few kilobytes a tick, not its
+        whole backlog) while a fat link clears everything that fits.
         """
         if not self.enabled or not self._packages:
             # Still purge expiry so a disabled-after-fill or idle outbox does
@@ -382,7 +384,7 @@ class CommsOutbox:
                 result.expired.append(pkg.package_id)
             return result
         budget: dict[str, float] = {
-            link.link_id: link_per_tick_budget(link.bandwidth_bps, dt) for link in comms
+            link.link_id: link_per_tick_budget(link.capacity_bps, dt) for link in comms
         }
         return self.flush(comms, now_s=now_s, link_budget_bytes=budget)
 
@@ -567,10 +569,11 @@ def _coerce_ttl(value: Any, fallback: float | None) -> float | None:
     return out
 
 
-def link_per_tick_budget(bandwidth_bps: float, dt_s: float) -> float:
-    """Bytes a link can carry in one tick at its nominal bandwidth.
+def link_per_tick_budget(rate_bps: float, dt_s: float) -> float:
+    """Bytes a link can carry in one tick at a given rate.
 
-    Exposed for the flush tool and tests so the per-tick rate-limit is computed
-    one way everywhere.
+    The rate is the link's SNR-derived ``capacity_bps``, which equals the rated
+    bandwidth for a static link (BL-048 / ADR 0053). Exposed for the flush tool
+    and tests so the per-tick rate-limit is computed one way everywhere.
     """
-    return max(0.0, float(bandwidth_bps) * float(dt_s) / 8.0)
+    return max(0.0, float(rate_bps) * float(dt_s) / 8.0)

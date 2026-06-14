@@ -357,9 +357,8 @@ def test_outbox_package_to_dict_is_json_safe() -> None:
 # -- BL-048 / ADR 0053: probabilistic delivery over a lossy propagation link --
 
 
-def _lossy_relay_comms() -> CommsSubsystem:
-    """A propagation link driven far enough away to carry a high packet loss."""
-    link: Mapping[str, Any] = {
+def _relay_link() -> Mapping[str, Any]:
+    return {
         "id": "relay",
         "bandwidth_bps": 2_000_000,
         "rssi_dbm_nominal": -80,
@@ -371,22 +370,32 @@ def _lossy_relay_comms() -> CommsSubsystem:
             "frequency_hz": 2.4e9,
             "excess_loss_db": 5.0,
             "noise_floor_dbm": -100.0,
+            "snr_floor_db": 5.0,
+            "snr_full_db": 20.0,
             "good_rssi_dbm": -85.0,
             "sensitivity_dbm": -115.0,
         },
     }
+
+
+def _relay_comms_at(lon: float) -> CommsSubsystem:
+    """A propagation-linked subsystem with the device at the given longitude.
+
+    Nearer the relay (smaller lon delta from 12.98) is a healthier, higher-
+    capacity link; further east is lossier with less capacity.
+    """
     comms = CommsSubsystem(
-        {"comms": {"links": [link]}},
-        position_fn=lambda: (47.0, 13.30, 500.0),
+        {"comms": {"links": [_relay_link()]}},
+        position_fn=lambda: (47.0, lon, 500.0),
     )
-    comms.step(1.0)  # solve the budget; the relay is now lossy
+    comms.step(1.0)  # solve the budget
     return comms
 
 
 def test_lossy_propagation_link_defers_some_deliveries() -> None:
     import numpy as np
 
-    comms = _lossy_relay_comms()
+    comms = _relay_comms_at(13.30)
     relay = comms.link("relay")
     assert relay is not None and relay.loss_pct > 10.0
 
@@ -400,7 +409,7 @@ def test_lossy_propagation_link_defers_some_deliveries() -> None:
 
 
 def test_without_rng_flush_is_all_or_nothing() -> None:
-    comms = _lossy_relay_comms()
+    comms = _relay_comms_at(13.30)
     profile: dict[str, Any] = {"comms": {"links": []}}
     ob = CommsOutbox(profile)  # no rng: probabilistic loss is off
     for _ in range(20):
@@ -408,3 +417,28 @@ def test_without_rng_flush_is_all_or_nothing() -> None:
     result = ob.flush(comms, now_s=0.0)
     assert len(result.delivered) == 20
     assert result.deferred == []
+
+
+def test_flush_tick_budget_tracks_capacity_not_bandwidth() -> None:
+    """ADR 0053 (Copilot review): the per-tick drain budget is the link's
+    SNR-derived capacity, so a propagation link whose capacity has fallen below
+    its rated bandwidth does not drain faster than it can sustain. A static link
+    is unchanged because its capacity equals its bandwidth."""
+    comms = _relay_comms_at(13.0)  # healthy (low loss) but capacity < bandwidth
+    relay = comms.link("relay")
+    assert relay is not None
+    assert 0.0 < relay.capacity_bps < relay.bandwidth_bps
+    assert relay.loss_pct < 5.0  # loss is not the limiter here, the budget is
+
+    profile: dict[str, Any] = {"comms": {"links": []}}
+    ob = CommsOutbox(profile)  # no rng: isolate the budget from probabilistic loss
+    for _ in range(40):
+        ob.enqueue("relay", 10_000, now_s=0.0)
+    result = ob.flush_tick(comms, dt=1.0, now_s=0.0)
+
+    cap_budget = relay.capacity_bps / 8.0
+    bandwidth_budget = relay.bandwidth_bps / 8.0
+    # Drains within the capacity budget (one package of slack), well under the
+    # larger bandwidth budget the pre-fix code would have allowed.
+    assert result.delivered_bytes <= cap_budget + 10_000
+    assert result.delivered_bytes < bandwidth_budget

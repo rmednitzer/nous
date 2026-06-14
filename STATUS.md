@@ -136,14 +136,15 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 972 tests pass at HEAD: BL-048 / ADR 0053 added
-  thirty (the propagation link-budget physics and an SNR-monotone property in
-  `tests/unit/test_propagation.py`, the propagation-link, per-link-capacity, and
-  lossy-flush additions across `tests/unit/test_comms_subsystem.py` /
-  `test_comms_estimator.py` / `test_comms_outbox.py`, the strengthened
-  SNR-monotone invariant in `tests/unit/test_subsystem_invariants.py`, and the
-  demo end-to-end in `tests/integration/test_propagation_demo.py`, closing
-  BL-048), on top of the 942 from BL-087, which added one (the
+  feature branch before merge. 973 tests pass at HEAD: BL-048 / ADR 0053 added
+  thirty-one (the propagation link-budget physics and an SNR-monotone property
+  in `tests/unit/test_propagation.py`, the propagation-link, per-link-capacity,
+  lossy-flush, and capacity-drain-budget additions across
+  `tests/unit/test_comms_subsystem.py` / `test_comms_estimator.py` /
+  `test_comms_outbox.py`, the strengthened SNR-monotone invariant in
+  `tests/unit/test_subsystem_invariants.py`, and the demo end-to-end in
+  `tests/integration/test_propagation_demo.py`, closing BL-048), on top of the
+  942 from BL-087, which added one (the
   Monte Carlo `p50` sample-median guard in `tests/unit/test_self_model.py`,
   closing the 2026-06-14 audit's ASSESS-1, the last of the audit's findings), on
   top of the 941 from BL-086 / ADR 0052, which added
