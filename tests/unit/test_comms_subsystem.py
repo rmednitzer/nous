@@ -57,6 +57,45 @@ def test_age_out_after_max_age_s() -> None:
     assert lte.throughput_bps == pytest.approx(0.0)
 
 
+def test_age_out_is_counted_and_stamped() -> None:
+    # COMMS-2: the connected -> aged-out transition is stamped so a controller
+    # can see the drop (and a flap a coarse poll missed) via comms_status.
+    c = CommsSubsystem(_profile())
+    c.step(31.0)
+    lte = c.link("lte")
+    assert lte is not None
+    assert lte.age_out_count == 1
+    assert lte.last_aged_out_at_s == pytest.approx(31.0)
+    # Staying aged out across further ticks does not re-count the transition.
+    c.step(5.0)
+    assert lte.age_out_count == 1
+    # A transmission revives the link; the next age-out is a fresh transition.
+    c.tx("lte", 1000)
+    c.step(31.0)
+    assert lte.age_out_count == 2
+    assert lte.last_aged_out_at_s == pytest.approx(67.0)
+
+
+def test_age_out_count_surfaces_in_truth() -> None:
+    c = CommsSubsystem(_profile())
+    c.step(31.0)
+    truth = c.truth()
+    lte_row = next(row for row in truth["links"] if row["link_id"] == "lte")
+    assert lte_row["age_out_count"] == 1
+    assert lte_row["last_aged_out_at_s"] == pytest.approx(31.0)
+
+
+def test_forced_down_link_does_not_count_as_age_out() -> None:
+    # A controller-forced disconnect is not an age-out; the counter stays 0.
+    c = CommsSubsystem(_profile())
+    c.set_link_state("lte", connected=False)
+    c.step(31.0)
+    lte = c.link("lte")
+    assert lte is not None
+    assert lte.age_out_count == 0
+    assert lte.last_aged_out_at_s is None
+
+
 def test_tx_resets_age_and_marks_live() -> None:
     c = CommsSubsystem(_profile())
     c.step(31.0)
