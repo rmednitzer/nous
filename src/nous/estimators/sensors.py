@@ -1,22 +1,24 @@
 """Environmental sensor Kalman filter (BL-009).
 
-Multi-channel 1-D Kalman over (temp_c, humidity_pct, baro_kpa). The
-environmental sensor pack is slowly varying under typical mission
-profiles, so per-second process variance is small; the filter folds
-the noisy observation toward the prior via a Kalman gain sized by the
-profile's advertised sigmas and resyncs its clock to ``obs.ts_s``.
+Per-channel scalar Kalman over (temp_c, humidity_pct, baro_kpa). The
+environmental pack is slowly varying under typical mission profiles, so the
+per-second process variance is small; each channel folds the observation
+through a gated Kalman update sized by the profile's advertised sigmas,
+floors its posterior variance, and resyncs its clock to ``obs.ts_s``.
 
-Out-of-range or non-finite readings are rejected without poisoning
-the central estimate (matches the validation contract from
+Out-of-range or non-finite readings are refused before the filter sees them
+(matching the validation contract of
 :class:`~nous.estimators.position.PositionKalman` and
-:class:`~nous.estimators.biometrics.BiometricsKalman`).
+:class:`~nous.estimators.biometrics.BiometricsKalman`) and counted as
+rejections in the health block.
 """
 
 from __future__ import annotations
 
 import math
 
-from ..types import Estimate, Observation
+from ..types import Estimate, EstimatorHealth, Observation
+from .health import ChannelSpec, ScalarChannel, build_health, parse_bounded
 
 __all__ = ["EnvironmentalKalman"]
 
@@ -44,15 +46,21 @@ _INITIAL_POINT: dict[str, float] = {
 
 
 class EnvironmentalKalman:
-    """1-D Kalman per channel over (temp_c, humidity_pct, baro_kpa)."""
+    """Gated scalar Kalman per channel over (temp_c, humidity_pct, baro_kpa)."""
 
     name: str = "sensors"
 
     def __init__(self) -> None:
         self._t = 0.0
-        self._point: dict[str, float] = dict(_INITIAL_POINT)
-        self._var: dict[str, float] = dict(_INITIAL_VAR)
         self._rejected = 0
+        self._channels: dict[str, ScalarChannel] = {
+            key: ScalarChannel(
+                _INITIAL_POINT[key],
+                _INITIAL_VAR[key],
+                ChannelSpec(process_var_per_s=_PROCESS_SIGMA[key] ** 2),
+            )
+            for key in _BOUNDS
+        }
 
     @property
     def rejected_updates(self) -> int:
@@ -62,30 +70,20 @@ class EnvironmentalKalman:
         if dt <= 0.0:
             return
         self._t += dt
-        for key, sigma in _PROCESS_SIGMA.items():
-            self._var[key] += (sigma**2) * dt
+        for channel in self._channels.values():
+            channel.predict(dt)
 
     def update(self, obs: Observation) -> None:
-        for key, raw in obs.payload.items():
-            if key not in _BOUNDS:
-                continue
-            try:
-                v = float(raw)
-            except (TypeError, ValueError):
-                self._rejected += 1
+        for key, channel in self._channels.items():
+            if key not in obs.payload:
                 continue
             lo, hi = _BOUNDS[key]
-            if not math.isfinite(v) or not lo <= v <= hi:
+            z = parse_bounded(obs.payload[key], lo, hi)
+            if z is None:
                 self._rejected += 1
                 continue
             r = float(obs.noise.get(f"{key}_sigma", 0.0)) ** 2
-            if r > 0.0:
-                denom = self._var[key] + r
-                k = self._var[key] / denom
-                self._point[key] = (1.0 - k) * self._point[key] + k * v
-                self._var[key] = (1.0 - k) * self._var[key]
-            else:
-                self._point[key] = v
+            channel.fuse(z, r)
         try:
             ts = float(obs.ts_s)
         except (TypeError, ValueError):
@@ -93,10 +91,14 @@ class EnvironmentalKalman:
         if math.isfinite(ts) and ts >= 0.0:
             self._t = ts
 
+    def health(self) -> EstimatorHealth:
+        return build_health(self._channels, rejected_extra=self._rejected)
+
     def state(self) -> Estimate:
         return Estimate(
             source=self.name,
             ts_s=self._t,
-            point=dict(self._point),
-            covariance=dict(self._var),
+            point={key: c.value for key, c in self._channels.items()},
+            covariance={key: c.var for key, c in self._channels.items()},
+            health=self.health(),
         )

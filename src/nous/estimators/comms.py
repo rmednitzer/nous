@@ -29,7 +29,7 @@ from collections.abc import Iterable
 
 import numpy as np
 
-from ..types import Estimate, LinkEstimate, Observation
+from ..types import Estimate, EstimatorHealth, LinkEstimate, Observation
 
 __all__ = ["CommsParticleFilter", "LinkBelief"]
 
@@ -52,6 +52,7 @@ class LinkBelief:
 
     __slots__ = (
         "_rng",
+        "collapses",
         "expected_throughput_bps",
         "link_id",
         "loss_pct",
@@ -84,6 +85,7 @@ class LinkBelief:
         self.loss_pct = 0.0
         self.throughput_bps = 0.0
         self.expected_throughput_bps = 0.0
+        self.collapses = 0
         self._rng = rng
 
     def belief(self) -> float:
@@ -141,6 +143,10 @@ class LinkBelief:
         new_weights = self.weights * likelihoods
         total = float(np.sum(new_weights))
         if total <= 0.0 or not math.isfinite(total):
+            # Degenerate likelihood: the ensemble carries no information about
+            # this observation. Reset to a uniform prior and count it, the
+            # particle-filter analog of a covariance reset.
+            self.collapses += 1
             self.weights.fill(1.0 / self.weights.size)
         else:
             self.weights = new_weights / total
@@ -180,6 +186,7 @@ class CommsParticleFilter:
         self._rng = rng if rng is not None else np.random.default_rng(int(seed))
         self._links: dict[str, LinkBelief] = {}
         self._link_estimates: dict[str, LinkEstimate] = {}
+        self._last_update_healthy = True
 
     @property
     def particles(self) -> int:
@@ -193,6 +200,7 @@ class CommsParticleFilter:
             belief.predict()
 
     def update(self, obs: Observation) -> None:
+        collapses_before = sum(b.collapses for b in self._links.values())
         seen: set[str] = set()
         for entry in obs.payload.get("links") or []:
             if not isinstance(entry, dict):
@@ -233,6 +241,9 @@ class CommsParticleFilter:
                 missing, _link_estimate_from_belief(self._links[missing])
             )
 
+        collapses_after = sum(b.collapses for b in self._links.values())
+        self._last_update_healthy = collapses_after == collapses_before
+
         try:
             ts = float(obs.ts_s)
         except (TypeError, ValueError):
@@ -247,6 +258,21 @@ class CommsParticleFilter:
         """Return the posterior P(connected) for ``link_id`` or ``None``."""
         belief = self._links.get(link_id)
         return belief.belief() if belief is not None else None
+
+    def health(self) -> EstimatorHealth:
+        """Filter health from particle-weight collapse.
+
+        A non-Gaussian filter has no innovation test ratio, so the health
+        block reports the events that matter for a particle ensemble: a
+        weight collapse to the uniform prior (the reset-count) and whether the
+        most recent update suffered one (the health flag).
+        """
+        resets = sum(b.collapses for b in self._links.values())
+        return EstimatorHealth(
+            healthy=self._last_update_healthy,
+            fused=bool(self._links),
+            reset_count=resets,
+        )
 
     def state(self) -> Estimate:
         connected_count = 0
@@ -271,6 +297,7 @@ class CommsParticleFilter:
                 "total_links": 0.0,
                 "connected_links_belief": variance_sum,
             },
+            health=self.health(),
         )
 
 
