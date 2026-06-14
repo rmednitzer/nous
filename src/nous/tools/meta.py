@@ -26,7 +26,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
 
     @mcp.tool()
     async def device_info(ctx: Context | None = None) -> str:
-        """Report nous version, profile, transport, policy, audit/anchor paths, safety posture."""
+        """Report version, profile, transport, policy, audit/anchor, persistence, safety posture."""
 
         async def _work() -> str:
             info = {
@@ -42,6 +42,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                     "anchor_path": app.anchor.path,
                     "anchor_degraded": app.anchor.degraded,
                 },
+                "persistence": app.transition_log.status(),
                 "safety": app.engine.safety.posture(),
             }
             return json.dumps(info, indent=2)

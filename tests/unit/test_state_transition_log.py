@@ -48,6 +48,40 @@ def test_no_engine_means_no_op() -> None:
     assert log.append_failures == 0
 
 
+def test_memory_only_log_is_not_degraded() -> None:
+    # The intentional no-DB mode (pure-Python engine) is healthy, not degraded.
+    log = StateTransitionLog(None)
+    assert log.degraded is False
+    status = log.status()
+    assert status["persistent"] is False
+    assert status["degraded"] is False
+    assert status["init_error"] == ""
+
+
+def test_failed_init_is_degraded(db_path: Path) -> None:
+    # AUDIT-2026-06-14 DB-1: a swallowed init_db failure must be observable.
+    log = StateTransitionLog(None, init_error="OperationalError: unable to open database file")
+    assert log.degraded is True
+    status = log.status()
+    assert status["persistent"] is False
+    assert status["degraded"] is True
+    assert "OperationalError" in status["init_error"]
+
+
+def test_live_log_degrades_on_append_failure(db_path: Path) -> None:
+    from sqlmodel import SQLModel
+
+    engine = init_db(f"sqlite:///{db_path}")
+    log = StateTransitionLog(engine)
+    assert log.degraded is False
+    # Drop the table out from under the log so the next append fails for real.
+    SQLModel.metadata.drop_all(engine)
+    log.append(from_mode="a", to_mode="b", trigger="x")
+    assert log.append_failures == 1
+    assert log.degraded is True
+    assert log.status()["last_error"] != ""
+
+
 def test_engine_persists_boot_transition(
     tmp_nous_home: Path, db_path: Path
 ) -> None:

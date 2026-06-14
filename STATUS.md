@@ -136,8 +136,11 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 903 tests pass at HEAD: BL-077 / ADR 0047 added
-  thirty-five (the store-and-forward outbox core in
+  feature branch before merge. 910 tests pass at HEAD: BL-078 added five (the
+  persistence-health distinction in `tests/unit/test_state_transition_log.py`
+  and the `device_info` surfacing in `tests/integration/test_persistence_status.py`,
+  closing the 2026-06-14 audit's DB-1), on top of the 905 from BL-077 / ADR 0047,
+  which added thirty-seven (the store-and-forward outbox core in
   `tests/unit/test_comms_outbox.py`: precedence ordering, eviction, expiry,
   flush budget, and head-of-line blocking, plus the three outbox tools and the
   tick-driven drain across recovery in

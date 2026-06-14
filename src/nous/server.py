@@ -10,6 +10,7 @@ the full surface and ``docs/backlog.md`` for the BL-NNN tracker.
 from __future__ import annotations
 
 import contextlib
+import sys
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -65,11 +66,15 @@ class Nous:
         self.audit = AuditLogger(str(settings.resolved_audit_path()))
         self.anchor = AnchorLog(str(settings.resolved_anchor_path()))
         db_engine = None
+        db_init_error = ""
         try:
             db_engine = init_db(settings.resolved_db_url())
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             db_engine = None
-        self.transition_log = StateTransitionLog(db_engine)
+            db_init_error = f"{exc.__class__.__name__}: {exc}"
+            with contextlib.suppress(Exception):
+                sys.stderr.write(f"state DB init failed: {db_init_error}\n")
+        self.transition_log = StateTransitionLog(db_engine, init_error=db_init_error)
         self.engine = Engine(
             settings=settings, transition_log=self.transition_log, audit=self.audit
         )
