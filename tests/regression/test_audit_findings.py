@@ -122,6 +122,9 @@ class TestCap1PeekAgreesWithIncrement:
             "not valid json",
             '{"date": "REPLACE", "count": "lots"}',
             '{"date": "REPLACE", "count": [1, 2]}',
+            '{"date": "REPLACE", "count": -5}',
+            '{"date": "REPLACE", "count": 0.5}',
+            '{"date": "REPLACE", "count": true}',
         ],
     )
     def test_corrupt_counter_refused_and_reported_corrupt(

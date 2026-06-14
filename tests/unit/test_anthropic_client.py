@@ -189,6 +189,18 @@ def test_peek_reports_corrupt_on_non_integer_count(tmp_path: Path) -> None:
     assert CallCap(path, cap=5).peek().corrupt is True
 
 
+def test_peek_reports_corrupt_on_negative_count(tmp_path: Path) -> None:
+    # A well-formed JSON object whose count is out of domain (negative, or a
+    # bool/float that int() would otherwise coerce) is corrupt, not coerced:
+    # the counter file is attacker-clobberable, so a bad value must fail closed.
+    path = tmp_path / "cap.json"
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    path.write_text(json.dumps({"date": today, "count": -1}))
+    assert CallCap(path, cap=5).peek().corrupt is True
+    with pytest.raises(CapExhausted, match="corrupt"):
+        CallCap(path, cap=5).increment()
+
+
 def test_peek_fresh_on_non_dict_json(tmp_path: Path) -> None:
     # Valid JSON that is not an object is the one shape increment() rewrites
     # as a fresh day rather than refusing, so peek must agree: count 0, intact.

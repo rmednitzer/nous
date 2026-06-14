@@ -16,9 +16,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   was being silently downgraded to the local mock. Both readers now parse
   through one `_parse_count` helper, so they cannot drift: a corrupt counter
   makes `peek` return a `CapReading` with `corrupt=True`, and the tool reports
-  `available: false` / `exhausted: true` / `corrupt: true` / `count_today:
-  null`. `increment` also fails closed uniformly, raising `CapExhausted` on a
-  non-integer `count` where it previously leaked a raw `ValueError`. High-blast
+  `available: false` / `exhausted: true` / `corrupt: true` /
+  `count_today: null`. `increment` also fails closed uniformly, rejecting a
+  malformed `count` (a non-integer or negative value) where it previously
+  coerced it or leaked a raw `ValueError`. High-blast
   surface (`anthropic_client.py`), so behind ADR 0049; `peek` returns
   `CapReading` rather than a tuple (four in-repo call sites updated), while
   `increment` keeps its tuple. Pinned by `tests/unit/test_anthropic_client.py`,

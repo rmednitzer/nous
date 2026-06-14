@@ -33,7 +33,11 @@ Route both readers through one parse helper, `_parse_count`, so they cannot
 drift again. The helper returns `0` for the cases `increment()` already treats
 as a fresh day (an empty file, valid JSON that is not an object, or a line
 dated before today) and raises an internal `_CorruptCounter` for the cases
-`increment()` must refuse (non-JSON, or a non-integer `count`).
+`increment()` must refuse: non-JSON, or a `count` that is not a non-negative
+`int`. The `count` is validated strictly rather than coerced, so a bool, a
+float, a string, or a negative value is treated as corrupt rather than cast,
+since a counter file that is documented as attacker-clobberable must not let a
+well-formed but out-of-domain value (a negative count, say) weaken the cap.
 
 `increment()` converts `_CorruptCounter` into `CapExhausted`, so it now fails
 closed uniformly on any unparseable counter rather than leaking a `ValueError`

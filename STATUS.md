@@ -136,8 +136,8 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 924 tests pass at HEAD: BL-081 / ADR 0049 added
-  ten (the cap-status fail-closed-on-corruption coverage across
+  feature branch before merge. 928 tests pass at HEAD: BL-081 / ADR 0049 added
+  fourteen (the cap-status fail-closed-on-corruption coverage across
   `tests/unit/test_anthropic_client.py`, `tests/unit/test_anthropic_status.py`,
   and `tests/regression/test_audit_findings.py`, closing the 2026-06-14 audit's
   CAP-1), on top of the 914 from BL-080 / ADR 0048, which added

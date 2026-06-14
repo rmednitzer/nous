@@ -105,9 +105,12 @@ def _parse_count(raw: str, today: str) -> int:
     Returns ``0`` for the cases :meth:`CallCap.increment` treats as a fresh
     day: an empty line, valid JSON that is not an object, or a line whose
     ``date`` is not ``today``. Raises :class:`_CorruptCounter` for the cases
-    increment must refuse rather than silently reset, since a corrupt counter
-    would otherwise let an attacker bypass the cap with one bad write (SC-5):
-    non-JSON, or a ``count`` that is not integer-coercible.
+    increment must refuse rather than silently reset, since a malformed
+    counter would otherwise let a bad write weaken the cap (SC-5): non-JSON,
+    or a ``count`` that is not a non-negative ``int``. The ``count`` is
+    validated strictly rather than coerced: a bool, a float, a string, or a
+    negative value is corrupt, not cast or rounded, because the only writer of
+    this file emits a plain non-negative integer.
     """
     if not raw:
         return 0
@@ -117,10 +120,10 @@ def _parse_count(raw: str, today: str) -> int:
         raise _CorruptCounter(str(exc)) from exc
     if not isinstance(loaded, dict) or loaded.get("date") != today:
         return 0
-    try:
-        return int(loaded.get("count", 0))
-    except (TypeError, ValueError) as exc:
-        raise _CorruptCounter(f"non-integer count: {loaded.get('count')!r}") from exc
+    count: object = loaded.get("count", 0)
+    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+        raise _CorruptCounter(f"count is not a non-negative integer: {count!r}")
+    return count
 
 
 @dataclass(frozen=True, slots=True)
