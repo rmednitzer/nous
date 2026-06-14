@@ -188,6 +188,13 @@ class CommsSubsystem:
             return 0
         if link.forced_state is False:
             return 0
+        if link.capacity_bps <= 0.0:
+            # A propagation link driven below its SNR floor carries nothing:
+            # reject the send and stamp the zero achieved rate rather than
+            # reporting bytes accepted on a dead link (audit 2026-06-14b H-1,
+            # consistent with the forced-down guard above).
+            link.throughput_bps = 0.0
+            return 0
         amount = max(0, int(n_bytes))
         if amount <= 0:
             return 0
@@ -301,6 +308,10 @@ class CommsSubsystem:
                 "loss_pct": link.loss_pct,
                 "throughput_bps": link.throughput_bps if link.is_live() else 0.0,
                 "capacity_bps": link.capacity_bps if link.is_live() else 0.0,
+                # Rated bandwidth is static (not gated on liveness); it lets the
+                # filter's LinkEstimate carry a bandwidth so comms_state uses the
+                # per-link capacity fraction, not the legacy floor (M-1).
+                "bandwidth_bps": link.bandwidth_bps,
                 "connected": link.is_live(),
             }
             for link in self._links.values()

@@ -137,7 +137,13 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 993 tests pass at HEAD: BL-090 / ADR 0055 added
+  feature branch before merge. 998 tests pass at HEAD: BL-091 added five (the
+  comms propagation-link fixes: the H-1 zero-capacity tx reject and outbox
+  ships-nothing tests, the H-2 missing-link estimate refresh, the M-1 estimate
+  bandwidth, and the M-2 likelihood-floor boundary across
+  `tests/unit/test_comms_subsystem.py` / `test_comms_outbox.py` /
+  `test_comms_estimator.py`, closing the 2026-06-14b audit's comms findings), on
+  top of the 993 from BL-090 / ADR 0055, which added
   two (the runner caught-exception redaction regression in
   `tests/regression/test_audit_findings.py`, closing the 2026-06-14b audit's
   HIGH-1, plus a single-line stderr-echo check in `tests/unit/test_runner.py`),

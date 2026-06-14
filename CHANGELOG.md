@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (comms: propagation-link correctness fixes, BL-091)
+
+- Four contained fixes to the BL-048 / BL-088 propagation code, all additive and
+  low-blast. `CommsSubsystem.tx` no longer reports bytes "accepted" on a
+  zero-capacity link (a propagation link driven below its SNR floor): it returns
+  0 and stamps the zero achieved rate rather than claiming a delivery a dead link
+  cannot make (H-1). The comms particle filter refreshes a link absent from the
+  current observation each update instead of freezing its estimate after the
+  first absence (H-2). The filter's `LinkEstimate` now carries the rated
+  `bandwidth_bps`, so `comms_state` uses the per-link capacity fraction rather
+  than the legacy flat throughput floor for the informational estimator read
+  (M-1). The connected-likelihood floor check is `<` rather than `<=`, so a link
+  exactly at the 1 bps floor is processed, matching the liveness boundary
+  elsewhere (M-2). The FSM-facing comms state is unchanged; covered by additive
+  regressions across the comms subsystem, outbox, and estimator suites.
+
 ### Fixed (runner: redact the caught-exception body so a backend error cannot leak credentials, BL-090 / ADR 0055)
 
 - The audited runner returned a caught worker error to the MCP caller as

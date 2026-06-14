@@ -395,21 +395,30 @@ def _relay_comms_at(lon: float) -> CommsSubsystem:
 def test_lossy_propagation_link_defers_some_deliveries() -> None:
     import numpy as np
 
-    comms = _relay_comms_at(13.30)
+    # 13.02 is degraded but alive: the link still carries capacity, so the
+    # probabilistic packet loss (not a zero-capacity reject) is what defers
+    # some deliveries. A dead link is covered by test_zero_capacity_link_*.
+    comms = _relay_comms_at(13.02)
     relay = comms.link("relay")
-    assert relay is not None and relay.loss_pct > 10.0
+    assert relay is not None and relay.loss_pct > 10.0 and relay.capacity_bps > 0.0
 
     profile: dict[str, Any] = {"comms": {"links": []}}
     ob = CommsOutbox(profile, rng=np.random.default_rng(0))
     for _ in range(20):
         ob.enqueue("relay", 100, now_s=0.0)
     result = ob.flush(comms, now_s=0.0)
-    # The channel lost at least one transmission, so not everything shipped.
+    # The channel lost some transmissions but not all: some shipped, some held.
+    assert len(result.delivered) >= 1
     assert len(result.deferred) >= 1
 
 
 def test_without_rng_flush_is_all_or_nothing() -> None:
-    comms = _relay_comms_at(13.30)
+    # 13.02 is degraded but alive (capacity_bps > 0). Without an rng the
+    # probabilistic loss draw is off, so the lossy link ships everything that
+    # fits rather than a random subset.
+    comms = _relay_comms_at(13.02)
+    relay = comms.link("relay")
+    assert relay is not None and relay.capacity_bps > 0.0
     profile: dict[str, Any] = {"comms": {"links": []}}
     ob = CommsOutbox(profile)  # no rng: probabilistic loss is off
     for _ in range(20):
@@ -417,6 +426,22 @@ def test_without_rng_flush_is_all_or_nothing() -> None:
     result = ob.flush(comms, now_s=0.0)
     assert len(result.delivered) == 20
     assert result.deferred == []
+
+
+def test_zero_capacity_link_ships_nothing() -> None:
+    # A propagation link driven below its SNR floor is live (within max_age)
+    # but its capacity_bps is 0, so tx accepts nothing and every package is
+    # deferred rather than counted as delivered (audit 2026-06-14b H-1).
+    comms = _relay_comms_at(13.30)
+    relay = comms.link("relay")
+    assert relay is not None and relay.is_live() and relay.capacity_bps == 0.0
+    profile: dict[str, Any] = {"comms": {"links": []}}
+    ob = CommsOutbox(profile)  # no rng: the deferral is the zero capacity, not loss
+    for _ in range(20):
+        ob.enqueue("relay", 100, now_s=0.0)
+    result = ob.flush(comms, now_s=0.0)
+    assert result.delivered == []
+    assert len(result.deferred) == 20
 
 
 def test_flush_tick_budget_tracks_capacity_not_bandwidth() -> None:
