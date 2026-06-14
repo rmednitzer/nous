@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Mapping
+from enum import Enum, StrEnum
 from typing import Any
 
 import numpy as np
@@ -27,6 +28,7 @@ from nous.safety import (
     SafetyResult,
     ceiling_clamp,
     floor_threshold,
+    forbid_value,
 )
 
 _finite = st.floats(allow_nan=False, allow_infinity=False, min_value=-1e6, max_value=1e6)
@@ -136,6 +138,51 @@ def test_evaluators_return_finite_float_value_for_numeric_string() -> None:
     assert passed.approved
     assert isinstance(passed.value, float)
     assert passed.value == 40.0
+
+
+class _OperatorLabel(StrEnum):
+    NOMINAL = "nominal"
+    INCAPACITATED = "incapacitated"
+
+
+class _PlainLabel(Enum):
+    NOMINAL = "nominal"
+
+
+def test_forbid_value_approves_other_states() -> None:
+    result = forbid_value("incapacitated", label="operator")("nominal", {})
+    assert result.approved
+    assert result.violation_type is None
+    assert result.value == "nominal"
+
+
+def test_forbid_value_refuses_the_forbidden_state() -> None:
+    result = forbid_value("denied", label="comms link")("denied", {})
+    assert not result.approved
+    assert result.violation_type == REFUSED
+    assert "comms link is denied" in str(result.evidence["detail"])
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [None, True, False, 0, 1, 5.0, np.bool_(True), _PlainLabel.NOMINAL],
+)
+def test_forbid_value_fails_closed_on_non_string(candidate: object) -> None:
+    # A non-string label is malformed context, not a measurement of the state;
+    # stringifying it could dodge the gate, so it must refuse fail-closed.
+    result = forbid_value("incapacitated")(candidate, {})
+    assert not result.approved
+    assert result.violation_type == REFUSED
+
+
+def test_forbid_value_accepts_strenum_member() -> None:
+    # A StrEnum is a str subclass, so a member matches the forbidden token by
+    # its value, the form the engine passes through the gate context.
+    evaluator = forbid_value("incapacitated", label="operator")
+    assert evaluator(_OperatorLabel.NOMINAL, {}).approved
+    refused = evaluator(_OperatorLabel.INCAPACITATED, {})
+    assert not refused.approved
+    assert refused.violation_type == REFUSED
 
 
 def test_enforcer_stamps_constraint_id() -> None:

@@ -16,8 +16,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   link, or a mission with the operator incapacitated, and have it degrade only
   on the next tick. A new categorical enforcer evaluator, `forbid_value`, backs
   the operator and comms gates; both reuse the `label:` constraint ids the
-  auto-safe already records, so one enforcer counter and one audit
-  `constraint_id` span entry and exit. The device hazards stay first in the gate
+  auto-safe records, so an entry refusal and an auto-safe firing on the same
+  condition land under one `constraint_id` in the audit trail (those auto-safe
+  decisions stay label-driven, so the enforcer counter reflects entry
+  refusals). The device hazards stay first in the gate
   order, so the SC-2 / SC-8 refusal messages are unchanged; the recover and cool
   transitions out of an impaired mode keep their thermal and power gates only.
   Pinned by `tests/unit/test_fsm_requirements_gate.py`.

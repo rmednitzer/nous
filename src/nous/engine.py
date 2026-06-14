@@ -137,9 +137,13 @@ _SAFING_RULES: tuple[tuple[str, str, str], ...] = (
 # Constraint ids for the label-driven safing conditions (ADR 0028). The
 # ``label:`` namespace keeps them from being mistaken for the SC-* STPA
 # constraint ids that share the audit record's ``constraint_id`` field.
-# The auto-safe label conditions reuse the FSM requirement ids (ADR 0043), so
-# an entry refusal and an auto-safe decision on the same condition share one
-# constraint id: the enforcer counter and the audit trail group them together.
+# The auto-safe operator and comms conditions reuse the FSM requirement ids
+# (ADR 0043), so an entry refusal and an auto-safe decision on the same
+# condition land under one constraint id in the audit trail. These two paths
+# stay label-driven and debounced (ADR 0028) rather than routed through the
+# enforcer, so the enforcer's violation counter reflects entry refusals, while
+# the SC-2 / SC-8 hazards (which the auto-safe does route through the enforcer)
+# are counted in both directions.
 _LABEL_OPERATOR = REQ_OPERATOR
 _LABEL_COMMS = REQ_COMMS_LINK
 

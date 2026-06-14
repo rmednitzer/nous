@@ -42,11 +42,15 @@ available operator; RELAY and C2 additionally require a live comms link. The
 recover and cool transitions out of an impaired mode keep their thermal and
 power gates only, because they land in IDLE, a standby rather than an
 operational posture. Crucially the operator and comms constraint ids are the
-same ones the auto-safe records, so one enforcer counter and one audit
-`constraint_id` span both directions of each condition: one flag set, read at
-entry and at exit. The device hazards stay first in the gate order, so the
-established SC-2 and SC-8 refusal messages keep surfacing and a multi-condition
-failure still names a device hazard first.
+same ones the auto-safe records, so an entry refusal and an auto-safe firing on
+the same condition land under one `constraint_id` in the audit trail: one flag
+set, read at entry and at exit. The operator and comms auto-safe decisions stay
+label-driven and debounced (ADR 0028) rather than routed through the enforcer,
+so the enforcer's violation counter reflects entry refusals for them; the SC-2
+and SC-8 hazards, which the auto-safe also routes through the enforcer, are
+counted in both directions. The device hazards stay first in the gate order, so
+the established SC-2 and SC-8 refusal messages keep surfacing and a
+multi-condition failure still names a device hazard first.
 
 ## Consequences
 

@@ -27,7 +27,7 @@ _OK: dict[str, object] = {
 }
 
 
-def _ctx(**overrides: float) -> dict[str, object]:
+def _ctx(**overrides: object) -> dict[str, object]:
     return {**_OK, **overrides}
 
 

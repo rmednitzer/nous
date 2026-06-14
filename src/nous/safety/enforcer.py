@@ -153,23 +153,24 @@ def forbid_value(forbidden: str, *, label: str = "state") -> Evaluator:
 
     The categorical shape behind the operator and comms mode-entry gates: a
     precondition that a label (the operator state, the comms state) is not in a
-    specific unsafe value. Any other value approves; an absent candidate
-    refuses fail-closed, so a gate evaluated without its signal denies the
-    action rather than waving it through. The candidate is compared as a
-    string, so a :class:`~enum.StrEnum` member and its value match the same
-    forbidden token.
+    specific unsafe value. Any other string value approves. An absent or
+    non-string candidate refuses fail-closed, so a gate evaluated without its
+    signal, or against malformed context (a bool, an int, a plain
+    :class:`~enum.Enum`), denies the action rather than stringifying to a
+    non-matching token and waving it through. A :class:`~enum.StrEnum` member
+    is accepted, since it is a ``str`` subclass, and matches the same forbidden
+    token as its value.
     """
 
     def _evaluate(candidate: Any, evidence: Mapping[str, Any]) -> SafetyResult:
         ev = dict(evidence)
-        if candidate is None:
+        if not isinstance(candidate, str):
             ev["detail"] = f"{label} unknown (fail closed)"
             return SafetyResult(False, candidate, violation_type=REFUSED, evidence=ev)
-        current = str(candidate)
-        if current == forbidden:
+        if candidate == forbidden:
             ev["detail"] = f"{label} is {forbidden}"
-            return SafetyResult(False, current, violation_type=REFUSED, evidence=ev)
-        return SafetyResult(True, current, evidence=ev)
+            return SafetyResult(False, candidate, violation_type=REFUSED, evidence=ev)
+        return SafetyResult(True, candidate, evidence=ev)
 
     return _evaluate
 
