@@ -136,7 +136,10 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 910 tests pass at HEAD: BL-078 added five (the
+  feature branch before merge. 912 tests pass at HEAD: BL-079 added two (the
+  failsafe-streak reset and capability-cache refresh on reload in
+  `tests/unit/test_profile_hot_reload.py`, closing the 2026-06-14 audit's
+  RLD-1), on top of the 910 from BL-078, which added five (the
   persistence-health distinction in `tests/unit/test_state_transition_log.py`
   and the `device_info` surfacing in `tests/integration/test_persistence_status.py`,
   closing the 2026-06-14 audit's DB-1), on top of the 905 from BL-077 / ADR 0047,

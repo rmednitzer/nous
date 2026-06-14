@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (engine: restart the safety law on profile reload, BL-079)
+
+- `Engine.reload_profile` rebuilt every subsystem and estimator but left the
+  `FailsafeArbiter` debounce streaks and `state.last_capabilities` intact (audit
+  2026-06-14 RLD-1), so a streak part-way to an auto-safe carried across a
+  reload onto a profile that may define a different threshold, and a read taken
+  between the reload and the next tick saw capability claims computed from the
+  old profile's physics. The reload now rebuilds the arbiter for fresh streaks
+  and recomputes the capabilities from the rebuilt estimators, so both restart
+  against the new physics. Engine-local and additive (the ADR 0044 failsafe
+  contract is unchanged; the `SafetyEnforcer` violation counters stay cumulative
+  by design). Pinned by `tests/unit/test_profile_hot_reload.py`.
+
 ### Fixed (persistence: surface state-DB health in device_info, BL-078)
 
 - A failed `init_db` at server start was swallowed silently, leaving the
