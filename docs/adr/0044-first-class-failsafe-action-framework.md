@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-06-14
 - **Authors:** rmednitzer
-- **Builds on:** ADR 0027, ADR 0028, ADR 0029, ADR 0043
+- **Builds on:** ADR 0027, ADR 0028, ADR 0029, ADR 0046
 
 ## Context
 

@@ -1,6 +1,6 @@
 """Innovation gating, variance floors, reset recovery, and the health surface.
 
-These cover the behaviour ADR 0042 adds on top of the scalar Kalman
+These cover the behaviour ADR 0045 adds on top of the scalar Kalman
 estimators: a converged filter rejects an outlier, seeds itself from its first
 measurement, never reports a falsely certain zero variance, adopts a sustained
 shift through a counted reset, and surfaces all of that in an

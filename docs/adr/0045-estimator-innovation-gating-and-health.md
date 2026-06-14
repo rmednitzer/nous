@@ -1,9 +1,10 @@
-# ADR 0042: Estimator innovation gating and health
+# ADR 0045: Estimator innovation gating and health
 
 - **Status:** Accepted
 - **Date:** 2026-06-14
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0010, ADR 0019
+- **Note:** Renumbered from 0042 to resolve a filename collision with `0042-confine-scenario-load-to-a-directory`; the originating commit references the former number.
 
 ## Context
 

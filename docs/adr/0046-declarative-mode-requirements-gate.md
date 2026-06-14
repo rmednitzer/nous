@@ -1,9 +1,10 @@
-# ADR 0043: Declarative mode-requirements gate
+# ADR 0046: Declarative mode-requirements gate
 
 - **Status:** Accepted
 - **Date:** 2026-06-14
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0018, ADR 0022, ADR 0027, ADR 0028
+- **Note:** Renumbered from 0043 to resolve a filename collision with `0043-constant-time-token-verification`; the originating commit references the former number.
 
 ## Context
 

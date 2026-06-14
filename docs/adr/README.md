@@ -46,3 +46,6 @@
 | 0041 | [Self-model publish target](0041-self-model-publish-target.md) | Accepted | 2026-06-09 |
 | 0042 | [Confine scenario_load to a configured scenarios directory](0042-confine-scenario-load-to-a-directory.md) | Proposed | 2026-06-13 |
 | 0043 | [Constant-time verification for OAuth bearer and refresh tokens](0043-constant-time-token-verification.md) | Proposed | 2026-06-13 |
+| 0044 | [First-class failsafe action framework](0044-first-class-failsafe-action-framework.md) | Accepted | 2026-06-14 |
+| 0045 | [Estimator innovation gating and health](0045-estimator-innovation-gating-and-health.md) | Accepted | 2026-06-14 |
+| 0046 | [Declarative mode-requirements gate](0046-declarative-mode-requirements-gate.md) | Accepted | 2026-06-14 |

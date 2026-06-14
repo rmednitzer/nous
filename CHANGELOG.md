@@ -30,10 +30,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `tests/unit/test_failsafe_arbiter.py` and an engine-level flap test in
   `tests/unit/test_fsm_auto_safe.py`.
 
-### Changed (FSM: declarative mode-requirements gate, ADR 0043)
+### Changed (FSM: declarative mode-requirements gate, ADR 0046)
 
 - Operational-mode entry now gates on the full precondition set, the same flags
-  the auto-safe reads on exit (ADR 0043, BL-075). Beyond the existing SC-2
+  the auto-safe reads on exit (ADR 0046, BL-075). Beyond the existing SC-2
   thermal and SC-8 power gates, all four IDLE to operational entries require an
   available operator, and the link modes (RELAY, C2) additionally require a live
   comms link, so a controller can no longer enter a relay posture into a dead
@@ -48,10 +48,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   transitions out of an impaired mode keep their thermal and power gates only.
   Pinned by `tests/unit/test_fsm_requirements_gate.py`.
 
-### Added (estimators: innovation gating and health, ADR 0042)
+### Added (estimators: innovation gating and health, ADR 0045)
 
 - Innovation gating and a health surface for the scalar Kalman estimators
-  (ADR 0042, BL-074). A shared primitive, `ScalarChannel` in
+  (ADR 0045, BL-074). A shared primitive, `ScalarChannel` in
   `src/nous/estimators/health.py`, centralises the per-channel recursion every
   estimator open-coded and adds the diagnostics PX4's EKF2 publishes: a
   normalised innovation squared gate (`test_ratio = innovation^2 /
