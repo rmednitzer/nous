@@ -636,3 +636,51 @@ class TestN2AuditSinkRecoversInProcess:
 
         tier, _ = classify("audit_resync", {})
         assert tier is Tier.STATEFUL
+
+
+class TestComms1OutboxSurvivesDeniedLink:
+    """COMMS-1: outbound traffic must survive a degraded or denied link.
+
+    Original defect (``docs/audit-2026-06-14.md`` COMMS-1): the comms
+    send seam was fire-and-forget. ``CommsSubsystem.tx`` accepts bytes
+    only on a live link, so ``comms_send`` / ``comms_publish`` /
+    ``self_model_publish`` on an aged-out, forced-down, or unknown link
+    returned ``bytes_accepted: 0`` and the message was gone, with no
+    queue, no retry, and no triage. Validated on the live twin: a
+    ``comms_publish`` of a CoT event on a denied link encoded a full
+    352-byte message and then dropped it.
+
+    Fix: a bounded, precedence-ordered store-and-forward outbox
+    (``state/comms_outbox.py``, BL-077 / ADR 0047) holds the package and
+    the engine tick drains it in triage order as the link recovers. A
+    package is only ever evicted to make room for a strictly
+    higher-precedence one, and an expired package is dropped rather than
+    shipped stale.
+    """
+
+    def test_package_queued_on_denied_link_survives_recovery(self) -> None:
+        from nous.state.comms_outbox import CommsOutbox, Precedence
+        from nous.subsystems.comms import CommsSubsystem
+
+        comms = CommsSubsystem(
+            {"comms": {"links": [{"id": "tak", "bandwidth_bps": 500_000, "max_age_s": 60}]}}
+        )
+        comms.set_link_state("tak", connected=False)
+        outbox = CommsOutbox()
+
+        outbox.enqueue("tak", 352, now_s=0.0, precedence=Precedence.IMMEDIATE)
+        deferred = outbox.flush(comms, now_s=1.0)
+        assert deferred.delivered == []
+        assert outbox.depth() == 1  # held, not dropped
+
+        comms.clear_link_override("tak")
+        recovered = outbox.flush(comms, now_s=2.0)
+        assert len(recovered.delivered) == 1
+        assert outbox.depth() == 0
+
+    def test_outbox_tools_are_classified(self) -> None:
+        from nous.policy import Tier, classify
+
+        assert classify("comms_outbox", {})[0] is Tier.READ_ONLY
+        assert classify("comms_enqueue", {})[0] is Tier.STATEFUL
+        assert classify("comms_flush", {})[0] is Tier.STATEFUL

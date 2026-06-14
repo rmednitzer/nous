@@ -73,3 +73,4 @@ comms:
   links:
     - { id: lte, bandwidth_bps: 20000000, rssi_dbm_nominal: -75, loss_pct_nominal: 0.5, max_age_s: 30 }
     - { id: lora, bandwidth_bps: 50000, rssi_dbm_nominal: -110, loss_pct_nominal: 2.0, max_age_s: 120 }
+  outbox: { enabled: true, max_packages: 256, max_bytes: 1048576, default_ttl_s: 300 }  # BL-077

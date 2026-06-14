@@ -6,6 +6,43 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (comms: store-and-forward outbox with precedence triage, BL-077 / ADR 0047)
+
+- Outbound traffic now survives a degraded or denied link. The 2026-06-14 audit
+  (finding COMMS-1) confirmed the send seam was fire-and-forget: `comms_send`,
+  `comms_publish`, and `self_model_publish` all drop a transmission the moment
+  the link cannot carry it, so a publish during an outage encoded a full message
+  and discarded it (validated on the live twin, a 352-byte CoT event lost on a
+  denied link). A new `src/nous/state/comms_outbox.py` adds a bounded,
+  precedence-ordered `CommsOutbox` the engine owns beside the comms subsystem.
+  Queued packages carry military message precedence (routine, priority,
+  immediate, flash) and a time-to-live; a flush walks them by descending
+  precedence then enqueue order, a package is only ever evicted to make room for
+  a strictly higher-precedence one, and an expired package is dropped rather than
+  shipped stale (the store-and-forward analogue of the SC-4 freshness gate). The
+  engine drains the outbox each tick at each link's modelled per-tick capacity,
+  so a recovered narrow link clears its backlog at its real rate.
+- Three tools join `tools/subsystems.py` beside the comms reads: `comms_enqueue`
+  (T2, raw `n_bytes` or a `payload_hex` blob), `comms_outbox` (T0, depth plus
+  per-precedence and per-link breakdown, head package, and disposition
+  counters), and `comms_flush` (T2, forced triage-ordered drain). Additive
+  policy classification only; the tool surface grows from 43 to 46. An optional
+  `comms.outbox` profile section (`enabled`, `max_packages`, `max_bytes`,
+  `default_ttl_s`) tunes the bounds, defaulting safely when absent. Pinned by
+  `tests/unit/test_comms_outbox.py`, `tests/integration/test_comms_outbox_tools.py`,
+  and a regression in `tests/regression/test_audit_findings.py`. Deliberately
+  single-hop and below the full DTN layer (BL-056); LIMITATIONS L12 updated.
+
+### Fixed (audit 2026-06-14)
+
+- The `inference_fallback` module docstring now names the DEGRADED comms route
+  it always took to the local mock (audit DOC-1). STATUS.md tool and test counts
+  reconciled to the current surface (DOC-2). The remaining adversarial findings
+  (audit chain-head versus fsync ordering, the cap status fail-open, the silent
+  database-init degradation, the failsafe streak carry-over on reload, and the
+  runner exception `exit_code`) are recorded in `docs/audit-2026-06-14.md` for
+  their own dedicated changes.
+
 ### Changed (FSM: first-class failsafe action framework, ADR 0044)
 
 - The tick-loop auto-safe is now a declarative table behind a pure arbiter

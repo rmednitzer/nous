@@ -292,6 +292,15 @@ Comms control (T2):
   comms_send (record a transmission of N bytes on a link) / comms_publish
   (encode a message via an interop adapter and account its bytes on the link)
 
+Store-and-forward outbox (T0 read + T2 write):
+  comms_outbox (read the triage queue: depth, per-precedence and per-link
+  breakdown, head package, disposition counters) / comms_enqueue (hold a package
+  for delivery when comms recover, tagged with military precedence -- routine /
+  priority / immediate / flash -- and a TTL) / comms_flush (force a
+  triage-ordered drain). The tick loop drains the outbox automatically as links
+  recover, so a package queued during a degraded or denied comms window survives
+  instead of being dropped (BL-077).
+
 Local inference and cloud cap (T0/T1):
   inference_local / anthropic_cap_status
 

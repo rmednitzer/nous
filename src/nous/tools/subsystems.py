@@ -3,10 +3,11 @@
 The ten read-only (T0) subsystem status tools, grouped into one module per
 the capability-grouping option of ADR 0021's revisit trigger: they are uniform
 telemetry reads (truth plus calibrated estimate), so one ``subsystems`` module
-is more legible than ten one-tool files. The two comms write tools
-(``comms_send`` / ``comms_publish``, T2, ADR 0033) live here too so every comms
-tool is discoverable in one place. (``inference_status`` stays with
-``inference_local`` in the inference module.)
+is more legible than ten one-tool files. The comms write tools (``comms_send`` /
+``comms_publish``, T2, ADR 0033) live here too, alongside the store-and-forward
+outbox surface (``comms_enqueue`` / ``comms_flush``, T2, and the ``comms_outbox``
+read, T0; BL-077, ADR 0047), so every comms tool is discoverable in one place.
+(``inference_status`` stays with ``inference_local`` in the inference module.)
 """
 
 from __future__ import annotations
@@ -275,6 +276,157 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         return await wrap(
             "comms_publish",
             {"link_id": link_id, "adapter": adapter, "data": dict(data or {})},
+            ctx,
+            _work,
+        )
+
+    @mcp.tool()
+    async def comms_enqueue(
+        link_id: str,
+        n_bytes: int | None = None,
+        payload_hex: str | None = None,
+        precedence: str = "routine",
+        kind: str = "raw",
+        ttl_s: float | None = None,
+        ctx: Context | None = None,
+    ) -> str:
+        """Queue a package for store-and-forward when comms are degraded (T2, BL-077).
+
+        The fire-and-forget ``comms_send`` / ``comms_publish`` path drops a
+        transmission the moment the link cannot carry it. ``comms_enqueue``
+        instead holds the package in a bounded, precedence-ordered outbox and the
+        tick loop delivers it (and ``comms_flush`` forces a drain) when the link
+        recovers. Give the bytes either as a raw ``n_bytes`` count or as a
+        ``payload_hex`` blob (e.g. the ``payload_hex`` an ``interop_encode`` call
+        returned); ``payload_hex`` is authoritative for the size when both are
+        present.
+
+        ``precedence`` is military message precedence (``routine`` < ``priority``
+        < ``immediate`` < ``flash``); a scarce link flushes the highest first and
+        a package is only ever evicted to make room for a strictly
+        higher-precedence one. ``ttl_s`` overrides the profile's default
+        time-to-live; an expired package is dropped rather than shipped stale.
+        Returns ``{"ok": bool, "reason": str, "package": {...}, "evicted":
+        [ids], "depth": N}``; ``ok`` is false when the package is empty, larger
+        than the outbox budget, or refused because the queue is full of
+        equal-or-higher-precedence traffic. Tier T2 (stateful).
+        """
+
+        async def _work() -> str:
+            from ..state.comms_outbox import Precedence
+
+            payload: bytes | None = None
+            size: int
+            if payload_hex is not None:
+                try:
+                    payload = bytes.fromhex(payload_hex)
+                except ValueError as exc:
+                    return json.dumps({"ok": False, "reason": f"hex: {exc}"})
+                size = len(payload)
+            elif n_bytes is not None:
+                size = int(n_bytes)
+            else:
+                return json.dumps(
+                    {"ok": False, "reason": "provide n_bytes or payload_hex"}
+                )
+
+            result = app.engine.outbox.enqueue(
+                link_id,
+                size,
+                now_s=app.engine.state.ts_s,
+                precedence=Precedence.parse(precedence),
+                kind=kind,
+                ttl_s=ttl_s,
+                payload=payload,
+            )
+            body = result.to_dict()
+            body["ok"] = result.accepted
+            body["depth"] = app.engine.outbox.depth()
+            return json.dumps(body)
+
+        return await wrap(
+            "comms_enqueue",
+            {
+                "link_id": link_id,
+                "n_bytes": n_bytes,
+                "payload_hex_len": len(payload_hex or ""),
+                "precedence": precedence,
+                "kind": kind,
+                "ttl_s": ttl_s,
+            },
+            ctx,
+            _work,
+        )
+
+    @mcp.tool()
+    async def comms_outbox(ctx: Context | None = None) -> str:
+        """Read the store-and-forward outbox: depth, triage breakdown, counters (T0, BL-077).
+
+        Reports the queue depth and bytes pending, the per-precedence and
+        per-link breakdown, the head package a flush would deliver first (with
+        its remaining time-to-live), the cumulative disposition counters
+        (enqueued / delivered / dropped_overflow / expired / rejected), and the
+        packages in triage (flush) order. The package list is capped so the read
+        stays bounded; ``packages_truncated`` flags when the queue is deeper than
+        the listing.
+        """
+
+        async def _work() -> str:
+            outbox = app.engine.outbox
+            now_s = app.engine.state.ts_s
+            body = outbox.status(now_s=now_s)
+            listed = outbox.packages()
+            cap = 25
+            body["packages"] = [pkg.to_dict() for pkg in listed[:cap]]
+            body["packages_truncated"] = len(listed) > cap
+            return json.dumps(body)
+
+        return await wrap("comms_outbox", {}, ctx, _work)
+
+    @mcp.tool()
+    async def comms_flush(
+        link_id: str | None = None,
+        max_bytes: int | None = None,
+        ctx: Context | None = None,
+    ) -> str:
+        """Force a triage-ordered drain of the outbox against the live links (T2, BL-077).
+
+        Walks queued packages by descending precedence then enqueue order,
+        delivering each through the comms ``tx`` seam on a live link. ``link_id``
+        restricts the drain to one link (others are left queued); ``max_bytes``
+        caps the bytes delivered per link this call (unbounded when omitted). A
+        package whose link is down, or that does not fit the remaining budget,
+        stays queued, and expired packages are dropped rather than shipped.
+        Returns the delivered / deferred / expired package ids plus the resulting
+        outbox depth. Tier T2 (stateful): links are accounted and the call is
+        audited.
+        """
+
+        async def _work() -> str:
+            outbox = app.engine.outbox
+            link_budget: dict[str, float] | None = None
+            if link_id is not None or max_bytes is not None:
+                cap = float(max_bytes) if max_bytes is not None else float("inf")
+                link_budget = {}
+                for lid in app.engine.comms.link_ids:
+                    if link_id is not None and lid != link_id:
+                        link_budget[lid] = 0.0
+                    else:
+                        link_budget[lid] = cap
+            result = outbox.flush(
+                app.engine.comms,
+                now_s=app.engine.state.ts_s,
+                link_budget_bytes=link_budget,
+            )
+            body = result.to_dict()
+            body["ok"] = True
+            body["depth"] = outbox.depth()
+            body["queued_bytes"] = outbox.queued_bytes()
+            return json.dumps(body)
+
+        return await wrap(
+            "comms_flush",
+            {"link_id": link_id, "max_bytes": max_bytes},
             ctx,
             _work,
         )

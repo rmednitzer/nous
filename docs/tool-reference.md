@@ -16,6 +16,9 @@ the committed copy after changing a tool's signature or docstring.
 | `audit_summary` | T0 | Read-only view of the audit handler's state. |
 | `audit_verify` | T0 | Verify the audit hash chain on disk (BL-016, ADR 0025). |
 | `biometrics_status` | T0 | Operator biometrics: heart rate, core temp, hydration, cognitive load. |
+| `comms_enqueue` | T2 | Queue a package for store-and-forward when comms are degraded (T2, BL-077). |
+| `comms_flush` | T2 | Force a triage-ordered drain of the outbox against the live links (T2, BL-077). |
+| `comms_outbox` | T0 | Read the store-and-forward outbox: depth, triage breakdown, counters (T0, BL-077). |
 | `comms_publish` | T2 | Encode ``data`` via an interop adapter and transmit it on a link (T2, ADR 0033). |
 | `comms_send` | T2 | Record a transmission of ``n_bytes`` on link ``link_id`` (T2, ADR 0033). |
 | `comms_state` | T0 | Comms-stack summary (per ADR-0006). |
@@ -38,7 +41,7 @@ the committed copy after changing a tool's signature or docstring.
 | `scenario_reset` | T1 | Detach and clear the scenario session (T1; ADR 0040). |
 | `scenario_resume` | T1 | Unfreeze a paused scenario session (T1, reversible; ADR 0040). |
 | `scenario_status` | T0 | Progress of the stateful scenario session, if any (T0, ADR 0040). |
-| `self_estimator_status` | T0 | Estimator covariances, last update times, divergence flags. |
+| `self_estimator_status` | T0 | Estimator means, covariances, and per-filter health. |
 | `self_model_assess` | T0 | Self-model capability assessment with calibrated p5/p50/p95 bands. |
 | `self_model_publish` | T2 | Publish the current self-model read over a comms link (T2, ADR 0041). |
 | `self_model_situation` | T0 | Fused situational read: capabilities, provenance, posture, safety, recommendations. |
@@ -128,6 +131,115 @@ tool registry.
 {
   "properties": {},
   "title": "biometrics_statusArguments",
+  "type": "object"
+}
+```
+
+### `comms_enqueue`
+
+```json
+{
+  "properties": {
+    "kind": {
+      "default": "raw",
+      "title": "Kind",
+      "type": "string"
+    },
+    "link_id": {
+      "title": "Link Id",
+      "type": "string"
+    },
+    "n_bytes": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "N Bytes"
+    },
+    "payload_hex": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Payload Hex"
+    },
+    "precedence": {
+      "default": "routine",
+      "title": "Precedence",
+      "type": "string"
+    },
+    "ttl_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ttl S"
+    }
+  },
+  "required": [
+    "link_id"
+  ],
+  "title": "comms_enqueueArguments",
+  "type": "object"
+}
+```
+
+### `comms_flush`
+
+```json
+{
+  "properties": {
+    "link_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Link Id"
+    },
+    "max_bytes": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Bytes"
+    }
+  },
+  "title": "comms_flushArguments",
+  "type": "object"
+}
+```
+
+### `comms_outbox`
+
+```json
+{
+  "properties": {},
+  "title": "comms_outboxArguments",
   "type": "object"
 }
 ```

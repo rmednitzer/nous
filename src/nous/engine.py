@@ -35,6 +35,7 @@ from .estimators.storage import StorageKalman
 from .estimators.thermal import ThermalKalman
 from .policy import Tier
 from .safety import SafetyResult
+from .state.comms_outbox import CommsOutbox
 from .state.comms_state import CommsState
 from .state.failsafe import FailsafeArbiter, FailsafeCondition
 from .state.machine import (
@@ -242,6 +243,7 @@ class Engine:
         )
         self.storage = StorageSubsystem(self.profile, rng=self.rng)
         self.comms = CommsSubsystem(self.profile, rng=self.rng)
+        self.outbox = CommsOutbox(self.profile)
         self.position = PositionSubsystem(self.profile, rng=self.rng)
         self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
         self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
@@ -380,6 +382,7 @@ class Engine:
         )
         self.storage = StorageSubsystem(self.profile, rng=self.rng)
         self.comms = CommsSubsystem(self.profile, rng=self.rng)
+        self.outbox = CommsOutbox(self.profile)
         self.position = PositionSubsystem(self.profile, rng=self.rng)
         self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
         self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
@@ -744,6 +747,12 @@ class Engine:
         self.state.comms_state, self.state.comms_state_reason = (
             self.comms.derive_state()
         )
+        # Store-and-forward drain (BL-077): deliver queued packages in triage
+        # order on any link that recovered this tick, at each link's modelled
+        # per-tick capacity. Internal engine machinery, so it runs unguarded
+        # like the estimators above -- a raising flush is a bug tests must catch,
+        # not a containment case like the external tick hooks.
+        self.outbox.flush_tick(self.comms, dt, self.state.ts_s)
         self.position_est.predict(dt)
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est.predict(dt)
@@ -871,6 +880,13 @@ class Engine:
                 "connected_links": sum(
                     1 for link in self.comms if link.is_live()
                 ),
+                "outbox": {
+                    "depth": self.outbox.depth(),
+                    "queued_bytes": self.outbox.queued_bytes(),
+                    "delivered": self.outbox.delivered_total,
+                    "expired": self.outbox.expired_total,
+                    "dropped_overflow": self.outbox.dropped_overflow_total,
+                },
             },
             "position": {
                 "lat": round(self.position.lat, 6),
