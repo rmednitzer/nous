@@ -136,7 +136,10 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 941 tests pass at HEAD: BL-086 / ADR 0052 added
+  feature branch before merge. 942 tests pass at HEAD: BL-087 added one (the
+  Monte Carlo `p50` sample-median guard in `tests/unit/test_self_model.py`,
+  closing the 2026-06-14 audit's ASSESS-1, the last of the audit's findings), on
+  top of the 941 from BL-086 / ADR 0052, which added
   three (the interop freshness-gate config-fault naming in
   `tests/unit/test_interop_adapters.py`, closing the 2026-06-14 audit's ITP-1 /
   FRESH-1), on top of the 938 from BL-085 / ADR 0051, which added

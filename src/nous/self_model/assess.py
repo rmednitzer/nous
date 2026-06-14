@@ -155,14 +155,13 @@ def _endurance_capability(
             100.0,
         )
         endurance_samples = (battery_wh * soc_samples / 100.0) / net_w * 60.0
-        p5, _p50, p95 = (
-            float(x) for x in np.quantile(endurance_samples, [0.05, 0.5, 0.95])
-        )
+        p5, p50, p95 = _quantiles(endurance_samples)
     else:
         soc_p5 = max(0.0, point_soc - _Z_90 * soc_sigma)
         soc_p95 = min(100.0, point_soc + _Z_90 * soc_sigma)
         p5 = _endurance_min(battery_wh, soc_p5, net_w)
         p95 = _endurance_min(battery_wh, soc_p95, net_w)
+        p50 = point_min
 
     if net_w <= 0.0:
         confidence = 0.0
@@ -175,7 +174,7 @@ def _endurance_capability(
         name="endurance_min",
         point=point_min,
         p5=min(p5, point_min),
-        p50=point_min,
+        p50=p50,
         p95=max(p95, point_min),
         confidence=confidence,
         drivers=drivers,
@@ -218,12 +217,11 @@ def _thermal_headroom_capability(
             junction_point, junction_sigma, size=_MONTE_CARLO_SAMPLES
         )
         headroom_samples = throttle_c - junction_samples
-        p5, _p50, p95 = (
-            float(x) for x in np.quantile(headroom_samples, [0.05, 0.5, 0.95])
-        )
+        p5, p50, p95 = _quantiles(headroom_samples)
     else:
         p5 = throttle_c - (junction_point + _Z_90 * junction_sigma)
         p95 = throttle_c - (junction_point - _Z_90 * junction_sigma)
+        p50 = point_c
 
     confidence = max(0.0, 1.0 - junction_sigma / 10.0)
 
@@ -231,7 +229,7 @@ def _thermal_headroom_capability(
         name="thermal_headroom_c",
         point=point_c,
         p5=min(p5, point_c),
-        p50=point_c,
+        p50=p50,
         p95=max(p95, point_c),
         confidence=confidence,
         drivers=["thermal", "compute"],
@@ -278,14 +276,13 @@ def _inference_capacity_capability(
         )
         headroom_samples = (100.0 - load_samples) / 100.0
         capacity_samples = capacity * headroom_samples
-        p5, _p50, p95 = (
-            float(x) for x in np.quantile(capacity_samples, [0.05, 0.5, 0.95])
-        )
+        p5, p50, p95 = _quantiles(capacity_samples)
     else:
         headroom_p5 = max(0.0, 100.0 - (load_point + _Z_90 * load_sigma)) / 100.0
         headroom_p95 = max(0.0, 100.0 - (load_point - _Z_90 * load_sigma)) / 100.0
         p5 = capacity * headroom_p5
         p95 = capacity * headroom_p95
+        p50 = point
 
     confidence = 1.0 if not compute.throttled else 0.5
 
@@ -293,7 +290,7 @@ def _inference_capacity_capability(
         name="inference_capacity_tok_per_s",
         point=point,
         p5=min(p5, point),
-        p50=point,
+        p50=p50,
         p95=max(p95, point),
         confidence=confidence,
         drivers=["compute", "thermal"],
@@ -302,7 +299,14 @@ def _inference_capacity_capability(
 
 
 def _quantiles(values: np.ndarray) -> tuple[float, float, float]:
-    """Helper retained for potential reuse: empirical 5/50/95 quantiles."""
+    """Empirical 5 / 50 / 95 quantiles of a Monte Carlo sample.
+
+    Each capability's Monte Carlo branch publishes the p50 as the sample
+    median (this ``q[1]``), so the band centre and the tails come from the
+    same sample rather than mixing a sampled band with a deterministic
+    point (audit ASSESS-1). The Gaussian fallback, whose median equals its
+    mean, keeps reporting the deterministic point as p50.
+    """
     q = np.quantile(values, [0.05, 0.5, 0.95])
     return float(q[0]), float(q[1]), float(q[2])
 
