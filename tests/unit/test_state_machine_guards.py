@@ -14,17 +14,20 @@ import pytest
 
 from nous.state.machine import GuardDenied, Mode, StateMachine
 
-# A context that passes both gates, so a test can flip exactly one signal
-# unsafe and know which constraint refused.
-_OK = {
+# A context that passes every gate, so a test can flip exactly one signal
+# unsafe and know which constraint refused. Beyond thermal and power it carries
+# the operator and comms labels the ADR 0043 entry gates read.
+_OK: dict[str, object] = {
     "thermal_headroom_c": 20.0,
     "thermal_headroom_threshold_c": 5.0,
     "soc_pct": 50.0,
     "soc_pct_critical": 5.0,
+    "operator_state": "nominal",
+    "comms_state": "connected",
 }
 
 
-def _ctx(**overrides: float) -> dict[str, float]:
+def _ctx(**overrides: float) -> dict[str, object]:
     return {**_OK, **overrides}
 
 

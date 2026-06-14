@@ -16,6 +16,7 @@ from .enforcer import (
     SafetyResult,
     ceiling_clamp,
     floor_threshold,
+    forbid_value,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "SafetyResult",
     "ceiling_clamp",
     "floor_threshold",
+    "forbid_value",
 ]
