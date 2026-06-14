@@ -54,13 +54,15 @@ return body
 
 ## External surfaces
 
-- **MCP tools** -- the forty-three-tool surface is documented in
+- **MCP tools** -- the forty-six-tool surface is documented in
   [tool-reference.md](tool-reference.md). It carries the full L1 read
-  surface (a read tool for each subsystem, with comms exposing both
-  `comms_state` and `comms_status`, plus an estimator summary and the
+  surface (a read tool for each subsystem, with comms exposing
+  `comms_state`, `comms_status`, and the store-and-forward `comms_outbox`,
+  plus an estimator summary and the
   `scenario_status` session read) plus the
   mutating tools `scenario_load` / `scenario_inject` / `profile_reload`,
-  `comms_send` / `comms_publish`, `self_model_publish`, `state_transition`,
+  `comms_send` / `comms_publish` / `comms_enqueue` / `comms_flush`,
+  `self_model_publish`, `state_transition`,
   `inference_cloud`,
   and `audit_resync` (all T2), the reversible session and stepping controls
   `scenario_pause` / `scenario_resume` / `scenario_reset` / `tick_advance`

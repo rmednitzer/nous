@@ -55,7 +55,7 @@ estimators into calibrated capability claims (BL-018, BL-035). See
 [STATUS.md](STATUS.md) for the phase table and the
 per-component maturity ledger, [LIMITATIONS.md](LIMITATIONS.md) for the
 explicit gaps, [docs/backlog.md](docs/backlog.md) for the line-item
-tracker, and [docs/audit-2026-06-01.md](docs/audit-2026-06-01.md) for
+tracker, and [docs/audit-2026-06-14b.md](docs/audit-2026-06-14b.md) for
 the most recent point-in-time audit (full code index, validation
 against the conformance documents, and the live-MCP probe). The audit cadence and the regression-pin
 pattern are codified in

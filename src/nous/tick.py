@@ -30,6 +30,14 @@ async def tick_loop(engine: Engine, hz: float, stop: anyio.Event) -> None:
     budget is ``dt``, and ``anyio.move_on_after`` waits the full
     inter-tick interval in real time. That keeps cancellation
     semantics intact regardless of the injected clock.
+
+    Fail-loud contract: ``engine.tick()`` is intentionally uncaught here. A
+    non-finite estimate trips ``Engine._assert_post_tick_finite`` (ADR 0019),
+    whose ``RuntimeError`` propagates out of this loop and crashes the server
+    process rather than serving a garbage belief. The deployment recovers it:
+    ``deploy/systemd/nous.service`` sets ``Restart=on-failure`` /
+    ``RestartSec=5s``, so the engine re-initialises within seconds (audit
+    2026-06-14b HIGH-2 documented this previously-implicit contract).
     """
     if hz <= 0.0:
         raise ValueError("hz must be positive")

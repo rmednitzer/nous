@@ -4,7 +4,7 @@ This document is authoritative on what `nous` is *not* yet, and what it does
 not aim to be at all. Read it before opening an issue claiming a missing
 capability.
 
-Last reviewed: 2026-06-06 ([`docs/audit-2026-06-06.md`](docs/audit-2026-06-06.md), full-repo validation audit). Prior: 2026-06-01 ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md), cadence delta audit).
+Last reviewed: 2026-06-14 ([`docs/audit-2026-06-14b.md`](docs/audit-2026-06-14b.md), full fresh adversarial and validation pass post BL-048 / BL-088). Prior: 2026-06-06 ([`docs/audit-2026-06-06.md`](docs/audit-2026-06-06.md), full-repo validation audit).
 
 ## L1. Pre-1.0
 

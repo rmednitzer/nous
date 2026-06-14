@@ -84,7 +84,7 @@ the tool surface is FastMCP.
 - The backlog (`docs/backlog.md`) tracks line items as `BL-NNN`. Reference
   the id in commit messages and PR titles where possible.
 - The STPA artefacts (`docs/stpa/`) follow the numbered file layout
-  (01-purpose through 09-derived-requirements).
+  (01-purpose through 11-coverage).
 
 ## Canonical recipes
 

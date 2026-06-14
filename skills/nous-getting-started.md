@@ -37,6 +37,9 @@ anything.
   and write rate.
 - `comms_state` and `comms_status` return the aggregate FSM signal
   plus the per-link envelopes (live RSSI, loss, throughput, age).
+- `comms_outbox` returns the store-and-forward queue: depth, queued
+  bytes, the per-precedence and per-link breakdown, the head package,
+  and the disposition counters (BL-077 / ADR 0047).
 - `position_status` returns lat / lon / alt, fix state, dead-reckoning
   duration, and the position Kalman estimate.
 - `sensors_status` returns ambient temperature, humidity, and
@@ -68,6 +71,9 @@ freshly started engine settles in the `IDLE` standby posture (ADR 0039).
 - `comms_send` / `comms_publish` (T2) account a transmission on a link;
   `self_model_publish` (T2) pushes the situation or assess read through an
   interop adapter onto a link (ADR 0041).
+- `comms_enqueue` / `comms_flush` (T2) drive the store-and-forward outbox:
+  queue a package while a link is degraded or denied, and force a
+  triage-ordered drain when it recovers (BL-077 / ADR 0047).
 - `scenario_load` / `scenario_inject` / `profile_reload` (T2) drive scenarios
   and reconfiguration. A `scenario_load` with `mode="session"` runs the
   timeline as a stateful session controlled by `scenario_status` /
