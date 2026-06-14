@@ -133,6 +133,17 @@ class LinkPropagation:
             except (TypeError, ValueError):
                 return None
 
+        def _pos_opt(key: str) -> float | None:
+            """An optional float that must be positive; non-positive reads as unset.
+
+            A non-physical (zero or negative) channel bandwidth would otherwise
+            drive the kTB floor to its 1 Hz value, an unrealistically optimistic
+            noise floor; treating it as unset falls back to the configured
+            constant floor instead (fail conservative).
+            """
+            value = _opt(key)
+            return value if value is not None and value > 0.0 else None
+
         return cls(
             peer_lat=peer_lat,
             peer_lon=peer_lon,
@@ -152,8 +163,8 @@ class LinkPropagation:
             path_loss_exponent=max(0.0, _f("path_loss_exponent", 2.0)),
             obstruction_distance_m=_opt("obstruction_distance_m"),
             obstruction_height_m=_f("obstruction_height_m", 0.0),
-            channel_bandwidth_hz=_opt("channel_bandwidth_hz"),
-            noise_figure_db=_f("noise_figure_db", 0.0),
+            channel_bandwidth_hz=_pos_opt("channel_bandwidth_hz"),
+            noise_figure_db=max(0.0, _f("noise_figure_db", 0.0)),
             antenna_boresight_deg=_opt("antenna_boresight_deg"),
             antenna_half_beamwidth_deg=max(
                 1.0, _f("antenna_half_beamwidth_deg", 60.0)
@@ -443,9 +454,13 @@ def solve_link_budget(
         + antenna_offset
     )
 
-    if prop.channel_bandwidth_hz is not None:
+    if prop.channel_bandwidth_hz is not None and prop.channel_bandwidth_hz > 0.0:
+        # Fail conservative: a non-positive bandwidth or a negative noise figure
+        # would lower the floor and flatter the SNR, so a directly-built
+        # LinkPropagation with bad values still falls back to the constant floor
+        # and a clamped noise figure (audit / PR #139 review).
         noise_floor = thermal_noise_floor_dbm(
-            prop.channel_bandwidth_hz, prop.noise_figure_db
+            prop.channel_bandwidth_hz, max(0.0, prop.noise_figure_db)
         )
     else:
         noise_floor = prop.noise_floor_dbm

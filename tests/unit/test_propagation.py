@@ -353,3 +353,38 @@ def test_from_profile_parses_higher_fidelity_fields() -> None:
     assert LinkPropagation.from_profile(
         {"propagation": {"peer": {"lat": 1.0, "lon": 2.0}}}
     ).path_loss_exponent == 2.0  # type: ignore[union-attr]
+
+
+def test_from_profile_sanitizes_non_physical_noise_config() -> None:
+    """PR #139 review: a non-positive channel bandwidth reads as unset and a
+    negative noise figure is clamped, so bad config cannot flatter the SNR."""
+    prop = LinkPropagation.from_profile(
+        {
+            "propagation": {
+                "peer": {"lat": 47.0, "lon": 13.0},
+                "channel_bandwidth_hz": -1.0,
+                "noise_figure_db": -3.0,
+            }
+        }
+    )
+    assert prop is not None
+    assert prop.channel_bandwidth_hz is None
+    assert prop.noise_figure_db == 0.0
+
+
+def test_solve_link_budget_fails_conservative_on_bad_noise_config() -> None:
+    """A directly-built LinkPropagation with a non-positive bandwidth must fall
+    back to the constant floor rather than the optimistic 1 Hz kTB floor."""
+    bad = LinkPropagation(
+        peer_lat=47.0,
+        peer_lon=13.10,
+        peer_alt_m=500.0,
+        noise_floor_dbm=-100.0,
+        channel_bandwidth_hz=0.0,
+        noise_figure_db=-50.0,
+    )
+    budget = solve_link_budget(
+        bad, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0,
+    )
+    assert budget.noise_floor_dbm == pytest_approx(-100.0)

@@ -136,11 +136,12 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 989 tests pass at HEAD: BL-088 / ADR 0054 added
-  sixteen (the higher-fidelity link-budget functions, the log-distance / knife
-  edge / antenna / kTB-noise / Rician-fade physics, and the
-  reduces-to-ADR-0053-at-defaults checks in `tests/unit/test_propagation.py`,
-  plus the obstruction-degrades-the-link and multipath-variance engine tests in
+  feature branch before merge. 991 tests pass at HEAD: BL-088 / ADR 0054 added
+  eighteen (the higher-fidelity link-budget functions, the log-distance / knife
+  edge / antenna / kTB-noise / Rician-fade physics, the
+  reduces-to-ADR-0053-at-defaults checks, and the fail-conservative noise-config
+  guard in `tests/unit/test_propagation.py`, plus the
+  obstruction-degrades-the-link and multipath-variance engine tests in
   `tests/integration/test_propagation_demo.py`, closing BL-088), on top of the
   973 from BL-048 / ADR 0053, which added
   thirty-one (the propagation link-budget physics and an SNR-monotone property
