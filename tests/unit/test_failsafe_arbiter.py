@@ -10,6 +10,8 @@ accrues toward firing where a hard reset would hold it off forever).
 
 from __future__ import annotations
 
+import pytest
+
 from nous.state.failsafe import FailsafeArbiter, FailsafeCondition
 
 
@@ -139,3 +141,35 @@ def test_observe_is_deterministic_for_replay() -> None:
     b_sel = second.select()
     assert a_sel is not None and b_sel is not None
     assert a_sel.id == b_sel.id == "b"
+
+
+def test_equal_severity_selection_is_order_independent() -> None:
+    # Equal severity: the id breaks the tie, so the selection does not depend
+    # on the order the conditions were handed to the arbiter (ADR 0019 replay).
+    a = _condition("aaa", severity=20)
+    b = _condition("bbb", severity=20)
+    forward = FailsafeArbiter([a, b])
+    reverse = FailsafeArbiter([b, a])
+    forward.observe({"aaa": True, "bbb": True})
+    reverse.observe({"aaa": True, "bbb": True})
+    f_sel = forward.select()
+    r_sel = reverse.select()
+    assert f_sel is not None and r_sel is not None
+    assert f_sel.id == r_sel.id == "aaa"
+
+
+def test_duplicate_condition_id_is_rejected() -> None:
+    with pytest.raises(ValueError, match="duplicate failsafe condition id"):
+        FailsafeArbiter([_condition("a"), _condition("a", severity=20)])
+
+
+def test_non_positive_debounce_is_rejected() -> None:
+    # A zero debounce would read as permanently tripped; reject at construction.
+    with pytest.raises(ValueError, match="debounce_ticks must be >= 1"):
+        _condition("a", debounce_ticks=0)
+
+
+def test_non_positive_decay_is_rejected() -> None:
+    # A zero decay would never clear an accrued streak; reject at construction.
+    with pytest.raises(ValueError, match="decay must be >= 1"):
+        _condition("a", decay=0)

@@ -53,10 +53,12 @@ Existing behaviour is preserved. The device and comms conditions keep a
 debounce of one tick (instantaneous), the operator condition keeps its
 three-tick window (now with anti-toggle), and the severity order
 (operator over power over thermal over comms) reproduces the previous
-priority. The one deliberate change is that the enforcer's violation counter
-now also reflects the operator anti-toggle, and a sustained but flapping
-operator label can now cross the debounce where a hard reset would have held
-it off forever.
+priority. The one deliberate change is the anti-toggle itself: a sustained
+but flapping operator label can now cross the debounce where a hard reset
+would have held it off forever. The operator condition stays label-driven
+rather than routed through `SafetyEnforcer.check`, so this changes when the
+label fires, not the enforcer's violation counter; only the SC-2 and SC-8
+device hazards touch that counter, exactly as before.
 
 ## Consequences
 
