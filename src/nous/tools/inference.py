@@ -156,7 +156,9 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         on: ``available`` says whether a cloud call would even be
         attempted (key configured + cap not exhausted); ``remaining``
         is the count today's budget will still admit. ``exhausted=true``
-        is the signal to fall back to ``inference_local``.
+        is the signal to fall back to ``inference_local``, as is
+        ``corrupt=true``, which marks a counter file the spend path
+        refuses (the cloud leg would degrade to the local mock).
         """
 
         async def _work() -> str:

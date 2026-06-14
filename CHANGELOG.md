@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (inference: cap status fails closed on a corrupt counter, BL-081 / ADR 0049)
+
+- `anthropic_cap_status` no longer advertises a healthy cap when the daily
+  counter file is corrupt (audit 2026-06-14 CAP-1). `CallCap.increment` (the
+  spend path) raised `CapExhausted` on a corrupt counter, but `CallCap.peek`
+  (the status path) returned `(0, cap)` on the same file, so the T0 tool
+  reported the cap fully available at the instant every `inference_cloud` call
+  was being silently downgraded to the local mock. Both readers now parse
+  through one `_parse_count` helper, so they cannot drift: a corrupt counter
+  makes `peek` return a `CapReading` with `corrupt=True`, and the tool reports
+  `available: false` / `exhausted: true` / `corrupt: true` /
+  `count_today: null`. `increment` also fails closed uniformly, rejecting a
+  malformed `count` (a non-integer or negative value) where it previously
+  coerced it or leaked a raw `ValueError`. High-blast
+  surface (`anthropic_client.py`), so behind ADR 0049; `peek` returns
+  `CapReading` rather than a tuple (four in-repo call sites updated), while
+  `increment` keeps its tuple. Pinned by `tests/unit/test_anthropic_client.py`,
+  `tests/unit/test_anthropic_status.py`, and
+  `tests/regression/test_audit_findings.py`.
+
 ### Changed (audit: exit_code on the runner's caught-exception path, BL-080 / ADR 0048)
 
 - The audited runner now stamps `exit_code=1` on a caught worker exception, so

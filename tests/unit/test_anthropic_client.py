@@ -158,19 +158,65 @@ def test_peek_does_not_mutate(tmp_path: Path) -> None:
     path = tmp_path / "cap.json"
     cap = CallCap(path, cap=5)
     cap.increment()
-    count, total = cap.peek()
-    assert count == 1
-    assert total == 5
-    count_again, _ = cap.peek()
-    assert count_again == 1
+    reading = cap.peek()
+    assert reading.count == 1
+    assert reading.cap == 5
+    assert reading.corrupt is False
+    assert cap.peek().count == 1
 
 
 def test_peek_handles_missing_file(tmp_path: Path) -> None:
     path = tmp_path / "missing.json"
     cap = CallCap(path, cap=5)
-    count, total = cap.peek()
-    assert count == 0
-    assert total == 5
+    reading = cap.peek()
+    assert reading.count == 0
+    assert reading.cap == 5
+    assert reading.corrupt is False
+
+
+def test_peek_reports_corrupt_on_non_json(tmp_path: Path) -> None:
+    path = tmp_path / "cap.json"
+    path.write_text("not valid json")
+    reading = CallCap(path, cap=5).peek()
+    assert reading.corrupt is True
+    assert reading.cap == 5
+
+
+def test_peek_reports_corrupt_on_non_integer_count(tmp_path: Path) -> None:
+    path = tmp_path / "cap.json"
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    path.write_text(json.dumps({"date": today, "count": "lots"}))
+    assert CallCap(path, cap=5).peek().corrupt is True
+
+
+def test_peek_reports_corrupt_on_negative_count(tmp_path: Path) -> None:
+    # A well-formed JSON object whose count is out of domain (negative, or a
+    # bool/float that int() would otherwise coerce) is corrupt, not coerced:
+    # the counter file is attacker-clobberable, so a bad value must fail closed.
+    path = tmp_path / "cap.json"
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    path.write_text(json.dumps({"date": today, "count": -1}))
+    assert CallCap(path, cap=5).peek().corrupt is True
+    with pytest.raises(CapExhausted, match="corrupt"):
+        CallCap(path, cap=5).increment()
+
+
+def test_peek_fresh_on_non_dict_json(tmp_path: Path) -> None:
+    # Valid JSON that is not an object is the one shape increment() rewrites
+    # as a fresh day rather than refusing, so peek must agree: count 0, intact.
+    path = tmp_path / "cap.json"
+    path.write_text("[1, 2, 3]")
+    reading = CallCap(path, cap=5).peek()
+    assert reading.corrupt is False
+    assert reading.count == 0
+
+
+def test_increment_fails_closed_on_non_integer_count(tmp_path: Path) -> None:
+    path = tmp_path / "cap.json"
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    path.write_text(json.dumps({"date": today, "count": [1]}))
+    with pytest.raises(CapExhausted, match="corrupt"):
+        CallCap(path, cap=5).increment()
 
 
 def test_fsync_failure_fails_closed(
@@ -277,7 +323,7 @@ async def test_call_default_tier_creates_without_thinking(
         for block in kwargs["system"]
     )
     assert client.last_cache_read_input_tokens == 42
-    assert CallCap(tmp_path / "cap.json", cap=100).peek()[0] == 1
+    assert CallCap(tmp_path / "cap.json", cap=100).peek().count == 1
 
 
 async def test_call_streams_long_generation(config: Settings, tmp_path: Path) -> None:

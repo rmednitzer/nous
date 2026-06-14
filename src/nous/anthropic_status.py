@@ -35,12 +35,33 @@ def cap_status(settings: Settings, *, cap_path: Path | None = None) -> dict[str,
     True only when the API key is configured and the cap has not been
     exhausted; ``cap=0`` is treated as "cap disabled" per the contract
     in ``CallCap.increment``.
+
+    A corrupt on-disk counter is reported as ``corrupt: true`` with
+    ``available: false`` and ``exhausted: true`` (audit CAP-1, ADR 0049):
+    it is the state under which ``inference_cloud`` would refuse the cloud
+    leg and fall back to the local mock, so the polled status must not
+    advertise a healthy cap. ``count_today`` is ``null`` in that case
+    because the real count is unknown until an operator repairs the file.
     """
     path = cap_path or (settings.home / ".anthropic_daily_count")
-    cap = CallCap(path, settings.anthropic_daily_cap)
-    count, total = cap.peek()
-    exhausted = bool(total) and count >= total
+    reading = CallCap(path, settings.anthropic_daily_cap).peek()
+    total = reading.cap
     api_key_configured = bool(_resolve_key(settings))
+    if reading.corrupt:
+        return {
+            "available": False,
+            "api_key_configured": api_key_configured,
+            "cap": total,
+            "count_today": None,
+            "remaining": 0,
+            "exhausted": True,
+            "corrupt": True,
+            "cap_disabled": total == 0,
+            "model_default": settings.anthropic_model_default,
+            "model_advanced": settings.anthropic_model_advanced,
+        }
+    count = reading.count
+    exhausted = bool(total) and count >= total
     return {
         "available": api_key_configured and not exhausted,
         "api_key_configured": api_key_configured,
@@ -48,6 +69,7 @@ def cap_status(settings: Settings, *, cap_path: Path | None = None) -> dict[str,
         "count_today": count,
         "remaining": max(0, total - count) if total else None,
         "exhausted": exhausted,
+        "corrupt": False,
         "cap_disabled": total == 0,
         "model_default": settings.anthropic_model_default,
         "model_advanced": settings.anthropic_model_advanced,
