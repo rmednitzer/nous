@@ -46,8 +46,10 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
 if TYPE_CHECKING:
-    from ..subsystems.comms import CommsSubsystem
+    from ..subsystems.comms import CommsSubsystem, Link
 
 __all__ = [
     "CommsOutbox",
@@ -191,12 +193,21 @@ class CommsOutbox:
     working unchanged.
     """
 
-    def __init__(self, profile: Mapping[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        profile: Mapping[str, Any] | None = None,
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         cfg = _outbox_cfg(profile)
         self.enabled: bool = cfg["enabled"]
         self.max_packages: int = cfg["max_packages"]
         self.max_bytes: int = cfg["max_bytes"]
         self.default_ttl_s: float | None = cfg["default_ttl_s"]
+        # BL-048 / ADR 0053: the engine RNG seam for probabilistic delivery over
+        # a lossy propagation link. ``None`` (the default, and every bare-profile
+        # test) keeps the flush all-or-nothing.
+        self._rng = rng
         self._packages: list[OutboxPackage] = []
         self._next_id = 1
         self._queued_bytes = 0
@@ -327,6 +338,15 @@ class CommsOutbox:
                 closed.add(pkg.link_id)
                 result.deferred.append(pkg.package_id)
                 continue
+            if self._delivery_lost(link):
+                # BL-048 / ADR 0053: a propagation link with packet loss can drop
+                # this transmission. The package stays queued (a retry next tick)
+                # and the link closes for the rest of this flush, so the loss
+                # does not let a lower-precedence package jump ahead.
+                pkg.attempts += 1
+                closed.add(pkg.link_id)
+                result.deferred.append(pkg.package_id)
+                continue
             accepted = comms.tx(pkg.link_id, pkg.size_bytes)
             if accepted <= 0:
                 pkg.attempts += 1
@@ -348,9 +368,11 @@ class CommsOutbox:
 
         Called from the engine tick after the comms subsystem has stepped, so a
         link that recovered this tick drains immediately. The per-link budget is
-        ``bandwidth_bps * dt / 8`` bytes, which rate-limits a slow link (a
-        recovered LoRa link clears a few kilobytes a tick, not its whole
-        backlog) while a fat link clears everything that fits.
+        ``capacity_bps * dt / 8`` bytes, the link's SNR-derived sustainable rate
+        (equal to the rated bandwidth for a static link, and shrinking on a
+        degraded propagation link per BL-048 / ADR 0053), which rate-limits a
+        slow link (a recovered LoRa link clears a few kilobytes a tick, not its
+        whole backlog) while a fat link clears everything that fits.
         """
         if not self.enabled or not self._packages:
             # Still purge expiry so a disabled-after-fill or idle outbox does
@@ -362,9 +384,23 @@ class CommsOutbox:
                 result.expired.append(pkg.package_id)
             return result
         budget: dict[str, float] = {
-            link.link_id: link_per_tick_budget(link.bandwidth_bps, dt) for link in comms
+            link.link_id: link_per_tick_budget(link.capacity_bps, dt) for link in comms
         }
         return self.flush(comms, now_s=now_s, link_budget_bytes=budget)
+
+    def _delivery_lost(self, link: Link) -> bool:
+        """Bernoulli packet-loss draw for a lossy propagation link.
+
+        Active only when an RNG is injected and the link carries a propagation
+        model (a static link's nominal loss is an envelope, not a per-tick loss
+        process), so the all-or-nothing flush is unchanged everywhere else.
+        """
+        if self._rng is None or link.propagation is None:
+            return False
+        loss = max(0.0, min(100.0, float(link.loss_pct)))
+        if loss <= 0.0:
+            return False
+        return float(self._rng.random()) < loss / 100.0
 
     # -- reads -----------------------------------------------------------
 
@@ -533,10 +569,11 @@ def _coerce_ttl(value: Any, fallback: float | None) -> float | None:
     return out
 
 
-def link_per_tick_budget(bandwidth_bps: float, dt_s: float) -> float:
-    """Bytes a link can carry in one tick at its nominal bandwidth.
+def link_per_tick_budget(rate_bps: float, dt_s: float) -> float:
+    """Bytes a link can carry in one tick at a given rate.
 
-    Exposed for the flush tool and tests so the per-tick rate-limit is computed
-    one way everywhere.
+    The rate is the link's SNR-derived ``capacity_bps``, which equals the rated
+    bandwidth for a static link (BL-048 / ADR 0053). Exposed for the flush tool
+    and tests so the per-tick rate-limit is computed one way everywhere.
     """
-    return max(0.0, float(bandwidth_bps) * float(dt_s) / 8.0)
+    return max(0.0, float(rate_bps) * float(dt_s) / 8.0)

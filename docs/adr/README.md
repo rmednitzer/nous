@@ -55,3 +55,4 @@
 | 0050 | [The audit chain head tracks the on-disk tail, not the fsync confirmation](0050-chain-head-tracks-on-disk-tail.md) | Accepted | 2026-06-14 |
 | 0051 | [Comms link throughput is an achieved rate, not a packet size](0051-comms-throughput-is-an-achieved-rate.md) | Accepted | 2026-06-14 |
 | 0052 | [Name the interop freshness gate's configuration faults distinctly from staleness](0052-interop-freshness-gate-failure-modes.md) | Accepted | 2026-06-14 |
+| 0053 | [Propagation-aware comms link quality](0053-propagation-aware-comms-model.md) | Accepted | 2026-06-14 |

@@ -6,6 +6,37 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (comms: propagation-aware link quality, BL-048 / ADR 0053)
+
+- A comms link with a `propagation` block now solves its RSSI, packet loss, and
+  SNR-derived capacity each tick from a first-order link budget instead of
+  holding the profile's static nominal: a Friis free-space path loss over the
+  slant range from the device position to the link's peer, a constant
+  excess-loss margin for terrain and obstruction, and a log-normal shadowing
+  draw from the engine RNG. A new `subsystems/propagation.py` holds the pure
+  link-budget functions; the result feeds the existing `rssi_dbm` / `loss_pct`
+  fields, so the unchanged observation to particle-filter to `derive` to FSM
+  pipeline degrades on its own as the device moves away from its peer. Device
+  position enters through a lazy `position_fn` seam that mirrors the `rng=`
+  injection.
+- The four couplings the earlier ADRs deferred land with the model. `tx` caps
+  the achieved rate at the SNR-derived `capacity_bps` (supersedes the ADR 0051
+  bandwidth cap; realizes the ADR 0020 throughput-monotone-in-SNR invariant).
+  `comms_state.derive` gates link health on a per-link fraction of each link's
+  own bandwidth rather than the flat 5000 bps. The comms particle filter uses
+  the modeled capacity as its expected throughput, so an observed rate far below
+  capacity now weighs against the connected hypothesis. The store-and-forward
+  flush models per-link Bernoulli packet loss on a propagation link (amends
+  ADR 0047).
+- The model is additive and inert without config: `LinkEstimate` gains optional
+  `bandwidth_bps` / `capacity_bps`, a static link's capacity is its rated
+  bandwidth, and every new channel carries a legacy fallback, so all existing
+  comms, estimator, outbox, and scenario tests are unchanged. `comms_status`
+  surfaces the range, path loss, SNR, and capacity behind a link's quality.
+  Demonstrated by `profiles/propagation-demo.yaml` and
+  `tests/integration/test_propagation_demo.py`. The forced-state override and
+  the `inject_comms_loss` / `set_link_state` seam still hard-override the physics.
+
 ### Fixed (self-model: Monte Carlo `p50` is the sample median, not the deterministic point, BL-087)
 
 - Each capability's Monte Carlo branch in `self_model/assess.py` computed the

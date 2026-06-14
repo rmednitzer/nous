@@ -317,19 +317,70 @@ def test_storage_wear_pct_monotone_under_writes(writes: list[float]) -> None:
 
 
 def test_comms_link_estimate_throughput_zero_when_not_live() -> None:
-    """The full SNR-to-throughput propagation model lands with
-    BL-041 / BL-048; today RSSI, loss, and throughput are
-    independent scenario inputs. The weaker invariant the
-    subsystem does enforce: ``LinkEstimate.throughput_bps`` is
-    zero when the link is not live, regardless of what the
-    scenario set the raw throughput to. A regression that
-    advertises a stale throughput on a dead link breaks the
-    self-model's comms capability claim."""
+    """BL-048 / ADR 0053 now drives RSSI, loss, and capacity from the
+    link budget for a propagation link, but the live-gate invariant is
+    unchanged: ``LinkEstimate.throughput_bps`` is zero when the link is
+    not live, regardless of what the propagation model or a scenario set
+    the raw throughput to. A regression that advertises a stale
+    throughput on a dead link breaks the self-model's comms capability
+    claim."""
     c = CommsSubsystem(_minimal_profile())
     c.set_link_state("lte", throughput_bps=20_000_000.0, connected=False)
     estimates = {est.link_id: est for est in c.link_estimates()}
     lte_estimate = estimates["lte"]
     assert lte_estimate.throughput_bps == 0.0
+
+
+def _propagation_relay_profile() -> dict[str, Any]:
+    return {
+        "comms": {
+            "links": [
+                {
+                    "id": "relay",
+                    "bandwidth_bps": 2_000_000,
+                    "rssi_dbm_nominal": -80,
+                    "loss_pct_nominal": 0.5,
+                    "max_age_s": 600.0,
+                    "propagation": {
+                        "peer": {"lat": 47.0, "lon": 12.98, "alt_m": 520},
+                        "tx_power_dbm": 20.0,
+                        "frequency_hz": 2.4e9,
+                        "excess_loss_db": 5.0,
+                        "noise_floor_dbm": -100.0,
+                        "snr_floor_db": 5.0,
+                        "snr_full_db": 20.0,
+                        "good_rssi_dbm": -85.0,
+                        "sensitivity_dbm": -115.0,
+                        "loss_floor_pct": 0.5,
+                    },
+                }
+            ]
+        }
+    }
+
+
+@given(extra_lon=st.floats(min_value=0.001, max_value=0.30))
+def test_comms_capacity_monotone_as_device_moves_away(extra_lon: float) -> None:
+    """BL-048 / ADR 0053 enforces the ADR 0020 deferred invariant: driving a
+    propagation link's device away from its peer never raises the link's
+    SNR-derived capacity nor lowers its packet loss. Throughput is monotone in
+    SNR; this is the subsystem-level statement of it."""
+    pos = {"lat": 47.0, "lon": 13.0, "alt": 500.0}
+    c = CommsSubsystem(
+        _propagation_relay_profile(),
+        position_fn=lambda: (pos["lat"], pos["lon"], pos["alt"]),
+    )
+    c.step(1.0)
+    near = c.link("relay")
+    assert near is not None
+    near_cap, near_loss = near.capacity_bps, near.loss_pct
+
+    pos["lon"] = 13.0 + extra_lon
+    c.step(1.0)
+    far = c.link("relay")
+    assert far is not None
+    assert far.capacity_bps <= near_cap + 1e-6
+    assert far.loss_pct >= near_loss - 1e-9
 
 
 # --- FSM: transition closure ---

@@ -104,15 +104,23 @@ model is `[planned]` for L2 in [BL-040].
 
 ## L7. First-order comms model
 
-**State.** Radio links are modelled by first-order link budget, additive
-white Gaussian noise on RSSI, and a particle filter for connection state.
-There is no propagation model, no terrain blockage, and no mesh routing.
+**State.** A link with a `propagation` block now solves its RSSI, packet
+loss, and SNR-derived capacity each tick from a first-order link budget:
+a Friis free-space path loss over the device-to-peer geometry, a constant
+excess-loss margin for terrain and obstruction, and a log-normal shadowing
+draw (BL-048, ADR 0053). A particle filter still tracks connection state.
+What is not modelled: terrain raytracing or diffraction, multipath beyond
+log-normal shadowing, frequency-selective fading, and mesh or multi-hop
+routing. A link with no propagation block stays at its static nominal.
 
-**Implication.** Comms scenarios are useful for exercising the *handling*
-of degraded links (failover, queueing, mode transitions), not for
-predicting actual RF performance.
+**Implication.** Comms scenarios now reproduce graded, geometry-driven
+degradation, range and obstruction lower the capacity and raise the loss,
+rather than only scripted link states. The path loss is still
+free-space-plus-margin, so it is not a terrain-accurate prediction of RF
+performance.
 
-**Tracking.** [BL-048] propagation-aware comms is `[planned]` for L3.
+**Tracking.** Higher-fidelity propagation (terrain, multipath, mesh) is
+`[planned]` for L3 under [BL-088].
 
 ## L8. Li-ion only
 

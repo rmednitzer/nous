@@ -28,7 +28,7 @@ schema.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -36,15 +36,25 @@ import numpy as np
 
 from ..state.comms_state import CommsState, derive
 from ..types import LinkEstimate, Observation
+from .propagation import LinkPropagation, solve_link_budget
 
 __all__ = ["CommsSubsystem", "Link"]
+
+PositionFn = Callable[[], tuple[float, float, float]]
 
 _LOG = logging.getLogger("nous.comms")
 
 
 @dataclass
 class Link:
-    """One radio link with its nominal envelope and live state."""
+    """One radio link with its nominal envelope and live state.
+
+    ``capacity_bps`` is the link's currently sustainable rate. For a static link
+    it is the rated ``bandwidth_bps``; for a link with a ``propagation`` block it
+    is the SNR-derived capacity recomputed each tick (BL-048, ADR 0053). The
+    ``range_m`` / ``path_loss_db`` / ``snr_db`` diagnostics are populated only
+    for propagation links and surface through ``comms_status``.
+    """
 
     link_id: str
     bandwidth_bps: float
@@ -54,19 +64,27 @@ class Link:
     rssi_dbm: float
     loss_pct: float
     throughput_bps: float
+    capacity_bps: float = 0.0
     age_s: float = 0.0
     connected: bool = True
     forced_state: bool | None = None
     age_out_count: int = 0
     last_aged_out_at_s: float | None = None
+    propagation: LinkPropagation | None = None
+    range_m: float | None = None
+    path_loss_db: float | None = None
+    snr_db: float | None = None
 
     def as_estimate(self) -> LinkEstimate:
+        live = self.is_live()
         return LinkEstimate(
             link_id=self.link_id,
-            connected=self.is_live(),
+            connected=live,
             rssi_dbm=self.rssi_dbm,
             loss_pct=self.loss_pct,
-            throughput_bps=self.throughput_bps if self.is_live() else 0.0,
+            throughput_bps=self.throughput_bps if live else 0.0,
+            bandwidth_bps=self.bandwidth_bps,
+            capacity_bps=self.capacity_bps if live else 0.0,
         )
 
     def is_live(self) -> bool:
@@ -91,9 +109,14 @@ class CommsSubsystem:
         profile: Mapping[str, Any],
         *,
         rng: np.random.Generator | None = None,
+        position_fn: PositionFn | None = None,
     ) -> None:
         self.profile = profile
         self._rng = rng  # ADR 0019 follow-up: engine RNG seam
+        # BL-048 / ADR 0053: a lazy device-position getter for the link budget.
+        # Resolved at step() time, so it tolerates being constructed before the
+        # position subsystem it reads.
+        self._position_fn = position_fn
         comms_cfg = profile.get("comms") or {}
         raw_links = comms_cfg.get("links") or []
         self._links: dict[str, Link] = {}
@@ -155,8 +178,10 @@ class CommsSubsystem:
         A transmission on a link that the controller has forced down is
         rejected (returns 0). Otherwise ``age_s`` is reset to 0 and
         ``throughput_bps`` is updated to the achieved rate: the bits sent over
-        the interval since this link last transmitted, capped at the link
-        bandwidth (audit COMMS-3, ADR 0051).
+        the interval since this link last transmitted, capped at the link's
+        sustainable ``capacity_bps`` (the rated bandwidth for a static link, the
+        SNR-derived capacity for a propagation link; achieved-rate audit COMMS-3 /
+        ADR 0051, the capacity cap per BL-048 / ADR 0053).
         """
         link = self._links.get(link_id)
         if link is None:
@@ -170,10 +195,13 @@ class CommsSubsystem:
         elapsed = link.age_s
         # An achieved rate (bits per second), not the raw packet size. No
         # elapsed time (the first send, or two sends in one instant) reports
-        # the link capacity instead of dividing by zero; the cap holds the
-        # rate to what the link can physically carry (ADR 0051).
-        rate = link.bandwidth_bps if elapsed <= 0.0 else bits / elapsed
-        link.throughput_bps = min(rate, link.bandwidth_bps)
+        # the link capacity instead of dividing by zero; the cap holds the rate
+        # to the SNR-derived sustainable capacity, which equals the rated
+        # bandwidth for a static link and falls on a poor channel (ADR 0051
+        # rate, capped by the ADR 0053 capacity).
+        ceiling = link.capacity_bps
+        rate = ceiling if elapsed <= 0.0 else bits / elapsed
+        link.throughput_bps = min(rate, ceiling)
         link.age_s = 0.0
         link.connected = True
         return amount
@@ -182,7 +210,18 @@ class CommsSubsystem:
         if dt <= 0.0:
             return
         self._t += dt
+        device_pos = self._device_position()
         for link in self._links.values():
+            if (
+                link.propagation is not None
+                and device_pos is not None
+                and link.forced_state is None
+            ):
+                # BL-048 / ADR 0053: re-solve the link budget from the geometry.
+                # A forced link keeps its override (the controller / scenario
+                # escape hatch wins over the physics), so the recompute is gated
+                # on forced_state being clear.
+                self._apply_propagation(link, device_pos)
             was_live = link.is_live()
             link.age_s += dt
             if link.age_s > link.max_age_s and link.forced_state is None:
@@ -205,6 +244,36 @@ class CommsSubsystem:
                     link.max_age_s,
                 )
 
+    def _device_position(self) -> tuple[float, float, float] | None:
+        if self._position_fn is None:
+            return None
+        lat, lon, alt = self._position_fn()
+        return float(lat), float(lon), float(alt)
+
+    def _apply_propagation(
+        self, link: Link, device_pos: tuple[float, float, float]
+    ) -> None:
+        prop = link.propagation
+        if prop is None:
+            return
+        shadow = 0.0
+        if self._rng is not None and prop.shadowing_sigma_db > 0.0:
+            shadow = float(self._rng.normal(0.0, prop.shadowing_sigma_db))
+        budget = solve_link_budget(
+            prop,
+            device_lat=device_pos[0],
+            device_lon=device_pos[1],
+            device_alt_m=device_pos[2],
+            bandwidth_bps=link.bandwidth_bps,
+            shadowing_db=shadow,
+        )
+        link.rssi_dbm = budget.rssi_dbm
+        link.loss_pct = budget.loss_pct
+        link.capacity_bps = budget.capacity_bps
+        link.range_m = budget.range_m
+        link.path_loss_db = budget.path_loss_db
+        link.snr_db = budget.snr_db
+
     def link_estimates(self) -> list[LinkEstimate]:
         return [link.as_estimate() for link in self._links.values()]
 
@@ -224,6 +293,7 @@ class CommsSubsystem:
                 "rssi_dbm": link.rssi_dbm,
                 "loss_pct": link.loss_pct,
                 "throughput_bps": link.throughput_bps if link.is_live() else 0.0,
+                "capacity_bps": link.capacity_bps if link.is_live() else 0.0,
                 "connected": link.is_live(),
             }
             for link in self._links.values()
@@ -257,10 +327,16 @@ def _link_from_profile(entry: Mapping[str, Any]) -> Link | None:
         rssi_dbm=rssi_nominal,
         loss_pct=max(0.0, min(100.0, loss_nominal)),
         throughput_bps=nominal_throughput,
+        # A static link's sustainable capacity is its rated bandwidth, so the
+        # ADR 0053 SNR coupling is inert without a propagation block. A
+        # propagation link overwrites this each tick from the link budget.
+        capacity_bps=bandwidth_bps,
+        propagation=LinkPropagation.from_profile(entry),
     )
 
 
 def _link_truth(link: Link) -> Mapping[str, Any]:
+    live = link.is_live()
     return {
         "link_id": link.link_id,
         "bandwidth_bps": link.bandwidth_bps,
@@ -269,12 +345,17 @@ def _link_truth(link: Link) -> Mapping[str, Any]:
         "max_age_s": link.max_age_s,
         "rssi_dbm": link.rssi_dbm,
         "loss_pct": link.loss_pct,
-        "throughput_bps": link.throughput_bps if link.is_live() else 0.0,
+        "throughput_bps": link.throughput_bps if live else 0.0,
+        "capacity_bps": link.capacity_bps if live else 0.0,
         "age_s": link.age_s,
-        "connected": link.is_live(),
+        "connected": live,
         "forced": link.forced_state is not None,
         "age_out_count": link.age_out_count,
         "last_aged_out_at_s": link.last_aged_out_at_s,
+        "propagation": link.propagation is not None,
+        "range_m": link.range_m,
+        "path_loss_db": link.path_loss_db,
+        "snr_db": link.snr_db,
     }
 
 

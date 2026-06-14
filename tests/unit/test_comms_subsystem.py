@@ -252,6 +252,107 @@ def test_sensor_obs_payload_includes_per_link_state() -> None:
     assert obs.source == "comms"
     assert len(obs.payload["links"]) == 2
     for link in obs.payload["links"]:
-        assert {"link_id", "rssi_dbm", "loss_pct", "throughput_bps", "connected"} <= set(
-            link
-        )
+        assert {
+            "link_id", "rssi_dbm", "loss_pct", "throughput_bps", "capacity_bps", "connected"
+        } <= set(link)
+
+
+# -- BL-048 / ADR 0053: propagation-aware link quality --------------------
+
+
+def _prop_link() -> Mapping[str, Any]:
+    return {
+        "id": "relay",
+        "bandwidth_bps": 2_000_000,
+        "rssi_dbm_nominal": -80,
+        "loss_pct_nominal": 0.5,
+        "max_age_s": 600.0,
+        "propagation": {
+            "peer": {"lat": 47.0, "lon": 12.98, "alt_m": 520},
+            "tx_power_dbm": 20.0,
+            "frequency_hz": 2.4e9,
+            "excess_loss_db": 5.0,
+            "noise_floor_dbm": -100.0,
+            "snr_floor_db": 5.0,
+            "snr_full_db": 20.0,
+            "good_rssi_dbm": -85.0,
+            "sensitivity_dbm": -115.0,
+            "loss_floor_pct": 0.5,
+        },
+    }
+
+
+def _prop_subsystem(pos: dict[str, float]) -> CommsSubsystem:
+    return CommsSubsystem(
+        {"comms": {"links": [_prop_link()]}},
+        position_fn=lambda: (pos["lat"], pos["lon"], pos["alt"]),
+    )
+
+
+def test_propagation_link_solves_quality_from_geometry() -> None:
+    pos = {"lat": 47.0, "lon": 13.0, "alt": 500.0}
+    c = _prop_subsystem(pos)
+    c.step(1.0)
+    near = c.link("relay")
+    assert near is not None
+    assert near.range_m is not None and near.range_m > 0.0
+    assert near.path_loss_db is not None and near.snr_db is not None
+    assert near.loss_pct < 5.0
+    assert near.capacity_bps > 0.25 * near.bandwidth_bps
+    # Capture scalars: c.link() returns the same object, mutated in place by step.
+    near_rssi, near_cap, near_loss = near.rssi_dbm, near.capacity_bps, near.loss_pct
+
+    pos["lon"] = 13.30
+    c.step(1.0)
+    far = c.link("relay")
+    assert far is not None
+    assert far.rssi_dbm < near_rssi
+    assert far.capacity_bps < near_cap
+    assert far.loss_pct > near_loss
+
+
+def test_static_link_capacity_equals_bandwidth() -> None:
+    c = CommsSubsystem(_profile())
+    lte = c.link("lte")
+    assert lte is not None
+    assert lte.propagation is None
+    assert lte.capacity_bps == pytest.approx(lte.bandwidth_bps)
+    # Stepping does not touch a static link's capacity (the coupling is inert).
+    c.step(1.0)
+    assert lte.capacity_bps == pytest.approx(lte.bandwidth_bps)
+
+
+def test_propagation_recompute_skipped_when_link_forced() -> None:
+    pos = {"lat": 47.0, "lon": 13.0, "alt": 500.0}
+    c = _prop_subsystem(pos)
+    c.set_link_state("relay", connected=False)
+    pos["lon"] = 13.30
+    c.step(1.0)
+    relay = c.link("relay")
+    assert relay is not None
+    # A forced link keeps its override; the budget was not solved for it.
+    assert relay.range_m is None
+    assert relay.rssi_dbm == pytest.approx(-80.0)
+
+
+def test_tx_caps_throughput_at_solved_capacity() -> None:
+    pos = {"lat": 47.0, "lon": 13.20, "alt": 500.0}
+    c = _prop_subsystem(pos)
+    c.step(1.0)
+    relay = c.link("relay")
+    assert relay is not None
+    assert relay.capacity_bps < relay.bandwidth_bps  # a poor channel lowered the ceiling
+    c.tx("relay", 10_000_000)  # a huge packet on the first send
+    assert relay.throughput_bps == pytest.approx(relay.capacity_bps)
+
+
+def test_derive_degraded_when_capacity_collapses() -> None:
+    pos = {"lat": 47.0, "lon": 13.30, "alt": 500.0}
+    c = _prop_subsystem(pos)
+    c.step(1.0)
+    relay = c.link("relay")
+    assert relay is not None
+    assert relay.is_live() is True  # still within max_age, so carrier present
+    assert relay.capacity_bps <= 0.25 * relay.bandwidth_bps
+    label, _ = c.derive_state()
+    assert label is CommsState.DEGRADED

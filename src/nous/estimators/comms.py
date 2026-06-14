@@ -52,6 +52,7 @@ class LinkBelief:
 
     __slots__ = (
         "_rng",
+        "capacity_bps",
         "collapses",
         "expected_throughput_bps",
         "link_id",
@@ -85,6 +86,7 @@ class LinkBelief:
         self.loss_pct = 0.0
         self.throughput_bps = 0.0
         self.expected_throughput_bps = 0.0
+        self.capacity_bps = 0.0
         self.collapses = 0
         self._rng = rng
 
@@ -118,6 +120,7 @@ class LinkBelief:
         loss_pct: float,
         throughput_bps: float,
         expected_throughput_bps: float,
+        capacity_bps: float = 0.0,
         observed_connected_flag: bool,
     ) -> None:
         """Weight particles by likelihood of the observation, then resample."""
@@ -125,6 +128,7 @@ class LinkBelief:
         self.loss_pct = max(0.0, min(100.0, loss_pct))
         self.throughput_bps = max(0.0, throughput_bps)
         self.expected_throughput_bps = max(_THROUGHPUT_FLOOR_BPS, expected_throughput_bps)
+        self.capacity_bps = max(0.0, capacity_bps)
 
         likelihood_connected = _likelihood_given_connected(
             self.throughput_bps,
@@ -212,6 +216,7 @@ class CommsParticleFilter:
                 rssi = float(entry.get("rssi_dbm", -120.0))
                 loss = float(entry.get("loss_pct", 100.0))
                 throughput = float(entry.get("throughput_bps", 0.0))
+                capacity = float(entry.get("capacity_bps", 0.0))
             except (TypeError, ValueError):
                 continue
             connected_flag = bool(entry.get("connected", False))
@@ -226,12 +231,22 @@ class CommsParticleFilter:
                 )
                 self._links[link_id] = belief
 
-            expected_throughput = max(throughput, _THROUGHPUT_FLOOR_BPS)
+            # BL-048 / ADR 0053: when the observation carries a modeled capacity,
+            # the expected throughput is that capacity, so an observed rate far
+            # below capacity lowers the connected likelihood. Without a capacity
+            # channel the filter keeps the self-referential floor (ADR 0051's
+            # documented scale-insensitivity), so manual observations are
+            # unaffected.
+            if capacity > _THROUGHPUT_FLOOR_BPS:
+                expected_throughput = capacity
+            else:
+                expected_throughput = max(throughput, _THROUGHPUT_FLOOR_BPS)
             belief.update_observation(
                 rssi_dbm=rssi,
                 loss_pct=loss,
                 throughput_bps=throughput,
                 expected_throughput_bps=expected_throughput,
+                capacity_bps=capacity,
                 observed_connected_flag=connected_flag,
             )
             self._link_estimates[link_id] = _link_estimate_from_belief(belief)
@@ -309,6 +324,7 @@ def _link_estimate_from_belief(belief: LinkBelief) -> LinkEstimate:
         rssi_dbm=belief.rssi_dbm,
         loss_pct=belief.loss_pct,
         throughput_bps=belief.throughput_bps if connected else 0.0,
+        capacity_bps=belief.capacity_bps if connected else 0.0,
     )
 
 

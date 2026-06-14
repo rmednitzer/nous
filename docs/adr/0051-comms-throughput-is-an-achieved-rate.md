@@ -64,6 +64,10 @@ gate, which is the defect the audit recorded.
 
 ## Revisit triggers
 
+Both triggers below are addressed by ADR 0053 (BL-048). The achieved rate here is
+retained but now capped at the SNR-derived capacity rather than the rated
+bandwidth, and the flat health threshold is replaced by a per-link fraction.
+
 - The SNR-to-throughput propagation model (BL-041 / BL-048) lands and derives
   throughput from link physics (RSSI, loss, modulation) rather than send cadence,
   superseding the inter-transmission-interval rate here.
