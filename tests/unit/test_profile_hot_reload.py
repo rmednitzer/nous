@@ -51,3 +51,27 @@ def test_engine_still_ticks_after_reload(engine: Engine) -> None:
     for _ in range(5):
         engine.tick()
     assert engine.state.tick == starting_tick + 5
+
+
+def test_reload_resets_failsafe_streaks(engine: Engine) -> None:
+    # AUDIT-2026-06-14 RLD-1: a debounce streak accrued under the old profile
+    # must not survive a reload, which restarts the safety law against the new
+    # physics.
+    from nous.state.machine import REQ_OPERATOR
+
+    engine._failsafe.observe({REQ_OPERATOR: True})
+    engine._failsafe.observe({REQ_OPERATOR: True})
+    assert engine._failsafe.streak(REQ_OPERATOR) > 0
+
+    engine.reload_profile()
+    assert engine._failsafe.streak(REQ_OPERATOR) == 0
+
+
+def test_reload_refreshes_capability_cache(engine: Engine) -> None:
+    # AUDIT-2026-06-14 RLD-1: a capability claim cached from the old profile
+    # must not survive into a read taken before the next tick.
+    engine.tick()
+    engine.state.last_capabilities = {"stale_marker": 999.0}
+    engine.reload_profile()
+    assert "stale_marker" not in engine.state.last_capabilities
+    assert engine.state.last_capabilities  # recomputed from the rebuilt estimators

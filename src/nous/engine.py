@@ -419,7 +419,18 @@ class Engine:
         self.state.operator_state, self.state.operator_state_reason = (
             derive_operator(self.biometrics_est.state())
         )
+        # A profile reload rebuilds the physics, so the safety law must restart
+        # against it (AUDIT-2026-06-14 RLD-1). A failsafe debounce streak
+        # accrued under the old curves is meaningless under the new ones, and a
+        # capability claim cached from the old profile must not survive into a
+        # read taken before the next tick. Rebuild the arbiter for fresh streaks,
+        # actuate the mode entry (which re-applies the posture's compute-load
+        # ceiling to the rebuilt subsystem), then recompute the capabilities so
+        # the cache reflects the fully-actuated state rather than the un-capped
+        # request.
+        self._failsafe = FailsafeArbiter(_FAILSAFE_CONDITIONS)
         self._apply_mode_entry(self.state.mode)
+        self._refresh_capabilities()
 
         return {
             "profile": self.settings.profile,
