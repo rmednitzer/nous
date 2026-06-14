@@ -475,22 +475,34 @@ class AuditLogger:
 
         The record is stamped with the hash chain (ADR 0025 / BL-016)
         before it is emitted: ``prev_hash`` from the current head and
-        ``entry_hash`` over the record body. The head advances only
-        when the emit does not raise, so the on-disk chain stays
-        consistent with what was actually written.
+        ``entry_hash`` over the record body. The head advances for every
+        record the emit does not raise on, so it tracks the on-disk tail
+        (see the invariant note below).
         """
         self._maybe_auto_resync()
         record.prev_hash = self._chain_head
         record.entry_hash = _entry_hash(record.model_dump(mode="json", exclude={"entry_hash"}))
         try:
             self._log.info(record.model_dump_json())
-            self._chain_head = record.entry_hash
+            # Invariant (AUD-1, ADR 0050): the head tracks the on-disk tail,
+            # not the fsync confirmation. The handler writes and flushes the
+            # line into the append-only file before it fsyncs, so an
+            # fsync-failed record is already physically present; the next
+            # record must link to it or ``verify_chain`` breaks at that line.
+            # So the poll runs first (it only gates the durable-write
+            # counters) and the head then advances unconditionally. Do not
+            # move this advance inside the ``new_failures == 0`` branch:
+            # durability is tracked separately via ``degraded`` /
+            # ``fsync_failures`` / ``writes_total`` and the BL-031 anchor.
             new_failures = self._sync_fsync_failure_state()
+            self._chain_head = record.entry_hash
             if new_failures == 0:
                 self.writes_total += 1
                 with contextlib.suppress(Exception):
                     self.last_write_ts_s = time.time()
         except OSError as exc:
+            # The emit itself raised: nothing reached the file, so the head
+            # must not advance -- the next record links to the prior line.
             self.fsync_failures += 1
             self.degraded = True
             self.degraded_reason = str(exc)
