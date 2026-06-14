@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (interop: name the freshness gate's config fault distinctly from staleness, BL-086 / ADR 0052)
+
+- `assert_fresh` (`interop/base.py`) reported a fabricated `0.00s old` age when an
+  adapter's `max_age_s` was invalid (non-positive or NaN), so the error blamed a
+  brand-new estimate for a refusal that was really a configuration fault (audit
+  ITP-1). `StaleEstimateError` gains an optional `reason`; the gate now resolves
+  the source timestamp and real age first, then on an invalid `max_age_s` raises
+  with that real age and a reason naming the misconfiguration. It stays a
+  `StaleEstimateError`, so the fail-closed catch in the interop and publish tools
+  is unchanged, and the genuine-staleness message is byte-for-byte unchanged
+  (`reason` defaults to `None`). FRESH-1 (`resolve_ts` returns `ts_s=0.0`
+  verbatim) is documented as by-design: `0.0` is a valid sim epoch, so the
+  requirement is clock consistency between `ts` and `now_s`, now spelled out on
+  `resolve_ts` rather than enforced. High-blast surface, so behind ADR 0052; the
+  change is additive (the `reason` field) with no Protocol change. Pinned by
+  `tests/unit/test_interop_adapters.py`.
+
 ### Changed (comms: link throughput is an achieved rate, not a packet size, BL-085 / ADR 0051)
 
 - `CommsSubsystem.tx` recorded `throughput_bps = n_bytes * 8`, the bit count of

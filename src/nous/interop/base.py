@@ -41,16 +41,35 @@ class Adapter(Protocol):
 
 
 class StaleEstimateError(RuntimeError):
-    """Raised by an adapter when its source estimate exceeds ``max_age``."""
+    """Raised by an adapter when it refuses to encode under SC-4.
 
-    def __init__(self, adapter: str, age_s: float, max_age_s: float) -> None:
+    The usual cause is a source estimate older than ``max_age_s``. When the
+    refusal is a configuration fault (an invalid ``max_age_s``) rather than
+    genuine staleness, a ``reason`` is passed: it replaces the message text
+    so the message names the misconfiguration, while ``age_s`` still records
+    the computed source age on the exception object (audit ITP-1, ADR 0052).
+    ``reason`` defaults to ``None`` for a genuine staleness refusal, whose
+    message is unchanged.
+    """
+
+    def __init__(
+        self,
+        adapter: str,
+        age_s: float,
+        max_age_s: float,
+        *,
+        reason: str | None = None,
+    ) -> None:
         self.adapter = adapter
         self.age_s = age_s
         self.max_age_s = max_age_s
-        super().__init__(
-            f"{adapter}: source estimate is {age_s:.2f}s old "
-            f"(max_age_s={max_age_s:.2f}); SC-4 refuses encode"
+        self.reason = reason
+        detail = (
+            reason
+            if reason is not None
+            else f"source estimate is {age_s:.2f}s old (max_age_s={max_age_s:.2f})"
         )
+        super().__init__(f"{adapter}: {detail}; SC-4 refuses encode")
 
 
 def resolve_ts(data: Mapping[str, Any], now_s: float | None = None) -> float:
@@ -59,7 +78,11 @@ def resolve_ts(data: Mapping[str, Any], now_s: float | None = None) -> float:
     Falls back to ``now_s`` (defaulting to the wall clock) when the caller
     omitted a timestamp. A NaN or negative timestamp is treated as
     "missing" because it cannot be older than ``max_age`` in a finite
-    sense.
+    sense. A zero timestamp is *not* missing: ``0.0`` is a valid epoch (the
+    simulation clock starts there), so it is returned verbatim. Callers
+    must pass a ``now_s`` on the same clock as ``ts`` -- a sim-epoch ``ts``
+    compared against a wall-clock ``now`` reads as ancient (audit FRESH-1,
+    ADR 0052).
     """
     candidate = data.get("ts_s", data.get("ts"))
     if candidate is None:
@@ -84,13 +107,22 @@ def assert_fresh(
 
     Returns the resolved source timestamp so the caller can stamp it into
     the encoded payload, satisfying the "must include the source
-    timestamp" half of SC-4.
+    timestamp" half of SC-4. An invalid ``max_age_s`` (non-positive or
+    NaN) is a configuration fault: the gate still refuses (fail closed),
+    but the raised :class:`StaleEstimateError` names the misconfiguration in
+    its message and carries the real source age on ``age_s``, rather than
+    the fabricated zero it reported before (audit ITP-1, ADR 0052).
     """
-    if max_age_s <= 0.0 or math.isnan(max_age_s):
-        raise StaleEstimateError(adapter_name, 0.0, max_age_s)
     ts_source = resolve_ts(data, now_s=now_s)
     ts_now = float(now_s) if now_s is not None else time.time()
     age = ts_now - ts_source
+    if max_age_s <= 0.0 or math.isnan(max_age_s):
+        raise StaleEstimateError(
+            adapter_name,
+            age,
+            max_age_s,
+            reason=f"max_age_s={max_age_s} is not a positive duration",
+        )
     if age > max_age_s:
         raise StaleEstimateError(adapter_name, age, max_age_s)
     return ts_source
