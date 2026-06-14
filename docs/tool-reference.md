@@ -22,7 +22,7 @@ the committed copy after changing a tool's signature or docstring.
 | `comms_publish` | T2 | Encode ``data`` via an interop adapter and transmit it on a link (T2, ADR 0033). |
 | `comms_send` | T2 | Record a transmission of ``n_bytes`` on link ``link_id`` (T2, ADR 0033). |
 | `comms_state` | T0 | Comms-stack summary (per ADR-0006). |
-| `comms_status` | T0 | Comms subsystem: per-link envelope, live RSSI, loss, throughput, age, age-out count. |
+| `comms_status` | T0 | Comms subsystem: per-link envelope, RSSI, loss, throughput, age, age-out count/time. |
 | `compute_status` | T0 | Compute subsystem: load fraction, electrical draw, throttling. |
 | `device_health` | T0 | Engine snapshot: tick, ts_s, mode, operator/comms state. |
 | `device_info` | T0 | Report version, profile, transport, policy, audit/anchor, persistence, safety posture. |

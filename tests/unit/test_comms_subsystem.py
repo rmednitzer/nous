@@ -96,6 +96,24 @@ def test_forced_down_link_does_not_count_as_age_out() -> None:
     assert lte.last_aged_out_at_s is None
 
 
+def test_forced_down_then_cleared_while_stale_does_not_count() -> None:
+    # A link forced down, left to go stale, then released is not a genuine
+    # live -> aged-out transition: clearing the override must not bump the
+    # counter just because age_s exceeded max_age_s while the link was forced
+    # down (it was never live in the unforced regime). Gating on is_live()
+    # rather than the raw connected flag is what makes this hold.
+    c = CommsSubsystem(_profile())
+    c.set_link_state("lte", connected=False)
+    c.step(60.0)  # age climbs well past max_age_s while forced down
+    c.clear_link_override("lte")
+    c.step(1.0)  # first unforced step finds the link already stale
+    lte = c.link("lte")
+    assert lte is not None
+    assert lte.is_live() is False
+    assert lte.age_out_count == 0
+    assert lte.last_aged_out_at_s is None
+
+
 def test_tx_resets_age_and_marks_live() -> None:
     c = CommsSubsystem(_profile())
     c.step(31.0)

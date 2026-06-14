@@ -9,9 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added (comms: stamp the link age-out so the transition is legible, BL-084)
 
 - A comms link aging out is no longer silent (audit 2026-06-14 COMMS-2). When a
-  link crosses `max_age_s` in `CommsSubsystem.step`, the connected-to-aged-out
-  transition now stamps a cumulative `age_out_count` and a `last_aged_out_at_s`
-  on the link, both surfaced through `comms_status`, and emits a structured
+  link crosses `max_age_s` in `CommsSubsystem.step`, a genuine live-to-aged-out
+  transition (gated on `is_live()`, so a link that went stale while forced down
+  is not miscounted when the override clears) now stamps a cumulative
+  `age_out_count` and a `last_aged_out_at_s` on the link, both surfaced through
+  `comms_status`, and emits a structured
   `nous.comms` log line at the moment. The count is cumulative, so a controller
   polling `comms_status` detects a link that aged out and recovered between
   polls rather than only seeing the current state. Additive and low-blast: the

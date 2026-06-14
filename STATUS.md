@@ -136,7 +136,7 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 934 tests pass at HEAD: BL-084 added three (the
+  feature branch before merge. 935 tests pass at HEAD: BL-084 added four (the
   comms link age-out stamping in `tests/unit/test_comms_subsystem.py`, closing
   the 2026-06-14 audit's COMMS-2), on top of the 931 from BL-083, which added one
   (the comms log-throughput scale-invariance guard in

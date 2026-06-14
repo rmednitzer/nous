@@ -174,23 +174,27 @@ class CommsSubsystem:
             return
         self._t += dt
         for link in self._links.values():
+            was_live = link.is_live()
             link.age_s += dt
             if link.age_s > link.max_age_s and link.forced_state is None:
-                if link.connected:
-                    # connected -> aged-out transition (COMMS-2): stamp it so a
-                    # controller polling comms_status sees the drop, and the
-                    # cumulative count survives a flap a coarse poll would miss.
-                    link.age_out_count += 1
-                    link.last_aged_out_at_s = self._t
-                    _LOG.info(
-                        "comms link %s aged out at t=%.3fs (age_s %.3f > max %.3f)",
-                        link.link_id,
-                        self._t,
-                        link.age_s,
-                        link.max_age_s,
-                    )
                 link.connected = False
                 link.throughput_bps = 0.0
+            if was_live and not link.is_live():
+                # genuine live -> aged-out transition (COMMS-2): stamp it so a
+                # controller polling comms_status sees the drop, and the
+                # cumulative count survives a flap a coarse poll would miss.
+                # Gating on is_live() rather than the raw connected flag means a
+                # link that went stale while forced down is not miscounted when
+                # the override is later cleared.
+                link.age_out_count += 1
+                link.last_aged_out_at_s = self._t
+                _LOG.info(
+                    "comms link %s aged out at t=%.3fs (age_s %.3f > max %.3f)",
+                    link.link_id,
+                    self._t,
+                    link.age_s,
+                    link.max_age_s,
+                )
 
     def link_estimates(self) -> list[LinkEstimate]:
         return [link.as_estimate() for link in self._links.values()]
