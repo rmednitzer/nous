@@ -157,7 +157,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         """Estimator means, covariances, and per-filter health.
 
         Each row carries the filtered ``point`` and ``covariance`` plus a
-        ``health`` block (ADR 0042): ``healthy`` and ``fused`` flags, the
+        ``health`` block (ADR 0045): ``healthy`` and ``fused`` flags, the
         ``rejected_updates`` and ``reset_count`` totals, a ``dead_reckoning``
         flag for a filter coasting without an accepted measurement, and the
         per-channel innovation ``test_ratio`` (a value above 1 means the last

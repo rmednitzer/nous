@@ -11,7 +11,7 @@ maps such a transition to the constraints it must satisfy: SC-2 thermal
 headroom and SC-8 power reserve for every operational entry, an available
 operator for all four, and a live comms link for the link-bearing modes
 (RELAY, C2). Each gate names the context key the constraint judges, and the
-entry set is the same flag set the auto-safe reads on the way out (ADR 0043).
+entry set is the same flag set the auto-safe reads on the way out (ADR 0046).
 The machine routes every gate through a
 :class:`~nous.safety.SafetyEnforcer` (ADR 0022), so a refused gate raises
 ``GuardDenied`` carrying the enforcer's structured reason and the enforcer
@@ -169,7 +169,7 @@ def is_terminal(mode: Mode) -> bool:
 SC_THERMAL_HEADROOM = "SC-2"
 SC_POWER_RESERVE = "SC-8"
 
-# Label-namespaced requirement constraint ids (ADR 0028, ADR 0043). The id
+# Label-namespaced requirement constraint ids (ADR 0028, ADR 0046). The id
 # names the hazard the requirement guards against, so a mode-entry refusal and
 # the matching auto-safe failsafe condition (the engine's ``FailsafeArbiter``,
 # ADR 0044) carry one constraint id per condition: one flag set, read at entry
@@ -192,7 +192,7 @@ _GATE_OPERATOR = _SafetyGate(REQ_OPERATOR, "operator_state")
 _GATE_COMMS = _SafetyGate(REQ_COMMS_LINK, "comms_state")
 
 # Each operational-mode entry from IDLE declares its full precondition set, the
-# same conditions the auto-safe watches on the way out (ADR 0043). All four
+# same conditions the auto-safe watches on the way out (ADR 0046). All four
 # require thermal headroom (SC-2), battery reserve (SC-8), and an available
 # operator (not incapacitated); the link-bearing modes (RELAY / C2) also
 # require a live comms link, so a controller cannot enter a relay posture into
@@ -222,7 +222,7 @@ def register_fsm_constraints(enforcer: SafetyEnforcer) -> None:
     state-of-charge at the profile's critical reserve. The operator and
     comms-link requirements refuse when their label reads incapacitated or
     denied. All four fail closed on missing context (ADR 0018, ADR 0022,
-    ADR 0043).
+    ADR 0046).
     """
     enforcer.register(
         SC_THERMAL_HEADROOM,

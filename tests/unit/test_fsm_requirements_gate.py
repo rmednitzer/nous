@@ -1,4 +1,4 @@
-"""Declarative mode-requirements gate (ADR 0043).
+"""Declarative mode-requirements gate (ADR 0046).
 
 Entry into an operational mode now gates on the same flag set the auto-safe
 watches on the way out: thermal headroom and power reserve (SC-2 / SC-8, the

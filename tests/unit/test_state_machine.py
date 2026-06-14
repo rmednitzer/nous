@@ -31,7 +31,7 @@ from nous.state.machine import (
 # unknown-context case is covered by ``test_state_machine_guards``).
 # Every operational-mode entry is gated on thermal headroom, power reserve, an
 # available operator, and (for the link modes) a live comms link, so a passing
-# context supplies all of them (ADR 0043).
+# context supplies all of them (ADR 0046).
 _OK_CONTEXT: dict[str, object] = {
     "thermal_headroom_c": 20.0,
     "thermal_headroom_threshold_c": 5.0,

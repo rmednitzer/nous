@@ -154,7 +154,7 @@ _OPERATOR_PERSISTENCE_TICKS = 3
 # ``_OPERATOR_PERSISTENCE_TICKS`` with anti-toggle decay, so a single-tick
 # recovery does not reset the streak; the device hazards and the comms
 # condition stay instantaneous. The ids are shared with the entry gate
-# (ADR 0043), so a refusal and an auto-safe firing land under one constraint id
+# (ADR 0046), so a refusal and an auto-safe firing land under one constraint id
 # in the audit trail. ``Engine._failsafe_detect`` supplies the raw-active set
 # the ``FailsafeArbiter`` debounces and selects from.
 _FAILSAFE_CONDITIONS: tuple[FailsafeCondition, ...] = (
@@ -675,7 +675,7 @@ class Engine:
 
         The operator and comms labels are the derived FSM state, supplying the
         candidates for the operator-availability and comms-link entry gates
-        (ADR 0043). The thermal and SoC readings are subsystem properties
+        (ADR 0046). The thermal and SoC readings are subsystem properties
         (always finite floats). The SoC critical reserve is read from the
         profile dict, so it
         is coerced defensively: a non-numeric value, or a ``power`` section that

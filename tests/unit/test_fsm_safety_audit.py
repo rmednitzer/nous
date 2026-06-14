@@ -88,7 +88,7 @@ def test_admitted_transition_mirrors_every_gate(tmp_nous_home: Path) -> None:
     assert ok and mode is Mode.MISSION
     records = _safety_records(log_path)
     # Every gate passes on an admitted entry, so each is mirrored approved.
-    # MISSION requires thermal, power, and an available operator (ADR 0043).
+    # MISSION requires thermal, power, and an available operator (ADR 0046).
     constraints = sorted(str(r["safety"]["constraint_id"]) for r in records)  # type: ignore[index]
     assert constraints == ["SC-2", "SC-8", "label:operator-incapacitated"]
     assert all(r["denied"] is False for r in records)
