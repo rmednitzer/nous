@@ -6,12 +6,17 @@ forever. With a ``propagation`` block on a link, this module turns the geometry
 between the device and the link's peer into a received signal level, and that
 level into the link's RSSI, packet loss, and SNR-derived capacity, each tick.
 
-The model is deliberately first-order (ADR 0053): a Friis free-space path loss, a
+The base model is first-order (ADR 0053): a Friis free-space path loss, a
 constant excess-loss margin standing in for terrain and obstruction, and a
-log-normal shadowing draw for fast variation. The caller draws the shadowing
-sample from the engine RNG (ADR 0019) and passes it in, so every function here is
-pure and deterministic given its inputs. Higher-fidelity propagation (terrain
-raytracing, multipath, mesh routing) is the BL-088 horizon.
+log-normal shadowing draw for fast variation. BL-088 / ADR 0054 raises the
+fidelity with five additive, opt-in upgrades: a log-distance path-loss exponent
+(the environment, not just free space), a single knife-edge diffraction loss (a
+discrete terrain obstruction), a kTB thermal-noise floor, a directional antenna
+pattern keyed on the bearing to the peer, and a Rician multipath fast-fade draw.
+Every upgrade defaults to reproduce the ADR 0053 budget exactly. The caller draws
+the two stochastic terms (shadowing and fast fade) from the engine RNG (ADR 0019)
+and passes them in, so every function here is pure and deterministic given its
+inputs.
 
 Two monotonicity properties hold by construction and are what make the model
 legible: as the device moves away from the peer the range grows, the path loss
@@ -25,17 +30,26 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import numpy as np
 
 __all__ = [
     "LinkBudget",
     "LinkPropagation",
+    "antenna_gain_offset_db",
+    "bearing_deg",
     "capacity_bps",
     "free_space_path_loss_db",
+    "knife_edge_diffraction_db",
+    "log_distance_path_loss_db",
     "received_power_dbm",
+    "rician_fade_db",
     "rssi_to_loss_pct",
     "slant_range_m",
     "solve_link_budget",
+    "thermal_noise_floor_dbm",
 ]
 
 _SPEED_OF_LIGHT_M_S = 299_792_458.0
@@ -43,6 +57,8 @@ _EARTH_RADIUS_M = 6_371_000.0
 _MIN_RANGE_M = 1.0
 # 20 * log10(4 * pi / c): the frequency / distance independent term of Friis.
 _FRIIS_CONSTANT_DB = 20.0 * math.log10(4.0 * math.pi / _SPEED_OF_LIGHT_M_S)
+# Johnson-Nyquist thermal noise power spectral density at 290 K: kTB in dBm/Hz.
+_THERMAL_NOISE_DBM_PER_HZ = -173.975
 
 
 @dataclass(frozen=True)
@@ -69,6 +85,17 @@ class LinkPropagation:
     good_rssi_dbm: float = -70.0
     sensitivity_dbm: float = -100.0
     loss_floor_pct: float = 0.0
+    # BL-088 / ADR 0054 higher-fidelity fields. Each default reproduces the
+    # ADR 0053 free-space, isotropic, constant-noise-floor, fade-free budget.
+    path_loss_exponent: float = 2.0
+    obstruction_distance_m: float | None = None
+    obstruction_height_m: float = 0.0
+    channel_bandwidth_hz: float | None = None
+    noise_figure_db: float = 0.0
+    antenna_boresight_deg: float | None = None
+    antenna_half_beamwidth_deg: float = 60.0
+    antenna_front_to_back_db: float = 20.0
+    rician_k_db: float | None = None
 
     @classmethod
     def from_profile(cls, entry: Mapping[str, Any]) -> LinkPropagation | None:
@@ -97,6 +124,15 @@ class LinkPropagation:
             except (TypeError, ValueError):
                 return default
 
+        def _opt(key: str) -> float | None:
+            raw = block.get(key)
+            if raw is None:
+                return None
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return None
+
         return cls(
             peer_lat=peer_lat,
             peer_lon=peer_lon,
@@ -113,12 +149,29 @@ class LinkPropagation:
             good_rssi_dbm=_f("good_rssi_dbm", -70.0),
             sensitivity_dbm=_f("sensitivity_dbm", -100.0),
             loss_floor_pct=_clip(_f("loss_floor_pct", 0.0), 0.0, 100.0),
+            path_loss_exponent=max(0.0, _f("path_loss_exponent", 2.0)),
+            obstruction_distance_m=_opt("obstruction_distance_m"),
+            obstruction_height_m=_f("obstruction_height_m", 0.0),
+            channel_bandwidth_hz=_opt("channel_bandwidth_hz"),
+            noise_figure_db=_f("noise_figure_db", 0.0),
+            antenna_boresight_deg=_opt("antenna_boresight_deg"),
+            antenna_half_beamwidth_deg=max(
+                1.0, _f("antenna_half_beamwidth_deg", 60.0)
+            ),
+            antenna_front_to_back_db=max(0.0, _f("antenna_front_to_back_db", 20.0)),
+            rician_k_db=_opt("rician_k_db"),
         )
 
 
 @dataclass(frozen=True)
 class LinkBudget:
-    """The solved RF state of one link: what the geometry produces this tick."""
+    """The solved RF state of one link: what the geometry produces this tick.
+
+    ``path_loss_db`` is the total propagation loss (the log-distance path loss
+    plus any knife-edge diffraction); ``diffraction_loss_db`` and
+    ``antenna_offset_db`` break out the BL-088 contributions, and
+    ``noise_floor_dbm`` is the floor the SNR was taken against.
+    """
 
     range_m: float
     path_loss_db: float
@@ -126,6 +179,9 @@ class LinkBudget:
     snr_db: float
     capacity_bps: float
     loss_pct: float
+    diffraction_loss_db: float = 0.0
+    antenna_offset_db: float = 0.0
+    noise_floor_dbm: float = -100.0
 
 
 def slant_range_m(
@@ -224,6 +280,102 @@ def rssi_to_loss_pct(
     return floor + frac * (100.0 - floor)
 
 
+def log_distance_path_loss_db(
+    range_m: float, frequency_hz: float, exponent: float = 2.0
+) -> float:
+    """Log-distance path loss: free space at ``exponent == 2``, steeper above.
+
+    ``PL = FSPL(1 m, f) + 10 * n * log10(d)``. An ``exponent`` of 2 reproduces
+    :func:`free_space_path_loss_db` exactly; 2.7 to 3.5 models urban clutter, and
+    4 or above a heavily obstructed or forested path (BL-088, ADR 0054).
+    """
+    d = max(_MIN_RANGE_M, range_m)
+    n = max(0.0, exponent)
+    return free_space_path_loss_db(_MIN_RANGE_M, frequency_hz) + 10.0 * n * math.log10(d)
+
+
+def bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Initial great-circle bearing from point 1 to point 2, degrees CW from north."""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dlambda = math.radians(lon2 - lon1)
+    y = math.sin(dlambda) * math.cos(phi2)
+    x = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(
+        dlambda
+    )
+    return math.degrees(math.atan2(y, x)) % 360.0
+
+
+def knife_edge_diffraction_db(
+    obstruction_height_m: float,
+    los_height_m: float,
+    d1_m: float,
+    d2_m: float,
+    frequency_hz: float,
+) -> float:
+    """Single knife-edge diffraction loss (ITU-R P.526 approximation), in dB.
+
+    ``los_height_m`` is the line-of-sight height at the obstruction's location;
+    the obstruction's height above it drives the Fresnel parameter ``v``. Returns
+    0 for an obstruction at or below the line of sight (``v <= -0.78``). ``d1`` and
+    ``d2`` are the along-path distances from each endpoint to the obstruction.
+    """
+    if d1_m <= 0.0 or d2_m <= 0.0:
+        return 0.0
+    h = obstruction_height_m - los_height_m
+    wavelength = _SPEED_OF_LIGHT_M_S / max(1.0, frequency_hz)
+    v = h * math.sqrt(2.0 / wavelength * (1.0 / d1_m + 1.0 / d2_m))
+    if v <= -0.78:
+        return 0.0
+    return 6.9 + 20.0 * math.log10(math.sqrt((v - 0.1) ** 2 + 1.0) + v - 0.1)
+
+
+def antenna_gain_offset_db(
+    bearing_to_peer_deg: float,
+    boresight_deg: float,
+    half_beamwidth_deg: float,
+    front_to_back_db: float,
+) -> float:
+    """Directional antenna gain roll-off from the off-boresight angle, in dB (<= 0).
+
+    A parabolic-in-dB main lobe: 0 at boresight, -3 dB at ``half_beamwidth_deg``
+    off boresight, floored at ``-front_to_back_db`` for the back lobe. Never
+    positive, so it only ever reduces the isotropic gain already in the budget.
+    """
+    theta = abs((bearing_to_peer_deg - boresight_deg + 180.0) % 360.0 - 180.0)
+    hpbw = max(1.0, half_beamwidth_deg)
+    rolloff = 3.0 * (theta / hpbw) ** 2
+    return -min(rolloff, max(0.0, front_to_back_db))
+
+
+def thermal_noise_floor_dbm(channel_bandwidth_hz: float, noise_figure_db: float) -> float:
+    """Johnson-Nyquist noise floor, ``kTB + NF`` in dBm.
+
+    ``-173.975 dBm/Hz`` (kT at 290 K) plus ``10 log10(B)`` plus the receiver noise
+    figure. Replaces the per-link constant floor when a channel bandwidth is
+    configured (BL-088, ADR 0054).
+    """
+    b = max(1.0, channel_bandwidth_hz)
+    return _THERMAL_NOISE_DBM_PER_HZ + 10.0 * math.log10(b) + noise_figure_db
+
+
+def rician_fade_db(rng: np.random.Generator, k_db: float) -> float:
+    """A Rician multipath fast-fade loss sample in dB (positive attenuates).
+
+    ``k_db`` is the Rician K-factor (specular-to-scattered power ratio) in dB: a
+    large K is near line of sight with little fading, ``K = 0`` is Rayleigh. The
+    underlying power gain has unit mean; the returned value is the negative of its
+    dB, so it is a loss term consistent with the shadowing draw (mostly positive,
+    occasionally negative on a constructive peak). Drawn from the engine RNG.
+    """
+    k = 10.0 ** (k_db / 10.0)
+    s = math.sqrt(k / (k + 1.0))
+    sigma = math.sqrt(1.0 / (2.0 * (k + 1.0)))
+    i = s + sigma * float(rng.normal())
+    q = sigma * float(rng.normal())
+    power = i * i + q * q
+    return -10.0 * math.log10(max(power, 1e-12))
+
+
 def solve_link_budget(
     prop: LinkPropagation,
     *,
@@ -232,13 +384,17 @@ def solve_link_budget(
     device_alt_m: float,
     bandwidth_bps: float,
     shadowing_db: float = 0.0,
+    fast_fade_db: float = 0.0,
 ) -> LinkBudget:
     """Solve the full link budget for one link given the device position.
 
-    ``shadowing_db`` is supplied by the caller (drawn from the engine RNG) so
-    this function stays pure and deterministic; pass ``0.0`` for the noise-free
-    geometry. Returns the range, path loss, RSSI, SNR, SNR-derived capacity, and
-    packet loss that the comms subsystem writes onto the link.
+    ``shadowing_db`` and ``fast_fade_db`` are the two stochastic loss terms,
+    supplied by the caller (drawn from the engine RNG) so this function stays pure
+    and deterministic; pass ``0.0`` for the noise-free geometry. The four
+    deterministic BL-088 upgrades (log-distance exponent, knife-edge diffraction,
+    directional antenna, kTB noise floor) are read from ``prop``. Returns the
+    range, total path loss, RSSI, SNR, SNR-derived capacity, packet loss, and the
+    BL-088 diagnostic breakdown.
     """
     rng_m = slant_range_m(
         device_lat,
@@ -248,27 +404,67 @@ def solve_link_budget(
         prop.peer_lon,
         prop.peer_alt_m,
     )
-    path_loss = free_space_path_loss_db(rng_m, prop.frequency_hz)
-    rssi = received_power_dbm(
-        prop.tx_power_dbm,
-        prop.tx_gain_dbi,
-        prop.rx_gain_dbi,
-        path_loss,
-        prop.excess_loss_db,
-        shadowing_db,
+    path_loss = log_distance_path_loss_db(
+        rng_m, prop.frequency_hz, prop.path_loss_exponent
     )
-    snr = rssi - prop.noise_floor_dbm
+
+    diffraction = 0.0
+    obstruction = prop.obstruction_distance_m
+    if obstruction is not None and 0.0 < obstruction < rng_m:
+        los_height = device_alt_m + (prop.peer_alt_m - device_alt_m) * (
+            obstruction / rng_m
+        )
+        diffraction = knife_edge_diffraction_db(
+            prop.obstruction_height_m,
+            los_height,
+            obstruction,
+            rng_m - obstruction,
+            prop.frequency_hz,
+        )
+
+    antenna_offset = 0.0
+    if prop.antenna_boresight_deg is not None:
+        antenna_offset = antenna_gain_offset_db(
+            bearing_deg(device_lat, device_lon, prop.peer_lat, prop.peer_lon),
+            prop.antenna_boresight_deg,
+            prop.antenna_half_beamwidth_deg,
+            prop.antenna_front_to_back_db,
+        )
+
+    rssi = (
+        received_power_dbm(
+            prop.tx_power_dbm,
+            prop.tx_gain_dbi,
+            prop.rx_gain_dbi,
+            path_loss + diffraction,
+            prop.excess_loss_db,
+            shadowing_db + fast_fade_db,
+        )
+        + antenna_offset
+    )
+
+    if prop.channel_bandwidth_hz is not None:
+        noise_floor = thermal_noise_floor_dbm(
+            prop.channel_bandwidth_hz, prop.noise_figure_db
+        )
+    else:
+        noise_floor = prop.noise_floor_dbm
+
+    snr = rssi - noise_floor
     cap = capacity_bps(bandwidth_bps, snr, prop.snr_floor_db, prop.snr_full_db)
     loss = rssi_to_loss_pct(
         rssi, prop.good_rssi_dbm, prop.sensitivity_dbm, prop.loss_floor_pct
     )
     return LinkBudget(
         range_m=rng_m,
-        path_loss_db=path_loss,
+        path_loss_db=path_loss + diffraction,
         rssi_dbm=rssi,
         snr_db=snr,
         capacity_bps=cap,
         loss_pct=loss,
+        diffraction_loss_db=diffraction,
+        antenna_offset_db=antenna_offset,
+        noise_floor_dbm=noise_floor,
     )
 
 

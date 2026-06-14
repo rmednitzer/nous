@@ -9,7 +9,9 @@ particle filter to ``derive`` to FSM) end to end on the real artifact.
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -91,3 +93,48 @@ def test_demo_comms_status_surfaces_propagation_diagnostics(demo_engine: Engine)
     assert relay["path_loss_db"] is not None
     assert relay["snr_db"] is not None
     assert relay["capacity_bps"] > 0.0
+
+
+def _demo_profile_with(relay_overrides: dict[str, Any]) -> dict[str, Any]:
+    profile = copy.deepcopy(dict(_load_profile("propagation-demo")))
+    profile["comms"]["links"][0]["propagation"].update(relay_overrides)
+    return profile
+
+
+def test_obstruction_degrades_the_link_through_the_engine(tmp_nous_home: Path) -> None:
+    """BL-088 / ADR 0054: a ridge between device and relay adds diffraction loss
+    that flows through _apply_propagation to the link's loss and capacity."""
+    clear = Engine(profile=_load_profile("propagation-demo"), seed=7)
+    blocked = Engine(
+        profile=_demo_profile_with(
+            {"obstruction_distance_m": 800.0, "obstruction_height_m": 1500.0}
+        ),
+        seed=7,
+    )
+    clear.start()
+    blocked.start()
+    for _ in range(3):
+        clear.tick()
+        blocked.tick()
+
+    clear_link = clear.comms.link("relay")
+    blocked_link = blocked.comms.link("relay")
+    assert clear_link is not None and blocked_link is not None
+    assert blocked_link.path_loss_db is not None and clear_link.path_loss_db is not None
+    assert blocked_link.path_loss_db > clear_link.path_loss_db  # diffraction added
+    assert blocked_link.loss_pct > clear_link.loss_pct
+    assert blocked_link.capacity_bps < clear_link.capacity_bps
+
+
+def test_multipath_adds_tick_to_tick_variance(tmp_nous_home: Path) -> None:
+    """A Rician multipath K-factor makes the fade, and thus the capacity, vary
+    tick to tick (the fast-fade draw is wired through the engine RNG)."""
+    engine = Engine(profile=_demo_profile_with({"rician_k_db": 3.0}), seed=7)
+    engine.start()
+    caps: list[float] = []
+    for _ in range(20):
+        engine.tick()
+        link = engine.comms.link("relay")
+        assert link is not None
+        caps.append(link.capacity_bps)
+    assert len(set(caps)) > 1

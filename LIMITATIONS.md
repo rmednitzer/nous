@@ -102,25 +102,28 @@ path, not to replace medical-grade monitoring.
 **Tracking.** Out of scope for v0.1. A physiology-grounded biometrics
 model is `[planned]` for L2 in [BL-040].
 
-## L7. First-order comms model
+## L7. Comms propagation model
 
-**State.** A link with a `propagation` block now solves its RSSI, packet
-loss, and SNR-derived capacity each tick from a first-order link budget:
-a Friis free-space path loss over the device-to-peer geometry, a constant
-excess-loss margin for terrain and obstruction, and a log-normal shadowing
-draw (BL-048, ADR 0053). A particle filter still tracks connection state.
-What is not modelled: terrain raytracing or diffraction, multipath beyond
-log-normal shadowing, frequency-selective fading, and mesh or multi-hop
-routing. A link with no propagation block stays at its static nominal.
+**State.** A link with a `propagation` block solves its RSSI, packet loss,
+and SNR-derived capacity each tick from a link budget over the
+device-to-peer geometry (BL-048, ADR 0053), with the BL-088 / ADR 0054
+higher-fidelity terms layered on: a log-distance path-loss exponent for the
+environment, a single knife-edge diffraction loss for a discrete
+obstruction, a kTB thermal-noise floor, a directional antenna pattern keyed
+on the bearing to the peer, and a Rician multipath fast-fade. A particle
+filter still tracks connection state. What is not modelled: multi-obstacle
+or DEM-driven terrain raytracing, frequency-selective fading, and mesh or
+multi-hop routing. A link with no propagation block stays at its static
+nominal.
 
-**Implication.** Comms scenarios now reproduce graded, geometry-driven
-degradation, range and obstruction lower the capacity and raise the loss,
-rather than only scripted link states. The path loss is still
-free-space-plus-margin, so it is not a terrain-accurate prediction of RF
-performance.
+**Implication.** Comms scenarios reproduce graded, geometry- and
+environment-driven degradation (range, clutter, a ridge, antenna pointing,
+and fading all move the link), not just scripted link states. The terrain
+model is a single knife edge, so it captures one dominant obstruction
+rather than a DEM-accurate path profile.
 
-**Tracking.** Higher-fidelity propagation (terrain, multipath, mesh) is
-`[planned]` for L3 under [BL-088].
+**Tracking.** DEM-driven terrain is `[planned]` under [BL-089]; mesh routing
+is part of the [BL-056] delay-tolerant-networking layer.
 
 ## L8. Li-ion only
 

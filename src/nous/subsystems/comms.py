@@ -36,7 +36,7 @@ import numpy as np
 
 from ..state.comms_state import CommsState, derive
 from ..types import LinkEstimate, Observation
-from .propagation import LinkPropagation, solve_link_budget
+from .propagation import LinkPropagation, rician_fade_db, solve_link_budget
 
 __all__ = ["CommsSubsystem", "Link"]
 
@@ -257,8 +257,14 @@ class CommsSubsystem:
         if prop is None:
             return
         shadow = 0.0
-        if self._rng is not None and prop.shadowing_sigma_db > 0.0:
-            shadow = float(self._rng.normal(0.0, prop.shadowing_sigma_db))
+        fade = 0.0
+        if self._rng is not None:
+            if prop.shadowing_sigma_db > 0.0:
+                shadow = float(self._rng.normal(0.0, prop.shadowing_sigma_db))
+            if prop.rician_k_db is not None:
+                # BL-088 / ADR 0054: a multipath fast-fade draw on top of the
+                # log-normal shadowing, both from the engine RNG seam.
+                fade = rician_fade_db(self._rng, prop.rician_k_db)
         budget = solve_link_budget(
             prop,
             device_lat=device_pos[0],
@@ -266,6 +272,7 @@ class CommsSubsystem:
             device_alt_m=device_pos[2],
             bandwidth_bps=link.bandwidth_bps,
             shadowing_db=shadow,
+            fast_fade_db=fade,
         )
         link.rssi_dbm = budget.rssi_dbm
         link.loss_pct = budget.loss_pct

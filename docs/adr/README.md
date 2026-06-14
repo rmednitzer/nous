@@ -56,3 +56,4 @@
 | 0051 | [Comms link throughput is an achieved rate, not a packet size](0051-comms-throughput-is-an-achieved-rate.md) | Accepted | 2026-06-14 |
 | 0052 | [Name the interop freshness gate's configuration faults distinctly from staleness](0052-interop-freshness-gate-failure-modes.md) | Accepted | 2026-06-14 |
 | 0053 | [Propagation-aware comms link quality](0053-propagation-aware-comms-model.md) | Accepted | 2026-06-14 |
+| 0054 | [Higher-fidelity comms propagation (path loss, diffraction, noise, antenna, fading)](0054-higher-fidelity-propagation.md) | Accepted | 2026-06-14 |
