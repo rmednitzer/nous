@@ -103,12 +103,55 @@ class StateTransitionLog:
     ``limit`` rows. Append failures degrade silently so a flaky DB
     cannot prevent the engine from advancing -- consistent with the
     audit logger's "best effort" posture.
+
+    A ``None`` engine has two meanings the caller must distinguish: the
+    intentional memory-only mode (the pure-Python engine constructs
+    ``StateTransitionLog(None)`` and persists nothing by design), and a
+    failed ``init_db`` at server start (``server.py`` swallows the error
+    so the engine still ticks). The optional ``init_error`` separates
+    them: an empty string is the intentional mode, a non-empty string
+    means persistence was configured but failed to come up. :meth:`status`
+    and :attr:`degraded` surface that distinction so ``device_info`` can
+    report a silently unpersisted transition history (AUDIT-2026-06-14
+    DB-1) instead of leaving an operator to discover it from an empty
+    ``state_history``.
+
+    ``init_error`` and ``last_error`` carry only the exception *class*, not
+    the message: ``device_info`` is a T0 read any caller can reach, and a
+    connection-time exception message can include the DB URL and its
+    credentials (a Postgres/MySQL ``NOUS_DB_URL``). The full message is
+    written to stderr at the point of failure for an operator with host
+    access.
     """
 
-    def __init__(self, engine: Engine | None) -> None:
+    def __init__(self, engine: Engine | None, *, init_error: str = "") -> None:
         self.engine = engine
+        self.init_error = init_error
         self.append_failures = 0
         self.last_error = ""
+
+    @property
+    def degraded(self) -> bool:
+        """True when persistence is configured but not working.
+
+        A ``None`` engine with no ``init_error`` is the intentional
+        memory-only mode, not a degradation. A ``None`` engine with an
+        ``init_error`` means ``init_db`` failed at start; a live engine
+        with append failures means a runtime write fault.
+        """
+        if self.engine is None:
+            return bool(self.init_error)
+        return self.append_failures > 0
+
+    def status(self) -> dict[str, Any]:
+        """Read-only persistence health for ``device_info``."""
+        return {
+            "persistent": self.engine is not None,
+            "degraded": self.degraded,
+            "init_error": self.init_error,
+            "append_failures": self.append_failures,
+            "last_error": self.last_error,
+        }
 
     def append(
         self,
@@ -132,7 +175,7 @@ class StateTransitionLog:
                 session.commit()
         except Exception as exc:  # noqa: BLE001
             self.append_failures += 1
-            self.last_error = f"{exc.__class__.__name__}: {exc}"
+            self.last_error = exc.__class__.__name__
 
     def tail(self, limit: int = 16) -> list[StateTransition]:
         """Return the most recent ``limit`` rows, oldest first."""
@@ -150,5 +193,5 @@ class StateTransitionLog:
                 return list(reversed(list(rows)))
         except Exception as exc:  # noqa: BLE001
             self.append_failures += 1
-            self.last_error = f"{exc.__class__.__name__}: {exc}"
+            self.last_error = exc.__class__.__name__
             return []
