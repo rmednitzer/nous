@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documented (audit: chain head tracks the on-disk tail, BL-082 / ADR 0050)
+
+- Recorded the invariant that `AuditLogger`'s hash-chain head tracks the on-disk
+  tail, not the fsync confirmation (audit 2026-06-14 AUD-1). The finding first
+  proposed gating the head advance on a clean fsync; that is the hazard, not the
+  fix. `_FsyncingFileHandler` writes the line into the append-only log before it
+  fsyncs, so an fsync-failed record is physically present, and gating the head
+  would make the next record skip it and break `verify_chain`. `write` is
+  reordered so the fsync-state poll runs before the (still unconditional) head
+  advance, with the invariant in a comment so no future change re-introduces the
+  bug; durability stays tracked separately via `degraded` / `fsync_failures` /
+  the fsync-gated `writes_total` and the BL-031 daily anchor. No behaviour
+  change. High-blast surface, so behind ADR 0050. Pinned by
+  `tests/regression/test_audit_findings.py` (`TestAud1ChainHeadTracksOnDiskTail`),
+  which proves the chain survives a silent fsync failure and fails under the
+  gate-on-fsync variant.
+
 ### Fixed (inference: cap status fails closed on a corrupt counter, BL-081 / ADR 0049)
 
 - `anthropic_cap_status` no longer advertises a healthy cap when the daily

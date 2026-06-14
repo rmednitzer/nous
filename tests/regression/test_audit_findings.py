@@ -14,6 +14,7 @@ not represented; add a class only after the fix lands.
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from xml.etree import ElementTree
@@ -23,7 +24,7 @@ from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyHttpUrl
 
 from nous.anthropic_client import CallCap, CapExhausted
-from nous.audit import redact
+from nous.audit import AuditLogger, AuditRecord, redact, verify_chain
 from nous.auth.oauth import FileOAuthProvider
 from nous.estimators.biometrics import BiometricsKalman
 from nous.estimators.compute import ComputeKalman
@@ -145,6 +146,71 @@ class TestCap1PeekAgreesWithIncrement:
         reading = cap.peek()
         assert reading.corrupt is False
         assert reading.count == 1
+
+
+class TestAud1ChainHeadTracksOnDiskTail:
+    """AUD-1: the chain head follows the on-disk tail, not the fsync.
+
+    Original finding (``docs/audit-2026-06-14.md`` AUD-1): ``write`` advanced
+    ``_chain_head`` right after the emit and only then polled for a silent
+    fsync failure, which read as "advance the head before the record is
+    durable". The proposed remediation -- gate the head advance on a clean
+    fsync -- would corrupt the chain rather than fix it: ``_FsyncingFileHandler``
+    writes the line into the append-only file before it fsyncs, so an
+    fsync-failed record is physically present, and a later record that linked
+    to the prior durable line instead would skip it and break ``verify_chain``.
+
+    Invariant (ADR 0050): the head advances for every emitted record (the
+    on-disk tail), while durability is tracked separately via ``degraded`` /
+    ``fsync_failures`` / ``writes_total``. These tests pin it, and they fail if
+    a future change gates the head advance on a clean fsync.
+    """
+
+    def test_chain_verifies_across_a_silent_fsync_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "audit.jsonl"
+        logger = AuditLogger(path)
+        logger.write(AuditRecord.from_output(tool="a", tier=0, args={}, output="1"))
+
+        real_fsync = os.fsync
+        calls = {"n": 0}
+
+        def _fail_once(fd: int) -> None:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("simulated fsync failure")
+            real_fsync(fd)
+
+        monkeypatch.setattr("nous.audit.os.fsync", _fail_once)
+        logger.write(AuditRecord.from_output(tool="b", tier=0, args={}, output="2"))
+        assert logger.degraded is True  # the fsync failure is observable
+
+        logger.write(AuditRecord.from_output(tool="c", tier=0, args={}, output="3"))
+
+        report = verify_chain(path)
+        assert report["ok"] is True, report
+        assert report["chained"] == 3
+
+    def test_fsync_failure_advances_head_but_holds_writes_total(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "audit.jsonl"
+        logger = AuditLogger(path)
+        logger.write(AuditRecord.from_output(tool="a", tier=0, args={}, output="1"))
+        head_after_a = logger.summary()["chain_head"]
+
+        def _fail_fsync(fd: int) -> None:
+            raise OSError("boom")
+
+        monkeypatch.setattr("nous.audit.os.fsync", _fail_fsync)
+        logger.write(AuditRecord.from_output(tool="b", tier=0, args={}, output="2"))
+
+        # The head advanced to record b (the on-disk tail) even though its
+        # fsync failed, but the durable-write counter did not move.
+        assert logger.summary()["chain_head"] != head_after_a
+        assert logger.writes_total == 1
+        assert logger.degraded is True
 
 
 class TestC2RedactionRecurses:

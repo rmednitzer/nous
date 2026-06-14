@@ -52,3 +52,4 @@
 | 0047 | [Comms store-and-forward outbox with precedence triage](0047-comms-store-and-forward-outbox.md) | Accepted | 2026-06-14 |
 | 0048 | [Stamp the audit exit_code on the runner's caught-exception path](0048-runner-exit-code-for-caught-errors.md) | Accepted | 2026-06-14 |
 | 0049 | [Make the cap status read fail closed on a corrupt counter](0049-cap-status-fail-closed-on-corrupt-counter.md) | Accepted | 2026-06-14 |
+| 0050 | [The audit chain head tracks the on-disk tail, not the fsync confirmation](0050-chain-head-tracks-on-disk-tail.md) | Accepted | 2026-06-14 |
