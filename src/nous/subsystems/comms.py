@@ -14,9 +14,10 @@ The simulator's controller cares about three things from comms:
 The subsystem is the ground truth: live RSSI, loss percentage, and
 throughput per link, plus an ``age_s`` counter that increments each
 tick and resets on a successful :meth:`tx`. When ``age_s`` exceeds the
-profile's ``max_age_s`` the link silently drops to ``connected=False``
-until another transmission is recorded or the controller intervenes
-through :meth:`set_link_state`.
+profile's ``max_age_s`` the link drops to ``connected=False`` and stamps
+the transition (a cumulative ``age_out_count`` and ``last_aged_out_at_s``,
+surfaced through ``comms_status``) until another transmission is recorded
+or the controller intervenes through :meth:`set_link_state`.
 
 The aggregator :func:`nous.state.comms_state.derive` consumes a list of
 :class:`~nous.types.LinkEstimate` instances; :meth:`link_estimates`
@@ -26,6 +27,7 @@ schema.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -36,6 +38,8 @@ from ..state.comms_state import CommsState, derive
 from ..types import LinkEstimate, Observation
 
 __all__ = ["CommsSubsystem", "Link"]
+
+_LOG = logging.getLogger("nous.comms")
 
 
 @dataclass
@@ -53,6 +57,8 @@ class Link:
     age_s: float = 0.0
     connected: bool = True
     forced_state: bool | None = None
+    age_out_count: int = 0
+    last_aged_out_at_s: float | None = None
 
     def as_estimate(self) -> LinkEstimate:
         return LinkEstimate(
@@ -168,10 +174,27 @@ class CommsSubsystem:
             return
         self._t += dt
         for link in self._links.values():
+            was_live = link.is_live()
             link.age_s += dt
             if link.age_s > link.max_age_s and link.forced_state is None:
                 link.connected = False
                 link.throughput_bps = 0.0
+            if was_live and not link.is_live():
+                # genuine live -> aged-out transition (COMMS-2): stamp it so a
+                # controller polling comms_status sees the drop, and the
+                # cumulative count survives a flap a coarse poll would miss.
+                # Gating on is_live() rather than the raw connected flag means a
+                # link that went stale while forced down is not miscounted when
+                # the override is later cleared.
+                link.age_out_count += 1
+                link.last_aged_out_at_s = self._t
+                _LOG.info(
+                    "comms link %s aged out at t=%.3fs (age_s %.3f > max %.3f)",
+                    link.link_id,
+                    self._t,
+                    link.age_s,
+                    link.max_age_s,
+                )
 
     def link_estimates(self) -> list[LinkEstimate]:
         return [link.as_estimate() for link in self._links.values()]
@@ -241,6 +264,8 @@ def _link_truth(link: Link) -> Mapping[str, Any]:
         "age_s": link.age_s,
         "connected": link.is_live(),
         "forced": link.forced_state is not None,
+        "age_out_count": link.age_out_count,
+        "last_aged_out_at_s": link.last_aged_out_at_s,
     }
 
 

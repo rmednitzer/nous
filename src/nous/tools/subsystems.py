@@ -199,7 +199,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
 
     @mcp.tool()
     async def comms_status(ctx: Context | None = None) -> str:
-        """Comms subsystem: per-link envelope, live RSSI, loss, throughput, age."""
+        """Comms subsystem: per-link envelope, RSSI, loss, throughput, age, age-out count/time."""
 
         async def _work() -> str:
             truth = dict(app.engine.comms.truth())
