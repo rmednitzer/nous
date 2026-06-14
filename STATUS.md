@@ -100,7 +100,7 @@ re-audit).
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). Changes require an ADR. |
 | `src/nous/audit_anchor.py` | in-progress | Daily anchor over the chain head (ADR 0026 / BL-031): `AnchorLog` appends one hash-linked anchor per UTC day, and `verify_anchors` (the `audit_anchor_verify` tool) cross-checks anchored heads against the chain across logrotate segments to catch tail truncation within the retention window. |
-| `src/nous/runner.py` | stable | Audited execution wrapper. Changes require an ADR. |
+| `src/nous/runner.py` | stable | Audited execution wrapper. The audit `exit_code` is two-valued: `None` for a normal return, `1` for an abnormal outcome (a policy denial or a caught worker error), with `denied` separating the two (ADR 0048). Changes require an ADR. |
 | `src/nous/state/machine.py` | stable | FSM transition table. Changes require an ADR. |
 | `src/nous/safety/enforcer.py` | in-progress | Runtime safety enforcer (ADR 0022): `SafetyEnforcer.check` returns a structured `SafetyResult` (approved / clamped / evidence) and counts per-constraint and total violations; `floor_threshold` and `ceiling_clamp` cover the SC-2 refusal and throttle-clamp shapes. The FSM now routes its entry gates through it (SC-2 thermal + SC-8 power, registered via `register_fsm_constraints`), the engine mirrors every check to the audit log under `Tier.SAFETY`, and the tick-driven auto-safing (ADR 0027/0028) drives the FSM toward safety on a violation. |
 | `src/nous/anthropic_client.py` | stable | Daily cap + prompt cache discipline. The cloud call carries model-tier selection, capability-guarded adaptive thinking, and streaming for long generations (BL-069 / ADR 0035); changes require an ADR. |
@@ -136,7 +136,10 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 912 tests pass at HEAD: BL-079 added two (the
+  feature branch before merge. 914 tests pass at HEAD: BL-080 / ADR 0048 added
+  two (the runner caught-exception `exit_code=1` regression in
+  `tests/regression/test_audit_findings.py`, closing the 2026-06-14 audit's
+  RUN-1), on top of the 912 from BL-079, which added two (the
   failsafe-streak reset and capability-cache refresh on reload in
   `tests/unit/test_profile_hot_reload.py`, closing the 2026-06-14 audit's
   RLD-1), on top of the 910 from BL-078, which added five (the

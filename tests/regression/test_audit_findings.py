@@ -684,3 +684,77 @@ class TestComms1OutboxSurvivesDeniedLink:
         assert classify("comms_outbox", {})[0] is Tier.READ_ONLY
         assert classify("comms_enqueue", {})[0] is Tier.STATEFUL
         assert classify("comms_flush", {})[0] is Tier.STATEFUL
+
+
+class TestRun1CaughtErrorStampsExitCode:
+    """RUN-1: a caught worker error must be distinguishable in the audit record.
+
+    Original defect (``docs/audit-2026-06-14.md`` RUN-1): the M1 fix stamped
+    ``exit_code=1`` on the policy-denial path and its docstring framed the
+    intent as "a consumer splits on ``exit_code is not None`` to bucket denials
+    and worker errors apart from normal returns". But the runner's
+    caught-exception path wrote the audit record with ``exit_code`` defaulting
+    to ``None``, identical to a normal return, so a caught worker error was
+    indistinguishable from a clean return on the typed field.
+
+    Fix (ADR 0048): the exception path now stamps ``exit_code=1``. The contract
+    is two-valued: ``None`` is a normal return, ``1`` is any abnormal outcome,
+    and ``denied`` separates a policy refusal from a caught error.
+    """
+
+    def test_caught_error_is_exit_code_one_and_not_denied(self, tmp_path: Path) -> None:
+        import asyncio
+
+        from nous.audit import AuditLogger
+        from nous.policy import PolicyMode
+        from nous.runner import run
+
+        audit = AuditLogger(tmp_path / "audit.jsonl")
+
+        async def _raises() -> str:
+            raise RuntimeError("boom")
+
+        body = asyncio.run(
+            run(
+                tool="device_info",
+                args={},
+                work=_raises,
+                audit=audit,
+                policy_mode=PolicyMode.OPEN,
+            )
+        )
+        assert body == "[error RuntimeError: boom]"
+        audit.flush()
+        record = json.loads(
+            Path(audit.path).read_text(encoding="utf-8").strip().splitlines()[-1]
+        )
+        assert record["exit_code"] == 1
+        assert record["denied"] is False
+
+    def test_normal_return_keeps_exit_code_none(self, tmp_path: Path) -> None:
+        import asyncio
+
+        from nous.audit import AuditLogger
+        from nous.policy import PolicyMode
+        from nous.runner import run
+
+        audit = AuditLogger(tmp_path / "audit.jsonl")
+
+        async def _ok() -> str:
+            return "ok"
+
+        asyncio.run(
+            run(
+                tool="device_info",
+                args={},
+                work=_ok,
+                audit=audit,
+                policy_mode=PolicyMode.OPEN,
+            )
+        )
+        audit.flush()
+        record = json.loads(
+            Path(audit.path).read_text(encoding="utf-8").strip().splitlines()[-1]
+        )
+        assert record.get("exit_code") is None
+        assert record["denied"] is False

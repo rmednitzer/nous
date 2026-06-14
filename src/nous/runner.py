@@ -72,12 +72,19 @@ async def run(
         )
         return body
 
+    error = False
     try:
         body = await work()
     except Exception as exc:  # noqa: BLE001
         body = f"[error {exc.__class__.__name__}: {exc}]"
+        error = True
 
     body = _truncate(body, max_output)
+    # Stamp ``exit_code=1`` on a caught worker exception so a consumer can tell
+    # it apart from a normal return on the typed field, not the body prefix
+    # (ADR 0048, closes AUDIT-2026-06-14 RUN-1). The contract is two-valued:
+    # ``None`` is a normal return, ``1`` is any abnormal outcome, and the
+    # ``denied`` flag separates a policy refusal (denied) from a caught error.
     audit.write(
         AuditRecord.from_output(
             tool=tool,
@@ -86,6 +93,7 @@ async def run(
             output=body,
             decision_reason=decision.reason,
             policy_mode=policy_mode.value,
+            exit_code=1 if error else None,
             request_id=request_id,
             client_id=client_id,
         )

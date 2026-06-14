@@ -50,3 +50,4 @@
 | 0045 | [Estimator innovation gating and health](0045-estimator-innovation-gating-and-health.md) | Accepted | 2026-06-14 |
 | 0046 | [Declarative mode-requirements gate](0046-declarative-mode-requirements-gate.md) | Accepted | 2026-06-14 |
 | 0047 | [Comms store-and-forward outbox with precedence triage](0047-comms-store-and-forward-outbox.md) | Accepted | 2026-06-14 |
+| 0048 | [Stamp the audit exit_code on the runner's caught-exception path](0048-runner-exit-code-for-caught-errors.md) | Accepted | 2026-06-14 |
