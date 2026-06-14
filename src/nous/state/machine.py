@@ -171,9 +171,10 @@ SC_POWER_RESERVE = "SC-8"
 
 # Label-namespaced requirement constraint ids (ADR 0028, ADR 0043). The id
 # names the hazard the requirement guards against, so a mode-entry refusal and
-# the matching auto-safe decision (``engine._safing_decision``) carry one
-# constraint id per condition: one flag set, read at entry and at exit. The
-# ``label:`` namespace keeps them distinct from the SC-* STPA ids.
+# the matching auto-safe failsafe condition (the engine's ``FailsafeArbiter``,
+# ADR 0044) carry one constraint id per condition: one flag set, read at entry
+# and at exit. The ``label:`` namespace keeps them distinct from the SC-* STPA
+# ids.
 REQ_OPERATOR = "label:operator-incapacitated"
 REQ_COMMS_LINK = "label:comms-denied"
 

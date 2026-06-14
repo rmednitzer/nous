@@ -36,6 +36,7 @@ from .estimators.thermal import ThermalKalman
 from .policy import Tier
 from .safety import SafetyResult
 from .state.comms_state import CommsState
+from .state.failsafe import FailsafeArbiter, FailsafeCondition
 from .state.machine import (
     REQ_COMMS_LINK,
     REQ_OPERATOR,
@@ -122,31 +123,6 @@ class EngineState:
     last_capabilities: dict[str, float] = field(default_factory=dict)
 
 
-# Priority-ordered enforcer safing rules (ADR 0027): (constraint id,
-# safety-context candidate key, preferred safer trigger). Power before
-# thermal: depletion is the least recoverable hazard, and the load LOW_POWER
-# sheds (the entry action of ADR 0029) also relieves heat. A mode without the
-# preferred trigger falls back to ``degrade``. Operator-incapacitation (ADR
-# 0028) outranks both and the comms-denied rule trails them; see
-# ``_safing_decision``.
-_SAFING_RULES: tuple[tuple[str, str, str], ...] = (
-    (SC_POWER_RESERVE, "soc_pct", "low_power"),
-    (SC_THERMAL_HEADROOM, "thermal_headroom_c", "thermal_limit"),
-)
-
-# Constraint ids for the label-driven safing conditions (ADR 0028). The
-# ``label:`` namespace keeps them from being mistaken for the SC-* STPA
-# constraint ids that share the audit record's ``constraint_id`` field.
-# The auto-safe operator and comms conditions reuse the FSM requirement ids
-# (ADR 0043), so an entry refusal and an auto-safe decision on the same
-# condition land under one constraint id in the audit trail. These two paths
-# stay label-driven and debounced (ADR 0028) rather than routed through the
-# enforcer, so the enforcer's violation counter reflects entry refusals, while
-# the SC-2 / SC-8 hazards (which the auto-safe does route through the enforcer)
-# are counted in both directions.
-_LABEL_OPERATOR = REQ_OPERATOR
-_LABEL_COMMS = REQ_COMMS_LINK
-
 # Modes whose function depends on a live comms link. Only these auto-safe on
 # a denied link (ADR 0028, narrowed to the approved "link modes" scope): a
 # MISSION or MONITORING run that does not need comms is not degraded by a
@@ -167,9 +143,54 @@ _MODE_LOAD_CEILINGS: dict[Mode, float] = {
 
 # Consecutive ticks the operator-incapacitation label must hold before the
 # auto-safe fires (ADR 0029). The label reads the biometrics Kalman estimate,
-# so a single-tick spike must not force a one-way SAFE. The SC-2 / SC-8 and
-# comms conditions read smoothly-evolving reported state and stay instantaneous.
+# so a single-tick spike must not force a one-way SAFE.
 _OPERATOR_PERSISTENCE_TICKS = 3
+
+# The auto-safe policy as a declarative table (ADR 0044). Severity orders the
+# firing when several conditions trip at once: operator incapacitation takes
+# the full SAFE and outranks the device hazards; power (the least recoverable
+# drain, whose LOW_POWER shedding also relieves heat) precedes thermal; the
+# comms-denied condition trails them. The operator condition is debounced over
+# ``_OPERATOR_PERSISTENCE_TICKS`` with anti-toggle decay, so a single-tick
+# recovery does not reset the streak; the device hazards and the comms
+# condition stay instantaneous. The ids are shared with the entry gate
+# (ADR 0043), so a refusal and an auto-safe firing land under one constraint id
+# in the audit trail. ``Engine._failsafe_detect`` supplies the raw-active set
+# the ``FailsafeArbiter`` debounces and selects from.
+_FAILSAFE_CONDITIONS: tuple[FailsafeCondition, ...] = (
+    FailsafeCondition(
+        id=REQ_OPERATOR,
+        severity=40,
+        debounce_ticks=_OPERATOR_PERSISTENCE_TICKS,
+        decay=1,
+        preferred="safe",
+        fallback="safe",
+    ),
+    FailsafeCondition(
+        id=SC_POWER_RESERVE,
+        severity=30,
+        debounce_ticks=1,
+        decay=1,
+        preferred="low_power",
+        fallback="degrade",
+    ),
+    FailsafeCondition(
+        id=SC_THERMAL_HEADROOM,
+        severity=20,
+        debounce_ticks=1,
+        decay=1,
+        preferred="thermal_limit",
+        fallback="degrade",
+    ),
+    FailsafeCondition(
+        id=REQ_COMMS_LINK,
+        severity=10,
+        debounce_ticks=1,
+        decay=1,
+        preferred="degrade",
+        fallback="degrade",
+    ),
+)
 
 
 class Engine:
@@ -196,7 +217,7 @@ class Engine:
         self.transition_log = transition_log or StateTransitionLog(None)
         self._started = False
         self._wall_start = 0.0
-        self._operator_incap_streak = 0
+        self._failsafe = FailsafeArbiter(_FAILSAFE_CONDITIONS)
         self._tick_hooks: list[TickHook] = []
         self.tick_hook_errors = 0
         # ADR 0019 deterministic seed + clock seams. ``seed=None``
@@ -484,39 +505,40 @@ class Engine:
             )
 
     def _auto_safe(self) -> None:
-        """Drive the FSM toward a safer mode when a safety condition trips.
+        """Drive the FSM toward a safer mode when a failsafe condition trips.
 
-        Evaluated each tick. The operator-incapacitation streak is tracked
-        every tick (so the debounce sees consecutive ticks regardless of
-        mode). Safing fires from an operational mode (every condition) and
-        from an impaired mode (ADR 0027/0028/0029): from an impaired mode the
-        device-hazard and comms conditions find no edge and no-op, but a
-        confirmed operator incapacitation can still deepen the posture to
-        ``SAFE``. That closes the race where a co-occurring device hazard
-        safes to ``LOW_POWER`` during the operator-confirmation window: the
-        operator priority is honoured once the label is confirmed rather than
-        being stranded one rung short. The highest-priority tripped condition
-        fires one transition toward safety: its preferred trigger when the
-        table offers one from the current mode, else the condition's own
-        fallback (``degrade`` for the enforcer hazards, ``safe`` for the
-        operator condition). The move is one-way; recovery stays
+        Evaluated each tick (ADR 0044). The detectors build the raw-active set,
+        the :class:`~nous.state.failsafe.FailsafeArbiter` debounces it (the
+        operator streak with anti-toggle decay; the device and comms conditions
+        instantaneously), and the highest-severity tripped condition fires one
+        transition toward safety: its preferred trigger when the table offers an
+        edge from the current mode, else the condition's own fallback.
+
+        The operator condition is observed from every mode so its streak tracks
+        the label even from IDLE or SAFE, but a transition fires only from an
+        operational or impaired mode. From an impaired mode the device and comms
+        conditions are out of scope, so only a confirmed operator incapacitation
+        can deepen the posture to ``SAFE``. The move is one-way; recovery stays
         controller-gated, so there is no oscillation to debounce.
         """
-        if self.state.operator_state is OperatorState.INCAPACITATED:
-            self._operator_incap_streak += 1
-        else:
-            self._operator_incap_streak = 0
         mode = self.state.mode
-        if not (is_operational(mode) or is_impaired(mode)):
-            return
+        operational = is_operational(mode)
         ctx = self._safety_context()
-        decision = self._safing_decision(ctx)
-        if decision is None:
+        active, projections = self._failsafe_detect(mode, ctx, operational=operational)
+        self._failsafe.observe(active)
+        if not (operational or is_impaired(mode)):
             return
-        preferred, fallback, safety, reason = decision
-        trigger = preferred if self.fsm.can(preferred) else fallback
+        condition = self._failsafe.select()
+        if condition is None:
+            return
+        trigger = (
+            condition.preferred
+            if self.fsm.can(condition.preferred)
+            else condition.fallback
+        )
         if not self.fsm.can(trigger):
             return
+        safety, reason = projections[condition.id]
         prev = self.fsm.current
         try:
             new = self.fsm.transition(trigger, context=ctx)
@@ -530,6 +552,55 @@ class Engine:
             reason=f"auto-safe: {safety['constraint_id']} -> {trigger}",
         )
         self._set_mode(new)
+
+    def _failsafe_detect(
+        self, mode: Mode, ctx: Mapping[str, Any], *, operational: bool
+    ) -> tuple[dict[str, bool], dict[str, tuple[dict[str, Any], str]]]:
+        """Build this tick's raw-active set and the audit projection per id.
+
+        The operator condition is read from every mode, so its debounce streak
+        tracks the label even outside the operational set. The device hazards
+        run through the enforcer and the comms condition reads the link label
+        only from an operational mode: an impaired mode has no safer edge for
+        them, and an enforcer check there would only charge the violation
+        counter. The device hazards short-circuit power before thermal, so the
+        counter is not charged for a thermal violation the power one pre-empts.
+        """
+        active: dict[str, bool] = {c.id: False for c in _FAILSAFE_CONDITIONS}
+        projections: dict[str, tuple[dict[str, Any], str]] = {}
+
+        if self.state.operator_state is OperatorState.INCAPACITATED:
+            reason = self.state.operator_state_reason or "operator incapacitated"
+            active[REQ_OPERATOR] = True
+            projections[REQ_OPERATOR] = (
+                _label_safety(REQ_OPERATOR, reason, ctx),
+                reason,
+            )
+
+        if operational:
+            for constraint_id, candidate_key in (
+                (SC_POWER_RESERVE, "soc_pct"),
+                (SC_THERMAL_HEADROOM, "thermal_headroom_c"),
+            ):
+                result = self.safety.check(
+                    constraint_id, ctx.get(candidate_key), evidence=ctx
+                )
+                if not result.approved:
+                    active[constraint_id] = True
+                    projections[constraint_id] = (
+                        _safety_result_to_dict(result),
+                        result.reason,
+                    )
+                    break
+            if mode in _LINK_MODES and self.state.comms_state is CommsState.DENIED:
+                reason = self.state.comms_state_reason or "comms denied"
+                active[REQ_COMMS_LINK] = True
+                projections[REQ_COMMS_LINK] = (
+                    _label_safety(REQ_COMMS_LINK, reason, ctx),
+                    reason,
+                )
+
+        return active, projections
 
     def _set_mode(self, mode: Mode) -> None:
         """Write ``state.mode`` and run the posture's entry action (ADR 0029).
@@ -552,64 +623,6 @@ class Engine:
         so recovery to IDLE lifts it.
         """
         self.compute.set_mode_load_ceiling(_MODE_LOAD_CEILINGS.get(mode))
-
-    def _safing_decision(
-        self, ctx: Mapping[str, Any]
-    ) -> tuple[str, str, dict[str, Any], str] | None:
-        """Highest-priority tripped safing condition, or ``None`` when safe.
-
-        Returns ``(preferred_trigger, fallback_trigger, safety_projection,
-        reason)``. The fallback is the trigger to use when the table offers no
-        preferred edge from the current mode; it is per-condition so the
-        operator condition never downgrades to ``degrade``.
-
-        Operator incapacitation outranks the device hazards (a full ``safe``
-        posture when no one can supervise) and is debounced: it fires only
-        after the label has held for ``_OPERATOR_PERSISTENCE_TICKS`` because it
-        reads the biometrics Kalman estimate, where a single-tick spike must
-        not force a one-way ``safe``. A reachability invariant guarantees
-        ``safe`` from every operational and impaired mode, so its fallback is
-        also ``safe`` and it can deepen an already-impaired posture.
-
-        The device-hazard and comms conditions are evaluated only from an
-        operational mode: they have no safer edge from an impaired mode and
-        would only inflate the violation counter. SC-8 power reserve and SC-2
-        thermal headroom go through the enforcer (fallback ``degrade``); a
-        fully denied comms link degrades the link-bearing modes (``RELAY`` /
-        ``C2``), whose function depends on it. The SC-* and comms conditions
-        read smoothly-evolving reported state, so they stay instantaneous.
-        """
-        if (
-            self.state.operator_state is OperatorState.INCAPACITATED
-            and self._operator_incap_streak >= _OPERATOR_PERSISTENCE_TICKS
-        ):
-            reason = self.state.operator_state_reason or "operator incapacitated"
-            return "safe", "safe", _label_safety(_LABEL_OPERATOR, reason, ctx), reason
-        if not is_operational(self.state.mode):
-            return None
-        for constraint_id, candidate_key, preferred in _SAFING_RULES:
-            result = self.safety.check(
-                constraint_id, ctx.get(candidate_key), evidence=ctx
-            )
-            if not result.approved:
-                return (
-                    preferred,
-                    "degrade",
-                    _safety_result_to_dict(result),
-                    result.reason,
-                )
-        if (
-            self.state.mode in _LINK_MODES
-            and self.state.comms_state is CommsState.DENIED
-        ):
-            reason = self.state.comms_state_reason or "comms denied"
-            return (
-                "degrade",
-                "degrade",
-                _label_safety(_LABEL_COMMS, reason, ctx),
-                reason,
-            )
-        return None
 
     def _audit_auto_safe(
         self,

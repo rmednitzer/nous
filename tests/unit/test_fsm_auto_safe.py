@@ -186,6 +186,25 @@ def test_auto_safe_operator_single_tick_spike_does_not_safe(tmp_nous_home: Path)
         assert eng.state.mode is Mode.MISSION
 
 
+def test_auto_safe_operator_flap_still_safes(tmp_nous_home: Path) -> None:
+    # ADR 0044 anti-toggle: a sustained-but-noisy incapacitation (two ticks
+    # incapacitated, one nominal blip, two more incapacitated) still crosses
+    # the three-tick window. A single clear tick decays the streak by one, not
+    # back to zero, so the blip cannot perpetually hand back the grace period.
+    eng = _engine_in("mission")
+    flap = [
+        OperatorState.INCAPACITATED,
+        OperatorState.INCAPACITATED,
+        OperatorState.NOMINAL,
+        OperatorState.INCAPACITATED,
+        OperatorState.INCAPACITATED,
+    ]
+    for label in flap:
+        eng.state.operator_state = label
+        eng._auto_safe()
+    assert eng.state.mode is Mode.SAFE
+
+
 @pytest.mark.parametrize("trigger", ["relay", "monitoring", "c2"])
 def test_auto_safe_operator_uses_safe_not_degrade_fallback(
     tmp_nous_home: Path, trigger: str

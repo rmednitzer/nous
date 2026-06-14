@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (FSM: first-class failsafe action framework, ADR 0044)
+
+- The tick-loop auto-safe is now a declarative table behind a pure arbiter
+  (ADR 0044, BL-076). A new `src/nous/state/failsafe.py` holds a
+  `FailsafeCondition` (id, severity, debounce ticks, decay, preferred and
+  fallback triggers) and a `FailsafeArbiter` that debounces the raw-active
+  condition set each tick and selects the highest-severity tripped condition,
+  the way PX4 separates its `FailsafeBase` framework from the concrete
+  `checkStateAndMode`. Hysteresis is now a per-condition property: the arbiter
+  decays an inactive streak by one per clear tick rather than resetting it, so
+  a sustained-but-flapping condition still accrues toward firing instead of
+  handing back the whole grace period on a single-tick blip. The engine keeps
+  the detectors (operator label from every mode, the device hazards through the
+  enforcer with power short-circuiting thermal, the comms label scoped to the
+  link modes), feeds the arbiter, and fires one transition per tick exactly as
+  before. Behaviour is preserved: the device and comms conditions stay
+  instantaneous, the operator condition keeps its three-tick window (now with
+  anti-toggle), the severity order reproduces the previous
+  operator-over-power-over-thermal-over-comms priority, and recovery stays
+  controller-gated (the one-way posture of ADR 0029). The `_SAFING_RULES` table
+  and the bespoke `_operator_incap_streak` counter are gone. Pinned by
+  `tests/unit/test_failsafe_arbiter.py` and an engine-level flap test in
+  `tests/unit/test_fsm_auto_safe.py`.
+
 ### Changed (FSM: declarative mode-requirements gate, ADR 0043)
 
 - Operational-mode entry now gates on the full precondition set, the same flags
