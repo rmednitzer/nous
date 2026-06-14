@@ -173,15 +173,18 @@ class CommsSubsystem:
         link.forced_state = None
 
     def tx(self, link_id: str, n_bytes: int) -> int:
-        """Record a transmission. Resets ``age_s`` and returns bytes accepted.
+        """Record a transmission, returning the bytes accepted.
 
-        A transmission on a link that the controller has forced down is
-        rejected (returns 0). Otherwise ``age_s`` is reset to 0 and
-        ``throughput_bps`` is updated to the achieved rate: the bits sent over
-        the interval since this link last transmitted, capped at the link's
-        sustainable ``capacity_bps`` (the rated bandwidth for a static link, the
-        SNR-derived capacity for a propagation link; achieved-rate audit COMMS-3 /
-        ADR 0051, the capacity cap per BL-048 / ADR 0053).
+        A send is rejected (returns 0, and ``age_s`` is left unchanged) when the
+        link is unknown, the controller has forced it down, its modeled
+        ``capacity_bps`` has collapsed to zero (a propagation link below its SNR
+        floor carries nothing; audit 2026-06-14b H-1), or ``n_bytes`` is
+        non-positive. Only an accepted send resets ``age_s`` to 0 and updates
+        ``throughput_bps`` to the achieved rate: the bits sent over the interval
+        since this link last transmitted, capped at the link's sustainable
+        ``capacity_bps`` (the rated bandwidth for a static link, the SNR-derived
+        capacity for a propagation link; achieved-rate audit COMMS-3 / ADR 0051,
+        the capacity cap per BL-048 / ADR 0053).
         """
         link = self._links.get(link_id)
         if link is None:

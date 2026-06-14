@@ -20,7 +20,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (M-1). The connected-likelihood floor check is `<` rather than `<=`, so a link
   exactly at the 1 bps floor is processed, matching the liveness boundary
   elsewhere (M-2). The FSM-facing comms state is unchanged; covered by additive
-  regressions across the comms subsystem, outbox, and estimator suites.
+  unit tests across the comms subsystem, outbox, and estimator suites and pinned
+  as the `TestH1` / `TestH2` / `TestM1` / `TestM2` regression classes (ADR 0023).
 
 ### Fixed (runner: redact the caught-exception body so a backend error cannot leak credentials, BL-090 / ADR 0055)
 

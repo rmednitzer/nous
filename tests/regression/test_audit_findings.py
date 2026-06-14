@@ -932,3 +932,178 @@ class TestHigh1RunnerRedactsCaughtExceptionBody:
         )
         assert record["exit_code"] == 1
         assert record["denied"] is False
+
+
+class TestH1CommsTxRejectsZeroCapacityLink:
+    """H-1: a transmission on a zero-capacity link must be rejected, not accepted.
+
+    Original defect (``docs/audit-2026-06-14b.md`` H-1): the BL-048 capacity cap
+    let ``CommsSubsystem.tx`` return ``n_bytes`` accepted on a propagation link
+    driven below its SNR floor (``capacity_bps == 0``) while stamping
+    ``throughput_bps=0``, so a direct ``comms_send`` or an outbox flush on a
+    fully-degraded but still-live link reported success on a link that carries
+    nothing.
+
+    Fix (BL-091): ``tx`` gates ``capacity_bps <= 0`` to ``return 0`` and stamps
+    the zero rate without resetting the age-out timer, matching the forced-down
+    guard.
+    """
+
+    def test_tx_rejects_and_stamps_zero_rate(self) -> None:
+        from collections.abc import Mapping
+        from typing import Any
+
+        from nous.subsystems.comms import CommsSubsystem
+
+        link: Mapping[str, Any] = {
+            "id": "relay",
+            "bandwidth_bps": 2_000_000,
+            "max_age_s": 600.0,
+            "propagation": {
+                "peer": {"lat": 47.0, "lon": 12.98, "alt_m": 520},
+                "tx_power_dbm": 20.0,
+                "frequency_hz": 2.4e9,
+                "excess_loss_db": 5.0,
+                "noise_floor_dbm": -100.0,
+                "snr_floor_db": 5.0,
+                "snr_full_db": 20.0,
+                "good_rssi_dbm": -85.0,
+                "sensitivity_dbm": -115.0,
+            },
+        }
+        comms = CommsSubsystem(
+            {"comms": {"links": [link]}}, position_fn=lambda: (47.0, 13.30, 500.0)
+        )
+        comms.step(1.0)
+        relay = comms.link("relay")
+        assert relay is not None
+        assert relay.is_live() is True
+        assert relay.capacity_bps == 0.0
+        assert comms.tx("relay", 1500) == 0
+        assert relay.throughput_bps == 0.0
+        # A rejected send does not reset the age-out timer.
+        assert relay.age_s > 0.0
+
+
+class TestH2CommsEstimatorRefreshesMissingLink:
+    """H-2: a link absent from the observation is refreshed each update, not frozen.
+
+    Original defect (``docs/audit-2026-06-14b.md`` H-2):
+    ``CommsParticleFilter.update`` refreshed a link absent from the current
+    observation with ``setdefault``, so after the first absence its
+    ``LinkEstimate`` froze while its particle belief kept drifting under
+    ``predict()``. Latent through the engine because ``sensor_obs`` always emits
+    every link, but a correctness defect.
+
+    Fix (BL-091): the missing-link branch assigns unconditionally, so the
+    estimate always reflects the current belief.
+    """
+
+    def test_missing_link_estimate_tracks_the_drifted_belief(self) -> None:
+        import numpy as np
+
+        from nous.estimators.comms import CommsParticleFilter
+        from nous.types import Observation
+
+        def obs(*links: dict[str, float | bool | str]) -> Observation:
+            return Observation(
+                source="comms", ts_s=1.0, payload={"links": list(links)}, noise={}
+            )
+
+        f = CommsParticleFilter()
+        f.update(
+            obs(
+                {
+                    "link_id": "lte",
+                    "rssi_dbm": -70.0,
+                    "loss_pct": 1.0,
+                    "throughput_bps": 1_000_000.0,
+                    "connected": True,
+                }
+            )
+        )
+        assert f.links()[0].connected is True
+        other: dict[str, float | bool | str] = {
+            "link_id": "other",
+            "rssi_dbm": -70.0,
+            "loss_pct": 1.0,
+            "throughput_bps": 500_000.0,
+            "connected": True,
+        }
+        f.update(obs(other))  # first absence of lte
+        f._links["lte"].particles = np.zeros_like(f._links["lte"].particles)
+        f.update(obs(other))  # a second absence must refresh, not freeze
+        lte = next(e for e in f.links() if e.link_id == "lte")
+        assert lte.connected is False
+
+
+class TestM1CommsEstimateCarriesBandwidth:
+    """M-1: the filter's LinkEstimate carries the rated bandwidth for health.
+
+    Original defect (``docs/audit-2026-06-14b.md`` M-1):
+    ``_link_estimate_from_belief`` never set ``bandwidth_bps``, so an
+    estimator-produced ``LinkEstimate`` fell back to the legacy flat throughput
+    floor in ``comms_state._rate_healthy`` rather than the per-link capacity
+    fraction. The FSM-facing ``derive_state`` uses the subsystem estimates that
+    carry it, so this was the informational estimator read only.
+
+    Fix (BL-091): the rated bandwidth is threaded from ``sensor_obs`` through the
+    belief to the estimate.
+    """
+
+    def test_estimate_carries_bandwidth_from_observation(self) -> None:
+        from nous.estimators.comms import CommsParticleFilter
+        from nous.types import Observation
+
+        f = CommsParticleFilter()
+        f.update(
+            Observation(
+                source="comms",
+                ts_s=1.0,
+                noise={},
+                payload={
+                    "links": [
+                        {
+                            "link_id": "relay",
+                            "rssi_dbm": -70.0,
+                            "loss_pct": 1.0,
+                            "throughput_bps": 1_000_000.0,
+                            "capacity_bps": 1_500_000.0,
+                            "bandwidth_bps": 2_000_000.0,
+                            "connected": True,
+                        }
+                    ]
+                },
+            )
+        )
+        assert f.links()[0].bandwidth_bps == 2_000_000.0
+
+
+class TestM2CommsLikelihoodFloorBoundary:
+    """M-2: a throughput exactly at the 1 bps floor is processed, not floored.
+
+    Original defect (``docs/audit-2026-06-14b.md`` M-2):
+    ``_likelihood_given_connected`` early-returned the likelihood floor at
+    ``throughput <= _THROUGHPUT_FLOOR_BPS``, treating a link exactly at the 1 bps
+    floor as disconnected, inconsistent with the ``>=`` floor liveness boundary
+    in ``_link_estimate_from_belief``.
+
+    Fix (BL-091): the comparison is ``<``, so a link exactly at the floor is
+    processed; strictly below still returns the likelihood floor.
+    """
+
+    def test_floor_boundary_is_strict(self) -> None:
+        from nous.estimators.comms import (
+            _LIKELIHOOD_FLOOR,
+            _THROUGHPUT_FLOOR_BPS,
+            _likelihood_given_connected,
+        )
+
+        at_floor = _likelihood_given_connected(
+            _THROUGHPUT_FLOOR_BPS, _THROUGHPUT_FLOOR_BPS, 0.0, True
+        )
+        below = _likelihood_given_connected(
+            _THROUGHPUT_FLOOR_BPS - 0.1, _THROUGHPUT_FLOOR_BPS, 0.0, True
+        )
+        assert at_floor > _LIKELIHOOD_FLOOR
+        assert below == _LIKELIHOOD_FLOOR
