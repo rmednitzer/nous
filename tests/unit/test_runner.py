@@ -131,7 +131,9 @@ def test_t3_call_under_open_mode_admitted(audit: AuditLogger) -> None:
     assert record["denied"] is False
 
 
-def test_exception_in_work_maps_to_error_body(audit: AuditLogger) -> None:
+def test_exception_in_work_maps_to_error_body(
+    audit: AuditLogger, capsys: pytest.CaptureFixture[str]
+) -> None:
     body = asyncio.run(
         run(
             tool="device_info",
@@ -141,7 +143,11 @@ def test_exception_in_work_maps_to_error_body(audit: AuditLogger) -> None:
             policy_mode=PolicyMode.OPEN,
         )
     )
-    assert body == "[error RuntimeError: boom]"
+    # The body carries the class name only; the message ("boom") never reaches
+    # the caller, it goes to stderr for an operator (ADR 0055).
+    assert body == "[error RuntimeError]"
+    assert "boom" not in body
+    assert "boom" in capsys.readouterr().err
     record = _last_record(audit)
     # A caught worker error is abnormal (exit_code 1) but not a denial, so a
     # consumer separates it from a normal return (exit_code None) and from a

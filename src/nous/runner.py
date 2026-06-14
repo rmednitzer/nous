@@ -4,7 +4,9 @@ Every tool registered in ``nous.server`` runs through ``run()``. The wrapper:
 
 1. classifies the tool into a tier (`nous.policy.classify`),
 2. admits or refuses the call under the configured mode (`nous.policy.decide`),
-3. executes the supplied ``work`` coroutine, catching every exception,
+3. executes the supplied ``work`` coroutine, catching every exception and
+   reducing it to its class name in the returned body (the full detail goes
+   to stderr, never to the caller; ADR 0055),
 4. truncates the body to the configured output budget,
 5. appends one audit line (the body's SHA-256, never the body itself).
 
@@ -13,6 +15,8 @@ The runner returns a single bounded string suitable for an MCP tool response.
 
 from __future__ import annotations
 
+import contextlib
+import sys
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
@@ -76,8 +80,16 @@ async def run(
     try:
         body = await work()
     except Exception as exc:  # noqa: BLE001
-        body = f"[error {exc.__class__.__name__}: {exc}]"
+        # The body carries only the class name: a backend error message can
+        # embed a data-source URL with credentials, and this body is returned
+        # to the caller (ADR 0055). The full detail goes to stderr for an
+        # operator with host access, mirroring the server's DB-init handler.
+        body = f"[error {exc.__class__.__name__}]"
         error = True
+        with contextlib.suppress(Exception):
+            sys.stderr.write(
+                f"tool {tool} failed: {exc.__class__.__name__}: {exc}\n"
+            )
 
     body = _truncate(body, max_output)
     # Stamp ``exit_code=1`` on a caught worker exception so a consumer can tell

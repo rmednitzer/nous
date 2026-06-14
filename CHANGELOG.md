@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (runner: redact the caught-exception body so a backend error cannot leak credentials, BL-090 / ADR 0055)
+
+- The audited runner returned a caught worker error to the MCP caller as
+  `[error <class>: <message>]` with the raw exception string, only truncated,
+  never redacted. A database failure on a read-only call (`state_get` /
+  `state_history` reach the database) raises an exception whose message can
+  embed the `NOUS_DB_URL` data source, host, user, and password, so an admitted
+  read-only caller could read a credential out of an error body. The body now
+  carries the exception class only (`[error <class>]`); the full `class: message`
+  is echoed to stderr for an operator with host access, mirroring the
+  `device_info` persistence handler (BL-078). The ADR 0048 `exit_code` / `denied`
+  audit contract is unchanged, and the audit record only ever stored the body's
+  SHA-256. Pinned by a regression in `tests/regression/test_audit_findings.py`.
+
 ### Added (comms: higher-fidelity propagation, BL-088 / ADR 0054)
 
 - Five additive, opt-in upgrades to the BL-048 link budget in

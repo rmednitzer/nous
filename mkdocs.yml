@@ -137,6 +137,7 @@ nav:
       - "0052 Name the interop freshness gate's configuration faults distinctly from staleness": adr/0052-interop-freshness-gate-failure-modes.md
       - "0053 Propagation-aware comms link quality": adr/0053-propagation-aware-comms-model.md
       - "0054 Higher-fidelity comms propagation (path loss, diffraction, noise, antenna, fading)": adr/0054-higher-fidelity-propagation.md
+      - "0055 Redact the runner's caught-exception body to the exception class": adr/0055-runner-redacts-caught-exception-body.md
   - STPA:
       - Overview: stpa/README.md
       - "01 Purpose": stpa/01-purpose.md
