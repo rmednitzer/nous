@@ -79,7 +79,11 @@ def test_live_log_degrades_on_append_failure(db_path: Path) -> None:
     log.append(from_mode="a", to_mode="b", trigger="x")
     assert log.append_failures == 1
     assert log.degraded is True
-    assert log.status()["last_error"] != ""
+    # last_error carries only the exception class, never the message, so a
+    # connection detail cannot leak through device_info.
+    last_error = log.status()["last_error"]
+    assert last_error != ""
+    assert " " not in last_error and ":" not in last_error
 
 
 def test_engine_persists_boot_transition(

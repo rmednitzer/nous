@@ -35,7 +35,8 @@ async def test_device_info_surfaces_failed_db_init(
     config: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def _boom(*_args: Any, **_kwargs: Any) -> Any:
-        raise OSError("unable to open database file")
+        # A connection-time message can carry the DB URL and its credentials.
+        raise OSError("could not connect to postgresql://nous:s3cret@db.internal/state")
 
     monkeypatch.setattr("nous.server.init_db", _boom)
     app = build_app(config)
@@ -43,6 +44,10 @@ async def test_device_info_surfaces_failed_db_init(
     # The engine still came up (the failure is swallowed so the device ticks).
     assert app.engine.state.tick >= 0
     info = _payload(await app.mcp.call_tool("device_info", {}))
-    assert info["persistence"]["persistent"] is False
-    assert info["persistence"]["degraded"] is True
-    assert "OSError" in info["persistence"]["init_error"]
+    persistence = info["persistence"]
+    assert persistence["persistent"] is False
+    assert persistence["degraded"] is True
+    # Only the exception class is surfaced; the message (and any credentials it
+    # carries) must not leak through the T0 device_info read.
+    assert persistence["init_error"] == "OSError"
+    assert "s3cret" not in json.dumps(info)

@@ -115,6 +115,13 @@ class StateTransitionLog:
     report a silently unpersisted transition history (AUDIT-2026-06-14
     DB-1) instead of leaving an operator to discover it from an empty
     ``state_history``.
+
+    ``init_error`` and ``last_error`` carry only the exception *class*, not
+    the message: ``device_info`` is a T0 read any caller can reach, and a
+    connection-time exception message can include the DB URL and its
+    credentials (a Postgres/MySQL ``NOUS_DB_URL``). The full message is
+    written to stderr at the point of failure for an operator with host
+    access.
     """
 
     def __init__(self, engine: Engine | None, *, init_error: str = "") -> None:
@@ -168,7 +175,7 @@ class StateTransitionLog:
                 session.commit()
         except Exception as exc:  # noqa: BLE001
             self.append_failures += 1
-            self.last_error = f"{exc.__class__.__name__}: {exc}"
+            self.last_error = exc.__class__.__name__
 
     def tail(self, limit: int = 16) -> list[StateTransition]:
         """Return the most recent ``limit`` rows, oldest first."""
@@ -186,5 +193,5 @@ class StateTransitionLog:
                 return list(reversed(list(rows)))
         except Exception as exc:  # noqa: BLE001
             self.append_failures += 1
-            self.last_error = f"{exc.__class__.__name__}: {exc}"
+            self.last_error = exc.__class__.__name__
             return []

@@ -71,9 +71,15 @@ class Nous:
             db_engine = init_db(settings.resolved_db_url())
         except Exception as exc:  # noqa: BLE001
             db_engine = None
-            db_init_error = f"{exc.__class__.__name__}: {exc}"
+            # device_info is a T0 read any caller can reach, so surface only the
+            # exception class: a connection-time message can carry the DB URL and
+            # its credentials (a Postgres/MySQL NOUS_DB_URL). The full detail goes
+            # to stderr / the journal for an operator with host access.
+            db_init_error = exc.__class__.__name__
             with contextlib.suppress(Exception):
-                sys.stderr.write(f"state DB init failed: {db_init_error}\n")
+                sys.stderr.write(
+                    f"state DB init failed: {exc.__class__.__name__}: {exc}\n"
+                )
         self.transition_log = StateTransitionLog(db_engine, init_error=db_init_error)
         self.engine = Engine(
             settings=settings, transition_log=self.transition_log, audit=self.audit

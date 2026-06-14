@@ -17,8 +17,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   audit sink does. `device_info` gains a `persistence` block (`persistent`,
   `degraded`, `init_error`, `append_failures`, `last_error`) so an operator who
   misconfigures `NOUS_DB_URL` sees a degraded sink instead of discovering it
-  from an empty `state_history`. Additive and low-blast (`db.py`, `server.py`,
-  `tools/meta.py`); pinned by `tests/unit/test_state_transition_log.py` and
+  from an empty `state_history`. The surfaced error fields carry only the
+  exception class, not the message, so a connection string with credentials
+  cannot leak through the T0 `device_info` read; the full detail goes to stderr.
+  Additive and low-blast (`db.py`, `server.py`, `tools/meta.py`); pinned by
+  `tests/unit/test_state_transition_log.py` and
   `tests/integration/test_persistence_status.py`.
 
 ### Added (comms: store-and-forward outbox with precedence triage, BL-077 / ADR 0047)
