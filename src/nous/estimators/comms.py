@@ -344,12 +344,15 @@ def _likelihood_given_connected(
     """P(observation | actually connected). Gaussian on log-throughput residual."""
     if throughput_bps <= _THROUGHPUT_FLOOR_BPS:
         return _LIKELIHOOD_FLOOR
-    sigma = _THROUGHPUT_OBS_SIGMA_FRAC * max(expected_throughput_bps, 1.0)
-    if sigma <= 0.0:
-        return _LIKELIHOOD_FLOOR
     log_obs = math.log(max(throughput_bps, _THROUGHPUT_FLOOR_BPS))
     log_exp = math.log(max(expected_throughput_bps, _THROUGHPUT_FLOOR_BPS))
-    z = (log_obs - log_exp) / (sigma / max(expected_throughput_bps, 1.0))
+    # ``_THROUGHPUT_OBS_SIGMA_FRAC`` is the constant log-space observation sigma
+    # (a unitless standard deviation) that normalizes the log residual into a
+    # z-score. The earlier ``_THROUGHPUT_OBS_SIGMA_FRAC * max(expected, 1.0)``
+    # numerator and ``/ max(expected, 1.0)`` divisor always cancelled to exactly
+    # this constant (audit 2026-06-14 COMMS-4), so the log-space spread is a
+    # deliberate constant rather than a scale-dependent one.
+    z = (log_obs - log_exp) / _THROUGHPUT_OBS_SIGMA_FRAC
     base = math.exp(-0.5 * z * z)
     loss_factor = max(0.0, 1.0 - loss_pct / 100.0)
     flag_factor = 1.0 if flag else 0.6

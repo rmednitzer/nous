@@ -214,3 +214,21 @@ def test_deterministic_under_seed() -> None:
         b.predict(1.0)
         b.update(obs)
     assert a.belief("lte") == pytest.approx(b.belief("lte"))
+
+
+def test_connected_likelihood_depends_only_on_log_ratio() -> None:
+    """COMMS-4: the log-throughput sigma is a fixed fraction, so the connected
+    likelihood depends only on the observed/expected ratio, not the absolute
+    scale. Two links with the same ratio at different magnitudes score
+    identically; this pins the constant-sigma design the simplification made
+    explicit (it would fail if the divisor were made scale-dependent)."""
+    from nous.estimators.comms import _likelihood_given_connected
+
+    small = _likelihood_given_connected(2_000.0, 1_000.0, loss_pct=0.0, flag=True)
+    large = _likelihood_given_connected(
+        2_000_000.0, 1_000_000.0, loss_pct=0.0, flag=True
+    )
+    assert small == pytest.approx(large)
+    # A wider ratio is less likely than a tight one (the residual still bites).
+    wide = _likelihood_given_connected(8_000.0, 1_000.0, loss_pct=0.0, flag=True)
+    assert wide < small
