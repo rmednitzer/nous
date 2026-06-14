@@ -137,10 +137,11 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 992 tests pass at HEAD: BL-090 / ADR 0055 added
-  one (the runner caught-exception redaction regression in
+  feature branch before merge. 993 tests pass at HEAD: BL-090 / ADR 0055 added
+  two (the runner caught-exception redaction regression in
   `tests/regression/test_audit_findings.py`, closing the 2026-06-14b audit's
-  HIGH-1), on top of the 991 from BL-088 / ADR 0054, which added
+  HIGH-1, plus a single-line stderr-echo check in `tests/unit/test_runner.py`),
+  on top of the 991 from BL-088 / ADR 0054, which added
   eighteen (the higher-fidelity link-budget functions, the log-distance / knife
   edge / antenna / kTB-noise / Rician-fade physics, the
   reduces-to-ADR-0053-at-defaults checks, and the fail-conservative noise-config

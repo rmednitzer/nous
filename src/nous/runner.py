@@ -86,10 +86,13 @@ async def run(
         # operator with host access, mirroring the server's DB-init handler.
         body = f"[error {exc.__class__.__name__}]"
         error = True
+        # Escape embedded newlines so a crafted message cannot forge extra
+        # journal lines, and flush so the entry lands as one reliable line.
+        detail = f"tool {tool} failed: {exc.__class__.__name__}: {exc}"
+        detail = detail.replace("\n", "\\n").replace("\r", "\\r")
         with contextlib.suppress(Exception):
-            sys.stderr.write(
-                f"tool {tool} failed: {exc.__class__.__name__}: {exc}\n"
-            )
+            sys.stderr.write(detail + "\n")
+            sys.stderr.flush()
 
     body = _truncate(body, max_output)
     # Stamp ``exit_code=1`` on a caught worker exception so a consumer can tell
