@@ -36,8 +36,14 @@ __all__ = ["CommsParticleFilter", "LinkBelief"]
 
 _LIVE_THROUGHPUT_FLOOR_BPS = 1.0
 _DEFAULT_PARTICLES = 64
-_STAY_CONNECTED_BASE = 0.97
-_STAY_DISCONNECTED_BASE = 0.93
+# Stickiness bounds for the sticky Markov transition. Both stay_connected and
+# stay_disconnected range over [0.93, 0.97] with opposite monotonicity in link
+# quality: at the best quality a connected link stays connected at 0.97 while a
+# disconnected one stays disconnected at only 0.93, and at the worst quality the
+# two swap. The names read as per-state baselines but are really the shared
+# max / min stickiness (audit 2026-06-14b M-4).
+_STAY_CONNECTED_BASE = 0.97  # max stickiness (best-quality stay-connected)
+_STAY_DISCONNECTED_BASE = 0.93  # min stickiness (worst-quality stay-connected)
 _RSSI_GOOD_DBM = -80.0
 _RSSI_BAD_DBM = -105.0
 _LOSS_GOOD_PCT = 5.0

@@ -7,11 +7,12 @@ yet?" questions.
 
 The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`. Two deployment failure modes found on `nous-prod-01` are closed in code: `deploy/install.sh` no longer installs `auto-update.sh` onto itself (the self-install errored under `set -e` and aborted every deploy after the `git reset`, the root cause of the freeze; BL-063), and `deploy/auto-update.sh` now rolls `HEAD` back and reinstalls the previous good artifacts on any failed deploy. The VM was manually resynced on 2026-05-28 (restarted onto current `main`; verified 29 tools, calibrated self-model, `audit.degraded:false`, so AUDIT N2 is cleared). A separate fix (BL-064 / ADR 0024) makes the engine tick at process scope: under `stateless_http=True` the per-request server lifespan had been rebooting the engine on every tool call, so `tick` and the FSM never advanced.
 
-Last reviewed: 2026-06-06 ([`docs/audit-2026-06-06.md`](docs/audit-2026-06-06.md),
+Last reviewed: 2026-06-14 ([`docs/audit-2026-06-14b.md`](docs/audit-2026-06-14b.md),
+a full fresh adversarial pass at HEAD post BL-048 / BL-088: gate-battery
+validation, a live-twin probe, and a three-front code and documentation drift
+sweep). Prior: 2026-06-06 ([`docs/audit-2026-06-06.md`](docs/audit-2026-06-06.md),
 full-repo validation: standards / NATO / BOM verification, a live-VM probe, the
-position estimator relabel, and the `state_transition` control tool). Prior:
-2026-06-01 ([`docs/audit-2026-06-01.md`](docs/audit-2026-06-01.md), cadence
-delta; the BL-016 audit hash chain landed behind ADR 0025).
+position estimator relabel, and the `state_transition` control tool).
 Prior pass 2026-05-27 second pass (delta audit at HEAD
 ``563175a``, post the ``claude/audit-carryforwards-2026-05-27``
 stack: six 2026-05-27 carry-forwards closed (H2 mypy strict for
@@ -86,7 +87,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0028` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0054` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
