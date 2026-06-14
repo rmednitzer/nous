@@ -7,9 +7,12 @@ the project rolls its own FSM instead of pulling in ``transitions`` or
 ``automat``.
 
 A transition into an operational mode is safety-gated. ``_SAFETY_GATES``
-maps such a transition to the STPA constraints it must satisfy (SC-2
-thermal headroom, SC-8 power reserve); each gate names the context key the
-constraint judges. The machine routes every gate through a
+maps such a transition to the constraints it must satisfy: SC-2 thermal
+headroom and SC-8 power reserve for every operational entry, an available
+operator for all four, and a live comms link for the link-bearing modes
+(RELAY, C2). Each gate names the context key the constraint judges, and the
+entry set is the same flag set the auto-safe reads on the way out (ADR 0043).
+The machine routes every gate through a
 :class:`~nous.safety.SafetyEnforcer` (ADR 0022), so a refused gate raises
 ``GuardDenied`` carrying the enforcer's structured reason and the enforcer
 records the violation for ``device_info`` to surface. A gate whose context
@@ -31,9 +34,13 @@ from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any, NamedTuple
 
-from ..safety import SafetyEnforcer, SafetyResult, floor_threshold
+from ..safety import SafetyEnforcer, SafetyResult, floor_threshold, forbid_value
+from .comms_state import CommsState
+from .operator_state import OperatorState
 
 __all__ = [
+    "REQ_COMMS_LINK",
+    "REQ_OPERATOR",
     "SC_POWER_RESERVE",
     "SC_THERMAL_HEADROOM",
     "GuardDenied",
@@ -162,6 +169,14 @@ def is_terminal(mode: Mode) -> bool:
 SC_THERMAL_HEADROOM = "SC-2"
 SC_POWER_RESERVE = "SC-8"
 
+# Label-namespaced requirement constraint ids (ADR 0028, ADR 0043). The id
+# names the hazard the requirement guards against, so a mode-entry refusal and
+# the matching auto-safe decision (``engine._safing_decision``) carry one
+# constraint id per condition: one flag set, read at entry and at exit. The
+# ``label:`` namespace keeps them distinct from the SC-* STPA ids.
+REQ_OPERATOR = "label:operator-incapacitated"
+REQ_COMMS_LINK = "label:comms-denied"
+
 
 class _SafetyGate(NamedTuple):
     """One constraint a transition must satisfy, and the context key it judges."""
@@ -172,19 +187,27 @@ class _SafetyGate(NamedTuple):
 
 _GATE_THERMAL = _SafetyGate(SC_THERMAL_HEADROOM, "thermal_headroom_c")
 _GATE_POWER = _SafetyGate(SC_POWER_RESERVE, "soc_pct")
+_GATE_OPERATOR = _SafetyGate(REQ_OPERATOR, "operator_state")
+_GATE_COMMS = _SafetyGate(REQ_COMMS_LINK, "comms_state")
 
-# Two kinds of transition are gated on both thermal headroom (SC-2) and
-# battery reserve (SC-8): entering an operational mode (MISSION / RELAY /
-# MONITORING / C2) from IDLE, and the recover/cool transitions out of an
-# impaired mode (which land in IDLE but stay gated, so the device cannot
-# leave the impaired posture until the hazard has cleared; ADR 0029). The
-# failsafe exits (safe / shutdown) are never gated. Gates are checked in
-# order, so the first unsatisfied constraint is the one the refusal names.
+# Each operational-mode entry from IDLE declares its full precondition set, the
+# same conditions the auto-safe watches on the way out (ADR 0043). All four
+# require thermal headroom (SC-2), battery reserve (SC-8), and an available
+# operator (not incapacitated); the link-bearing modes (RELAY / C2) also
+# require a live comms link, so a controller cannot enter a relay posture into
+# a dead link and have it degrade only on the next tick. The recover/cool
+# transitions out of an impaired mode land in IDLE but stay gated on the device
+# hazards, so the device cannot leave the impaired posture until they clear
+# (ADR 0029); IDLE is a standby, not an operational mode, so they carry no
+# operator or comms requirement. The failsafe exits (safe / shutdown) are never
+# gated. Gates are checked in order, device hazards first, so the established
+# SC-2 / SC-8 refusal messages keep surfacing and the first unsatisfied
+# constraint is the one the refusal names.
 _SAFETY_GATES: dict[tuple[Mode, str], tuple[_SafetyGate, ...]] = {
-    (Mode.IDLE, "mission"): (_GATE_THERMAL, _GATE_POWER),
-    (Mode.IDLE, "relay"): (_GATE_THERMAL, _GATE_POWER),
-    (Mode.IDLE, "monitoring"): (_GATE_THERMAL, _GATE_POWER),
-    (Mode.IDLE, "c2"): (_GATE_THERMAL, _GATE_POWER),
+    (Mode.IDLE, "mission"): (_GATE_THERMAL, _GATE_POWER, _GATE_OPERATOR),
+    (Mode.IDLE, "relay"): (_GATE_THERMAL, _GATE_POWER, _GATE_OPERATOR, _GATE_COMMS),
+    (Mode.IDLE, "monitoring"): (_GATE_THERMAL, _GATE_POWER, _GATE_OPERATOR),
+    (Mode.IDLE, "c2"): (_GATE_THERMAL, _GATE_POWER, _GATE_OPERATOR, _GATE_COMMS),
     (Mode.DEGRADED, "recover"): (_GATE_THERMAL, _GATE_POWER),
     (Mode.THERMAL_LIMIT, "cool"): (_GATE_THERMAL, _GATE_POWER),
     (Mode.LOW_POWER, "recover"): (_GATE_THERMAL, _GATE_POWER),
@@ -195,8 +218,10 @@ def register_fsm_constraints(enforcer: SafetyEnforcer) -> None:
     """Register the FSM's safety-gate evaluators on ``enforcer``.
 
     SC-2 floors thermal headroom at the profile threshold; SC-8 floors
-    state-of-charge at the profile's critical reserve. Both fail closed on
-    missing, non-numeric, or non-finite context (ADR 0018, ADR 0022).
+    state-of-charge at the profile's critical reserve. The operator and
+    comms-link requirements refuse when their label reads incapacitated or
+    denied. All four fail closed on missing context (ADR 0018, ADR 0022,
+    ADR 0043).
     """
     enforcer.register(
         SC_THERMAL_HEADROOM,
@@ -207,6 +232,14 @@ def register_fsm_constraints(enforcer: SafetyEnforcer) -> None:
     enforcer.register(
         SC_POWER_RESERVE,
         floor_threshold("soc_pct_critical", label="SoC", unit="%"),
+    )
+    enforcer.register(
+        REQ_OPERATOR,
+        forbid_value(OperatorState.INCAPACITATED.value, label="operator"),
+    )
+    enforcer.register(
+        REQ_COMMS_LINK,
+        forbid_value(CommsState.DENIED.value, label="comms link"),
     )
 
 

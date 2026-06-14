@@ -53,7 +53,12 @@ def test_refused_transition_increments_posture(tmp_nous_home: Path) -> None:
     posture = eng.safety.posture()
     assert posture["total_violations"] == 1
     assert posture["by_constraint"]["SC-2"] == 1
-    assert posture["registered"] == ["SC-2", "SC-8"]
+    assert posture["registered"] == [
+        "SC-2",
+        "SC-8",
+        "label:comms-denied",
+        "label:operator-incapacitated",
+    ]
 
 
 def test_refused_transition_writes_safety_audit_record(tmp_nous_home: Path) -> None:
@@ -82,9 +87,10 @@ def test_admitted_transition_mirrors_every_gate(tmp_nous_home: Path) -> None:
     )
     assert ok and mode is Mode.MISSION
     records = _safety_records(log_path)
-    # Both gates pass on an admitted entry, so both are mirrored approved.
+    # Every gate passes on an admitted entry, so each is mirrored approved.
+    # MISSION requires thermal, power, and an available operator (ADR 0043).
     constraints = sorted(str(r["safety"]["constraint_id"]) for r in records)  # type: ignore[index]
-    assert constraints == ["SC-2", "SC-8"]
+    assert constraints == ["SC-2", "SC-8", "label:operator-incapacitated"]
     assert all(r["denied"] is False for r in records)
 
 

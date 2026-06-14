@@ -37,6 +37,8 @@ from .policy import Tier
 from .safety import SafetyResult
 from .state.comms_state import CommsState
 from .state.machine import (
+    REQ_COMMS_LINK,
+    REQ_OPERATOR,
     SC_POWER_RESERVE,
     SC_THERMAL_HEADROOM,
     GuardDenied,
@@ -135,8 +137,15 @@ _SAFING_RULES: tuple[tuple[str, str, str], ...] = (
 # Constraint ids for the label-driven safing conditions (ADR 0028). The
 # ``label:`` namespace keeps them from being mistaken for the SC-* STPA
 # constraint ids that share the audit record's ``constraint_id`` field.
-_LABEL_OPERATOR = "label:operator-incapacitated"
-_LABEL_COMMS = "label:comms-denied"
+# The auto-safe operator and comms conditions reuse the FSM requirement ids
+# (ADR 0043), so an entry refusal and an auto-safe decision on the same
+# condition land under one constraint id in the audit trail. These two paths
+# stay label-driven and debounced (ADR 0028) rather than routed through the
+# enforcer, so the enforcer's violation counter reflects entry refusals, while
+# the SC-2 / SC-8 hazards (which the auto-safe does route through the enforcer)
+# are counted in both directions.
+_LABEL_OPERATOR = REQ_OPERATOR
+_LABEL_COMMS = REQ_COMMS_LINK
 
 # Modes whose function depends on a live comms link. Only these auto-safe on
 # a denied link (ADR 0028, narrowed to the approved "link modes" scope): a
@@ -651,8 +660,11 @@ class Engine:
     def _safety_context(self) -> dict[str, Any]:
         """Build the safety-gate context from current truth (ADR 0022, 0029).
 
-        The thermal and SoC readings are subsystem properties (always finite
-        floats). The SoC critical reserve is read from the profile dict, so it
+        The operator and comms labels are the derived FSM state, supplying the
+        candidates for the operator-availability and comms-link entry gates
+        (ADR 0043). The thermal and SoC readings are subsystem properties
+        (always finite floats). The SoC critical reserve is read from the
+        profile dict, so it
         is coerced defensively: a non-numeric value, or a ``power`` section that
         is not a mapping at all (both of which ``ProfileModel`` rejects at load,
         but a directly-constructed profile could still carry), omits the key
@@ -667,6 +679,8 @@ class Engine:
             "thermal_headroom_c": float(self.thermal.headroom_c),
             "thermal_headroom_threshold_c": float(self.thermal.headroom_threshold_c),
             "soc_pct": float(self.power.soc_pct),
+            "operator_state": self.state.operator_state.value,
+            "comms_state": self.state.comms_state.value,
         }
         if isinstance(power_cfg, Mapping):
             reserve = _coerce_finite(power_cfg.get("soc_pct_critical_threshold", 5.0))

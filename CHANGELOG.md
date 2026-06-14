@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (FSM: declarative mode-requirements gate, ADR 0043)
+
+- Operational-mode entry now gates on the full precondition set, the same flags
+  the auto-safe reads on exit (ADR 0043, BL-075). Beyond the existing SC-2
+  thermal and SC-8 power gates, all four IDLE to operational entries require an
+  available operator, and the link modes (RELAY, C2) additionally require a live
+  comms link, so a controller can no longer enter a relay posture into a dead
+  link, or a mission with the operator incapacitated, and have it degrade only
+  on the next tick. A new categorical enforcer evaluator, `forbid_value`, backs
+  the operator and comms gates; both reuse the `label:` constraint ids the
+  auto-safe records, so an entry refusal and an auto-safe firing on the same
+  condition land under one `constraint_id` in the audit trail (those auto-safe
+  decisions stay label-driven, so the enforcer counter reflects entry
+  refusals). The device hazards stay first in the gate
+  order, so the SC-2 / SC-8 refusal messages are unchanged; the recover and cool
+  transitions out of an impaired mode keep their thermal and power gates only.
+  Pinned by `tests/unit/test_fsm_requirements_gate.py`.
+
 ### Added (estimators: innovation gating and health, ADR 0042)
 
 - Innovation gating and a health surface for the scalar Kalman estimators

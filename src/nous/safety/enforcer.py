@@ -46,6 +46,7 @@ __all__ = [
     "SafetyResult",
     "ceiling_clamp",
     "floor_threshold",
+    "forbid_value",
 ]
 
 REFUSED = "refused"
@@ -143,6 +144,33 @@ def ceiling_clamp(
                 True, cap, was_clamped=True, violation_type=CLAMPED, evidence=ev
             )
         return SafetyResult(True, value, evidence=ev)
+
+    return _evaluate
+
+
+def forbid_value(forbidden: str, *, label: str = "state") -> Evaluator:
+    """An evaluator that refuses when the candidate equals ``forbidden``.
+
+    The categorical shape behind the operator and comms mode-entry gates: a
+    precondition that a label (the operator state, the comms state) is not in a
+    specific unsafe value. Any other string value approves. An absent or
+    non-string candidate refuses fail-closed, so a gate evaluated without its
+    signal, or against malformed context (a bool, an int, a plain
+    :class:`~enum.Enum`), denies the action rather than stringifying to a
+    non-matching token and waving it through. A :class:`~enum.StrEnum` member
+    is accepted, since it is a ``str`` subclass, and matches the same forbidden
+    token as its value.
+    """
+
+    def _evaluate(candidate: Any, evidence: Mapping[str, Any]) -> SafetyResult:
+        ev = dict(evidence)
+        if not isinstance(candidate, str):
+            ev["detail"] = f"{label} unknown (fail closed)"
+            return SafetyResult(False, candidate, violation_type=REFUSED, evidence=ev)
+        if candidate == forbidden:
+            ev["detail"] = f"{label} is {forbidden}"
+            return SafetyResult(False, candidate, violation_type=REFUSED, evidence=ev)
+        return SafetyResult(True, candidate, evidence=ev)
 
     return _evaluate
 

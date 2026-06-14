@@ -29,15 +29,18 @@ from nous.state.machine import (
 # context with these signals; the gates exist to refuse when the
 # context says the device is unsafe, not when it is absent (the
 # unknown-context case is covered by ``test_state_machine_guards``).
-# Every transition into an operational mode is gated on both thermal
-# headroom and power reserve, so each entry supplies both.
-_OK_CONTEXT: dict[str, float] = {
+# Every operational-mode entry is gated on thermal headroom, power reserve, an
+# available operator, and (for the link modes) a live comms link, so a passing
+# context supplies all of them (ADR 0043).
+_OK_CONTEXT: dict[str, object] = {
     "thermal_headroom_c": 20.0,
     "thermal_headroom_threshold_c": 5.0,
     "soc_pct": 50.0,
     "soc_pct_critical": 5.0,
+    "operator_state": "nominal",
+    "comms_state": "connected",
 }
-_GUARDED_TRANSITIONS: dict[tuple[Mode, str], dict[str, float]] = {
+_GUARDED_TRANSITIONS: dict[tuple[Mode, str], dict[str, object]] = {
     (Mode.IDLE, "mission"): _OK_CONTEXT,
     (Mode.IDLE, "relay"): _OK_CONTEXT,
     (Mode.IDLE, "monitoring"): _OK_CONTEXT,
