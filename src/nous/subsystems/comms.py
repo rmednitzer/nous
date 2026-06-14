@@ -152,9 +152,11 @@ class CommsSubsystem:
     def tx(self, link_id: str, n_bytes: int) -> int:
         """Record a transmission. Resets ``age_s`` and returns bytes accepted.
 
-        A transmission on a link that the controller has forced down
-        is rejected (returns 0). Otherwise ``age_s`` is reset to 0 and
-        a coarse throughput figure is updated.
+        A transmission on a link that the controller has forced down is
+        rejected (returns 0). Otherwise ``age_s`` is reset to 0 and
+        ``throughput_bps`` is updated to the achieved rate: the bits sent over
+        the interval since this link last transmitted, capped at the link
+        bandwidth (audit COMMS-3, ADR 0051).
         """
         link = self._links.get(link_id)
         if link is None:
@@ -164,9 +166,16 @@ class CommsSubsystem:
         amount = max(0, int(n_bytes))
         if amount <= 0:
             return 0
+        bits = float(amount) * 8.0
+        elapsed = link.age_s
+        # An achieved rate (bits per second), not the raw packet size. No
+        # elapsed time (the first send, or two sends in one instant) reports
+        # the link capacity instead of dividing by zero; the cap holds the
+        # rate to what the link can physically carry (ADR 0051).
+        rate = link.bandwidth_bps if elapsed <= 0.0 else bits / elapsed
+        link.throughput_bps = min(rate, link.bandwidth_bps)
         link.age_s = 0.0
         link.connected = True
-        link.throughput_bps = float(amount) * 8.0
         return amount
 
     def step(self, dt: float) -> None:

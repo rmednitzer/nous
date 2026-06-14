@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (comms: link throughput is an achieved rate, not a packet size, BL-085 / ADR 0051)
+
+- `CommsSubsystem.tx` recorded `throughput_bps = n_bytes * 8`, the bit count of
+  the last packet, on a field consumed as a rate (audit 2026-06-14 COMMS-3).
+  `comms_state.derive` gates a link healthy on `throughput_bps > 5000`, so a
+  large packet read as healthy and a small one as degraded regardless of the
+  actual rate. `throughput_bps` is now an achieved rate: the bits sent over the
+  interval since the link last transmitted (`link.age_s`), capped at the link
+  bandwidth, with a first-send / zero-interval fallback to the link capacity
+  rather than a divide by zero. The flat 5000 bps `comms_state` threshold is
+  unchanged but now compares a genuine rate, and the value bounds at the link
+  capacity. Behind ADR 0051 because it reaches the FSM-facing comms state,
+  though `subsystems/comms.py` is not a high-blast surface. No estimator-test
+  churn (the filter sets `expected = max(observed, floor)`, so it is
+  scale-insensitive) and no existing test pinned the old bit count. Pinned by
+  `tests/unit/test_comms_subsystem.py`.
+
 ### Added (comms: stamp the link age-out so the transition is legible, BL-084)
 
 - A comms link aging out is no longer silent (audit 2026-06-14 COMMS-2). When a
