@@ -1,22 +1,30 @@
-"""Multi-node DTN mesh with custody transfer (BL-056 increment 2, ADR 0062).
+"""Multi-node DTN mesh with contact-graph routing and custody (BL-056, ADR 0062 + 0063).
 
 The BL-077 outbox is the device's direct-link egress buffer. This module is the
 delay-tolerant-networking overlay above it: a configured graph of nodes (the
 device plus abstract peers) connected by contacts, across which bundles are
 routed hop by hop toward a destination endpoint, stored and forwarded at each hop
-when a contact is down, and held under custody for reliable delivery.
+when a contact is unavailable, and held under custody for reliable delivery.
 
 The device is the ``self`` node; peer nodes are hold-and-forward stores with no
 subsystem physics, the same way BL-048 models a link's far peer as a position
 rather than a second device. The topology is an optional ``dtn`` profile section,
 so a profile without it leaves the mesh empty and inert. The mesh is pure and
 clock/RNG-injected (ADR 0019): ``step`` takes the simulated time and the loss
-draw uses the engine RNG, so a seeded scenario replays identically.
+draws use the engine RNG, so a seeded scenario replays identically.
+
+Routing is contact-graph routing (ADR 0063): a contact carries an optional
+schedule, and each held bundle is routed along the earliest-arrival path over the
+time-windowed contact graph that still meets the bundle's deadline, so a bundle
+moves toward a node where a future contact will open and waits there. Custody
+transfer models a separately-lossy acknowledgement: a lost custody ack makes the
+previous custodian retain and retransmit, and the resulting duplicate is
+deduplicated per node on the bundle id (ADR 0061).
 """
 
 from __future__ import annotations
 
-from collections import deque
+import heapq
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -31,6 +39,7 @@ __all__ = ["BundleState", "Contact", "DtnMesh", "DtnNode", "MeshBundle"]
 _DEFAULT_RATE_BPS = 1_000_000.0
 _DEFAULT_CUSTODY_RETRIES = 8
 _DEFAULT_LIFETIME_S = 600.0
+_DEFAULT_ACK_LOSS_PCT = 0.0
 # Routing-loop guard: a bundle that has been forwarded this many hops without
 # reaching its destination is dropped rather than circulating forever.
 _MAX_HOPS = 32
@@ -45,16 +54,26 @@ class BundleState(StrEnum):
 
 @dataclass
 class Contact:
-    """A bidirectional link between two mesh nodes."""
+    """A bidirectional link between two mesh nodes, optionally scheduled."""
 
     a: str
     b: str
     up: bool = True
     rate_bps: float = _DEFAULT_RATE_BPS
     loss_pct: float = 0.0
+    start_s: float | None = None
+    end_s: float | None = None
 
     def connects(self, x: str, y: str) -> bool:
         return {self.a, self.b} == {x, y}
+
+    def available(self, now_s: float) -> bool:
+        """True when the contact is up and ``now_s`` lies in its window."""
+        if not self.up:
+            return False
+        if self.start_s is not None and now_s < self.start_s:
+            return False
+        return self.end_s is None or now_s < self.end_s
 
 
 @dataclass
@@ -78,6 +97,23 @@ class MeshBundle:
     def is_expired(self, now_s: float) -> bool:
         return self.expiry_ts_s is not None and now_s >= self.expiry_ts_s
 
+    def clone(self, *, holder_eid: str) -> MeshBundle:
+        """A copy of this bundle (same identity) held at ``holder_eid``."""
+        return MeshBundle(
+            bundle_id=self.bundle_id,
+            source_eid=self.source_eid,
+            dest_eid=self.dest_eid,
+            sequence=self.sequence,
+            size_bytes=self.size_bytes,
+            precedence=self.precedence,
+            created_ts_s=self.created_ts_s,
+            expiry_ts_s=self.expiry_ts_s,
+            custody=self.custody,
+            holder_eid=holder_eid,
+            hops=self.hops,
+            attempts=self.attempts,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "bundle_id": self.bundle_id,
@@ -99,14 +135,15 @@ class MeshBundle:
 
 @dataclass
 class DtnNode:
-    """A mesh node: an EID and the bundles it currently holds."""
+    """A mesh node: an EID, the bundles it holds, and the ids it has seen."""
 
     eid: str
     store: list[MeshBundle] = field(default_factory=list)
+    seen: set[str] = field(default_factory=set)
 
 
 class DtnMesh:
-    """A configured multi-node DTN with shortest-path routing and custody."""
+    """A configured multi-node DTN with contact-graph routing and custody."""
 
     def __init__(
         self,
@@ -119,18 +156,21 @@ class DtnMesh:
         self.self_eid: str = cfg["self_eid"]
         self.custody_retries: int = cfg["custody_retries"]
         self.default_lifetime_s: float = cfg["default_lifetime_s"]
+        self.ack_loss_pct: float = cfg["ack_loss_pct"]
         self._rng = rng
         self.nodes: dict[str, DtnNode] = {
             eid: DtnNode(eid) for eid in cfg["node_eids"]
         }
         self.contacts: list[Contact] = cfg["contacts"]
         self._next_seq = 1
+        self.delivered_ids: set[str] = set()
         self.originated_total = 0
         self.delivered_total = 0
         self.forwarded_total = 0
         self.retransmits_total = 0
         self.dropped_total = 0
         self.expired_total = 0
+        self.deduped_total = 0
 
     # -- origination -------------------------------------------------------
 
@@ -149,7 +189,8 @@ class DtnMesh:
 
         Returns the bundle, or ``None`` when the mesh is disabled or the size is
         non-positive. ``custody=True`` requests reliable delivery: the bundle is
-        retained and retransmitted on a lost forward instead of dropped.
+        retained and retransmitted on a lost forward or a lost custody ack
+        instead of dropped.
         """
         if not self.enabled or int(size_bytes) <= 0:
             return None
@@ -178,18 +219,31 @@ class DtnMesh:
         self.originated_total += 1
         if dest_eid == self.self_eid:
             bundle.state = BundleState.DELIVERED
+            self.delivered_ids.add(bid)
             self.delivered_total += 1
         else:
-            self.nodes[self.self_eid].store.append(bundle)
+            node = self.nodes[self.self_eid]
+            node.store.append(bundle)
+            node.seen.add(bid)
         return bundle
 
-    # -- routing -----------------------------------------------------------
+    # -- routing (contact-graph, ADR 0063) ---------------------------------
 
-    def next_hop(self, src_eid: str, dest_eid: str) -> tuple[str, Contact] | None:
-        """The first hop on a shortest path over up-contacts, or ``None``.
+    def next_hop(
+        self,
+        src_eid: str,
+        dest_eid: str,
+        *,
+        now_s: float = 0.0,
+        size_bytes: int = 0,
+        deadline_s: float | None = None,
+    ) -> tuple[str, Contact] | None:
+        """First hop on the earliest-arrival contact-graph route, or ``None``.
 
-        Breadth-first over the currently-up contact subgraph; ties are broken by
-        neighbour EID so the route is deterministic.
+        A Dijkstra over the time-windowed contact graph that minimises the
+        bundle's arrival at ``dest_eid``, honouring each contact's schedule from
+        ``now_s`` and refusing any route whose arrival exceeds ``deadline_s``.
+        Ties break by hop count then neighbour EID so the route is deterministic.
         """
         if (
             src_eid == dest_eid
@@ -197,20 +251,29 @@ class DtnMesh:
             or dest_eid not in self.nodes
         ):
             return None
-        adj = self._adjacency_up()
+        arrival: dict[str, float] = {src_eid: float(now_s)}
         prev: dict[str, tuple[str, Contact]] = {}
-        seen = {src_eid}
-        queue = deque([src_eid])
-        while queue:
-            node = queue.popleft()
+        visited: set[str] = set()
+        heap: list[tuple[float, int, str, str]] = [(float(now_s), 0, src_eid, src_eid)]
+        while heap:
+            ta, hops, _, node = heapq.heappop(heap)
+            if node in visited:
+                continue
+            visited.add(node)
             if node == dest_eid:
                 break
-            for nbr, contact in sorted(adj[node], key=lambda t: t[0]):
-                if nbr in seen:
+            for nbr, contact in self._neighbours(node):
+                if nbr in visited:
                     continue
-                seen.add(nbr)
-                prev[nbr] = (node, contact)
-                queue.append(nbr)
+                arr = self._arrival_over(contact, ta, now_s, size_bytes)
+                if arr is None:
+                    continue
+                if deadline_s is not None and arr > deadline_s:
+                    continue
+                if nbr not in arrival or arr < arrival[nbr]:
+                    arrival[nbr] = arr
+                    prev[nbr] = (node, contact)
+                    heapq.heappush(heap, (arr, hops + 1, nbr, nbr))
         if dest_eid not in prev:
             return None
         cur = dest_eid
@@ -218,14 +281,29 @@ class DtnMesh:
             cur = prev[cur][0]
         return (cur, prev[cur][1])
 
-    def _adjacency_up(self) -> dict[str, list[tuple[str, Contact]]]:
-        adj: dict[str, list[tuple[str, Contact]]] = {eid: [] for eid in self.nodes}
+    def _neighbours(self, node: str) -> list[tuple[str, Contact]]:
+        out: list[tuple[str, Contact]] = []
         for c in self.contacts:
-            if not c.up or c.a not in self.nodes or c.b not in self.nodes:
+            if not c.up:
                 continue
-            adj[c.a].append((c.b, c))
-            adj[c.b].append((c.a, c))
-        return adj
+            if c.a == node and c.b in self.nodes:
+                out.append((c.b, c))
+            elif c.b == node and c.a in self.nodes:
+                out.append((c.a, c))
+        return sorted(out, key=lambda t: t[0])
+
+    @staticmethod
+    def _arrival_over(
+        contact: Contact, ta: float, now_s: float, size_bytes: int
+    ) -> float | None:
+        """Earliest arrival across ``contact`` for a bundle present at time ``ta``."""
+        start = contact.start_s if contact.start_s is not None else now_s
+        eff_start = max(ta, start)
+        if contact.end_s is not None and eff_start >= contact.end_s:
+            return None
+        rate = contact.rate_bps if contact.rate_bps > 0.0 else _DEFAULT_RATE_BPS
+        tx = size_bytes / rate if size_bytes > 0 else 0.0
+        return eff_start + tx
 
     # -- step --------------------------------------------------------------
 
@@ -241,10 +319,18 @@ class DtnMesh:
             for bundle in self._triage(node.store):
                 if id(bundle) in moved:
                     continue
-                hop = self.next_hop(eid, bundle.dest_eid)
+                hop = self.next_hop(
+                    eid,
+                    bundle.dest_eid,
+                    now_s=now_s,
+                    size_bytes=bundle.size_bytes,
+                    deadline_s=bundle.expiry_ts_s,
+                )
                 if hop is None:
                     continue
                 next_eid, contact = hop
+                if not contact.available(now_s):
+                    continue
                 key = frozenset({contact.a, contact.b})
                 if key not in budget:
                     budget[key] = link_per_tick_budget(contact.rate_bps, dt)
@@ -258,24 +344,58 @@ class DtnMesh:
                         self._drop(node, bundle)
                     continue
                 budget[key] -= bundle.size_bytes
-                node.store.remove(bundle)
-                bundle.holder_eid = next_eid
-                bundle.hops += 1
                 self.forwarded_total += 1
+                self._handle_forward(bundle, node, next_eid, moved)
+
+    def _handle_forward(
+        self, bundle: MeshBundle, node: DtnNode, next_eid: str, moved: set[int]
+    ) -> None:
+        """Move a successfully-forwarded bundle, honouring the custody ack and dedup."""
+        proceed = bundle
+        if bundle.custody and self._ack_lost():
+            bundle.attempts += 1
+            if bundle.attempts <= self.custody_retries:
+                self.retransmits_total += 1
+                proceed = bundle.clone(holder_eid=next_eid)
                 moved.add(id(bundle))
-                if next_eid == bundle.dest_eid:
-                    bundle.state = BundleState.DELIVERED
-                    self.delivered_total += 1
-                elif bundle.hops > _MAX_HOPS:
-                    bundle.state = BundleState.DROPPED
-                    self.dropped_total += 1
-                else:
-                    self.nodes[next_eid].store.append(bundle)
+            else:
+                node.store.remove(bundle)
+        else:
+            node.store.remove(bundle)
+        proceed.hops += 1
+        proceed.holder_eid = next_eid
+        moved.add(id(proceed))
+        if proceed.hops > _MAX_HOPS:
+            proceed.state = BundleState.DROPPED
+            self.dropped_total += 1
+            return
+        if next_eid == proceed.dest_eid:
+            if proceed.bundle_id in self.delivered_ids:
+                proceed.state = BundleState.DROPPED
+                self.deduped_total += 1
+            else:
+                self.delivered_ids.add(proceed.bundle_id)
+                proceed.state = BundleState.DELIVERED
+                self.delivered_total += 1
+            return
+        nxt = self.nodes[next_eid]
+        if proceed.bundle_id in nxt.seen or proceed.bundle_id in self.delivered_ids:
+            proceed.state = BundleState.DROPPED
+            self.deduped_total += 1
+        else:
+            nxt.seen.add(proceed.bundle_id)
+            nxt.store.append(proceed)
 
     def _forward_lost(self, contact: Contact) -> bool:
+        return self._loss_draw(contact.loss_pct)
+
+    def _ack_lost(self) -> bool:
+        return self._loss_draw(self.ack_loss_pct)
+
+    def _loss_draw(self, loss_pct: float) -> bool:
         if self._rng is None:
             return False
-        loss = max(0.0, min(100.0, float(contact.loss_pct)))
+        loss = max(0.0, min(100.0, float(loss_pct)))
         if loss <= 0.0:
             return False
         return float(self._rng.random()) < loss / 100.0
@@ -335,6 +455,7 @@ class DtnMesh:
         return {
             "enabled": self.enabled,
             "self_eid": self.self_eid,
+            "ack_loss_pct": self.ack_loss_pct,
             "nodes": [
                 {"eid": eid, "held": len(self.nodes[eid].store)}
                 for eid in sorted(self.nodes)
@@ -346,6 +467,8 @@ class DtnMesh:
                     "up": c.up,
                     "rate_bps": c.rate_bps,
                     "loss_pct": c.loss_pct,
+                    "start_s": c.start_s,
+                    "end_s": c.end_s,
                 }
                 for c in self.contacts
             ],
@@ -357,6 +480,7 @@ class DtnMesh:
                 "retransmits": self.retransmits_total,
                 "dropped": self.dropped_total,
                 "expired": self.expired_total,
+                "deduped": self.deduped_total,
             },
         }
 
@@ -396,6 +520,9 @@ def _mesh_cfg(profile: Mapping[str, Any] | None) -> dict[str, Any]:
         "default_lifetime_s": _positive_float(
             section.get("default_lifetime_s"), _DEFAULT_LIFETIME_S
         ),
+        "ack_loss_pct": max(
+            0.0, min(100.0, _positive_float(section.get("ack_loss_pct"), _DEFAULT_ACK_LOSS_PCT))
+        ),
     }
 
 
@@ -417,6 +544,8 @@ def _parse_contacts(raw: Any) -> list[Contact]:
                 up=_coerce_bool(entry.get("up"), default=True),
                 rate_bps=_positive_float(entry.get("rate_bps"), _DEFAULT_RATE_BPS),
                 loss_pct=max(0.0, min(100.0, _positive_float(entry.get("loss_pct"), 0.0))),
+                start_s=_optional_float(entry.get("start_s")),
+                end_s=_optional_float(entry.get("end_s")),
             )
         )
     return contacts
@@ -448,3 +577,12 @@ def _positive_float(value: Any, fallback: float) -> float:
     except (TypeError, ValueError):
         return fallback
     return out if out >= 0.0 else fallback
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

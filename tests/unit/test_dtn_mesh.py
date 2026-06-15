@@ -1,4 +1,7 @@
-"""Multi-node DTN mesh: routing, store-and-forward, custody (BL-056 / ADR 0062)."""
+"""Multi-node DTN mesh: contact-graph routing, store-and-forward, custody.
+
+BL-056 / ADR 0062 (mesh core) and ADR 0063 (contact-graph routing, custody ack).
+"""
 
 from __future__ import annotations
 
@@ -196,5 +199,115 @@ def test_step_is_deterministic_under_a_seed() -> None:
         for tick in range(1, 20):
             mesh.step(1.0, now_s=float(tick))
         return (mesh.delivered_total, mesh.retransmits_total)
+
+    assert run() == run()
+
+
+def test_cgr_holds_for_a_scheduled_contact_then_delivers() -> None:
+    mesh = _mesh(
+        {
+            "self_eid": "dtn://dev/",
+            "contacts": [
+                {"a": "dtn://dev/", "b": "dtn://relay/"},
+                {
+                    "a": "dtn://relay/",
+                    "b": "dtn://ground/",
+                    "start_s": 10.0,
+                    "end_s": 30.0,
+                },
+            ],
+        }
+    )
+    bundle = mesh.originate("dtn://ground/", 100, now_s=0.0, lifetime_s=100.0)
+    assert bundle is not None
+
+    # The dev->relay contact is up now: the bundle advances toward the relay.
+    mesh.step(1.0, now_s=1.0)
+    assert bundle.holder_eid == "dtn://relay/"
+    assert bundle.hops == 1
+
+    # The relay->ground contact is scheduled for t=10: the relay holds the bundle.
+    mesh.step(1.0, now_s=2.0)
+    assert bundle.holder_eid == "dtn://relay/"
+    assert _state(bundle) is BundleState.IN_TRANSIT
+
+    # The window opens: the bundle is delivered.
+    mesh.step(1.0, now_s=10.0)
+    assert _state(bundle) is BundleState.DELIVERED
+    assert bundle.hops == 2
+
+
+def test_cgr_holds_when_no_route_meets_the_deadline() -> None:
+    mesh = _mesh(
+        {
+            "self_eid": "dtn://dev/",
+            "contacts": [
+                {"a": "dtn://dev/", "b": "dtn://relay/"},
+                {"a": "dtn://relay/", "b": "dtn://ground/", "start_s": 100.0},
+            ],
+        }
+    )
+    # The only route to ground opens at t=100, past the bundle's lifetime, so the
+    # device never forwards it and the bundle expires in place.
+    bundle = mesh.originate("dtn://ground/", 100, now_s=0.0, lifetime_s=20.0)
+    assert bundle is not None
+
+    mesh.step(1.0, now_s=10.0)
+    assert bundle.holder_eid == "dtn://dev/"
+    assert _state(bundle) is BundleState.IN_TRANSIT
+
+    mesh.step(1.0, now_s=21.0)
+    assert _state(bundle) is BundleState.EXPIRED
+    assert mesh.expired_total == 1
+    assert mesh.delivered_total == 0
+
+
+def test_lost_custody_ack_delivers_once_and_dedups_the_duplicate() -> None:
+    mesh = _mesh(
+        {
+            "self_eid": "dtn://dev/",
+            "contacts": [{"a": "dtn://dev/", "b": "dtn://ground/"}],
+            "ack_loss_pct": 100.0,
+            "custody_retries": 1,
+        },
+        rng=np.random.default_rng(0),
+    )
+    bundle = mesh.originate("dtn://ground/", 100, now_s=0.0, custody=True)
+    assert bundle is not None
+
+    # Forward succeeds but the custody ack is lost: a copy is delivered while the
+    # device retains the original to retransmit.
+    mesh.step(1.0, now_s=1.0)
+    assert mesh.delivered_total == 1
+    assert mesh.retransmits_total == 1
+    assert _state(bundle) is BundleState.IN_TRANSIT
+    assert bundle.holder_eid == "dtn://dev/"
+
+    # The retransmitted duplicate is deduplicated at the destination, not delivered
+    # a second time.
+    mesh.step(1.0, now_s=2.0)
+    assert mesh.delivered_total == 1
+    assert mesh.deduped_total == 1
+    assert _state(bundle) is BundleState.DROPPED
+
+
+def test_step_is_deterministic_with_ack_loss() -> None:
+    def run() -> tuple[int, int, int]:
+        mesh = _mesh(
+            {
+                "self_eid": "dtn://dev/",
+                "contacts": [
+                    {"a": "dtn://dev/", "b": "dtn://relay/"},
+                    {"a": "dtn://relay/", "b": "dtn://ground/"},
+                ],
+                "ack_loss_pct": 50.0,
+                "custody_retries": 10,
+            },
+            rng=np.random.default_rng(11),
+        )
+        mesh.originate("dtn://ground/", 100, now_s=0.0, custody=True)
+        for tick in range(1, 30):
+            mesh.step(1.0, now_s=float(tick))
+        return (mesh.delivered_total, mesh.deduped_total, mesh.retransmits_total)
 
     assert run() == run()

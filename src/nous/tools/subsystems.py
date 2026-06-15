@@ -464,16 +464,18 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
     async def dtn_mesh(ctx: Context | None = None) -> str:
         """Read the DTN mesh: nodes, contacts, in-transit bundles, counters (T0, BL-056).
 
-        The delay-tolerant-networking overlay (ADR 0062) routes bundles across a
-        configured multi-node topology with store-and-forward and custody
-        transfer. Returns the self EID, the per-node held-bundle counts, the
-        contact graph (up/down, rate, loss), the in-transit total, the cumulative
-        disposition counters (originated / delivered / forwarded / retransmits /
-        dropped / expired), and the in-transit bundles grouped by holding node,
-        each node's bundles in triage (forward) order (capped so the read stays
-        bounded; ``bundles_truncated`` flags a deeper backlog). With no ``dtn``
-        section in the profile the mesh is disabled: ``enabled`` is false and the
-        topology, bundles, and counters are empty.
+        The delay-tolerant-networking overlay (ADR 0062, ADR 0063) routes bundles
+        across a configured multi-node topology with store-and-forward and
+        custody transfer, using contact-graph routing over the contacts'
+        schedules. Returns the self EID, the acknowledgement-loss fraction, the
+        per-node held-bundle counts, the contact graph (up/down, rate, loss, and
+        the optional ``start_s`` / ``end_s`` window), the in-transit total, the
+        cumulative disposition counters (originated / delivered / forwarded /
+        retransmits / dropped / expired / deduped), and the in-transit bundles
+        grouped by holding node, each node's bundles in triage (forward) order
+        (capped so the read stays bounded; ``bundles_truncated`` flags a deeper
+        backlog). With no ``dtn`` section in the profile the mesh is disabled:
+        ``enabled`` is false and the topology, bundles, and counters are empty.
         """
 
         async def _work() -> str:
@@ -499,16 +501,18 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
     ) -> str:
         """Originate a bundle at the device node toward a remote EID (T2, BL-056).
 
-        Injects a bundle into the DTN mesh (ADR 0062) bound for ``dest_eid``; the
-        tick loop routes it hop by hop over the up-contacts toward the
-        destination, storing it at each hop while a contact is down. ``custody``
+        Injects a bundle into the DTN mesh (ADR 0062, ADR 0063) bound for
+        ``dest_eid``; the tick loop routes it along the earliest-arrival
+        contact-graph path toward the destination, storing it at each hop while a
+        contact is down or its scheduled window has not opened. ``custody``
         requests reliable delivery: a custodial bundle is retained and
-        retransmitted on a lost forward rather than dropped, up to the profile's
-        retry bound. ``precedence`` is military message precedence (the mesh
-        forwards the highest first), ``lifetime_s`` overrides the default bundle
-        lifetime, and ``bundle_id`` names the bundle. Returns the assigned bundle,
-        or an error when the mesh is disabled (no ``dtn`` profile section) or the
-        size is non-positive. Tier T2 (stateful).
+        retransmitted on a lost forward or a lost custody acknowledgement rather
+        than dropped, up to the profile's retry bound, and any duplicate the
+        retransmission creates is deduplicated. ``precedence`` is military message
+        precedence (the mesh forwards the highest first), ``lifetime_s`` overrides
+        the default bundle lifetime, and ``bundle_id`` names the bundle. Returns
+        the assigned bundle, or an error when the mesh is disabled (no ``dtn``
+        profile section) or the size is non-positive. Tier T2 (stateful).
         """
 
         async def _work() -> str:
