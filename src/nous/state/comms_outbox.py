@@ -248,6 +248,7 @@ class CommsOutbox:
         self.expired_total = 0
         self.rejected_total = 0
         self.deduped_total = 0
+        self.defer_causes: dict[str, int] = {}
 
     # -- enqueue ---------------------------------------------------------
 
@@ -392,6 +393,7 @@ class CommsOutbox:
             link = comms.link(pkg.link_id)
             if link is None or not link.is_live():
                 pkg.attempts += 1
+                self._count_defer("link_down")
                 closed.add(pkg.link_id)
                 result.deferred.append(pkg.package_id)
                 continue
@@ -405,12 +407,14 @@ class CommsOutbox:
                 # and the link closes for the rest of this flush, so the loss
                 # does not let a lower-precedence package jump ahead.
                 pkg.attempts += 1
+                self._count_defer("loss")
                 closed.add(pkg.link_id)
                 result.deferred.append(pkg.package_id)
                 continue
             accepted = comms.tx(pkg.link_id, pkg.size_bytes, now_s=now_s)
             if accepted <= 0:
                 pkg.attempts += 1
+                self._count_defer(link.last_tx_reason or "rejected")
                 closed.add(pkg.link_id)
                 result.deferred.append(pkg.package_id)
                 continue
@@ -525,6 +529,7 @@ class CommsOutbox:
                 "expired": self.expired_total,
                 "rejected": self.rejected_total,
                 "deduped": self.deduped_total,
+                "defer_causes": dict(self.defer_causes),
             },
         }
 
@@ -584,6 +589,10 @@ class CommsOutbox:
         self._packages.remove(pkg)
         self._queued_ids.discard(pkg.bundle_id)
         self._queued_bytes -= pkg.size_bytes
+
+    def _count_defer(self, cause: str) -> None:
+        """Tally why a delivery deferred this flush, for the read tool (BL-108)."""
+        self.defer_causes[cause] = self.defer_causes.get(cause, 0) + 1
 
     def _is_duplicate(self, bundle_id: str) -> bool:
         """True when ``bundle_id`` is already queued or recently delivered."""

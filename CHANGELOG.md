@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (per-cause diagnostics for held and dropped traffic, BL-108)
+
+- The store-and-forward outbox and the DTN mesh each kept a single counter that
+  conflated distinct failure causes, so a controller could see traffic was not
+  moving but not why (AUDIT-2026-06-15 L-3). Two additive maps now carry the
+  cause (ADR 0070). The `comms_outbox` counters gain `defer_causes` (`link_down`,
+  `loss`, `emcon`, `no_capacity`), driven by a new `last_tx_reason` the comms
+  `tx()` records per link; a deferral is counted once per link per flush, and a
+  budget-held package is not a failed attempt and is not counted. The `dtn_mesh`
+  counters gain `drop_causes` (`max_hops`, `forward_loss`, `retry_exhausted`,
+  `store_overflow`). The existing `attempts`, `dropped`, and `expired` aggregates
+  are unchanged. The mesh breakdown is process-local by design: the persisted
+  `dropped_total` carries forward across a restart while the split restarts from
+  the new process, so no schema change or migration is needed.
+
 ### Fixed (DTN persistence: distinguish a load fault from a save fault, BL-101)
 
 - `DtnStore.load()` incremented `save_failures` on a corrupt or unreadable

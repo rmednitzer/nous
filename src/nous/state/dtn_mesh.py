@@ -202,6 +202,7 @@ class DtnMesh:
         self.forwarded_total = 0
         self.retransmits_total = 0
         self.dropped_total = 0
+        self.drop_causes: dict[str, int] = {}
         self.expired_total = 0
         self.deduped_total = 0
         self.restore_lost_total = 0
@@ -385,7 +386,11 @@ class DtnMesh:
                     if bundle.custody and bundle.attempts <= self.custody_retries:
                         self.retransmits_total += 1
                     else:
-                        self._drop(node, bundle)
+                        self._drop(
+                            node,
+                            bundle,
+                            "retry_exhausted" if bundle.custody else "forward_loss",
+                        )
                     continue
                 budget[key] -= bundle.size_bytes
                 self.forwarded_total += 1
@@ -412,7 +417,7 @@ class DtnMesh:
         moved.add(id(proceed))
         if proceed.hops > _MAX_HOPS:
             proceed.state = BundleState.DROPPED
-            self.dropped_total += 1
+            self._count_drop("max_hops")
             return
         if next_eid == proceed.dest_eid:
             if proceed.bundle_id in self.delivered_ids:
@@ -453,10 +458,15 @@ class DtnMesh:
                 self.expired_total += 1
                 self._dirty = True
 
-    def _drop(self, node: DtnNode, bundle: MeshBundle) -> None:
+    def _count_drop(self, cause: str) -> None:
+        """Bump the aggregate drop total and its per-cause split (ADR 0070)."""
+        self.dropped_total += 1
+        self.drop_causes[cause] = self.drop_causes.get(cause, 0) + 1
+
+    def _drop(self, node: DtnNode, bundle: MeshBundle, cause: str) -> None:
         node.store.remove(bundle)
         bundle.state = BundleState.DROPPED
-        self.dropped_total += 1
+        self._count_drop(cause)
         self._dirty = True
 
     def _admit(self, node: DtnNode, bundle: MeshBundle) -> None:
@@ -473,7 +483,7 @@ class DtnMesh:
             worst = self._triage(node.store)[-1]
             node.store.remove(worst)
             worst.state = BundleState.DROPPED
-            self.dropped_total += 1
+            self._count_drop("store_overflow")
             self._dirty = True
 
     @staticmethod
@@ -544,6 +554,7 @@ class DtnMesh:
                 "forwarded": self.forwarded_total,
                 "retransmits": self.retransmits_total,
                 "dropped": self.dropped_total,
+                "drop_causes": dict(self.drop_causes),
                 "expired": self.expired_total,
                 "deduped": self.deduped_total,
                 "restore_lost": self.restore_lost_total,
