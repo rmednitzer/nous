@@ -68,3 +68,4 @@
 | 0063 | [Contact-graph routing and an explicit custody acknowledgement](0063-dtn-contact-graph-routing-and-custody-ack.md) | Accepted | 2026-06-15 |
 | 0064 | [Persisting the DTN store across a restart](0064-dtn-store-persistence.md) | Accepted | 2026-06-15 |
 | 0065 | [EMCON emission-control postures](0065-emcon-emission-control.md) | Accepted | 2026-06-15 |
+| 0066 | [EMCON scheduled emission windows](0066-emcon-scheduled-emission-windows.md) | Accepted | 2026-06-15 |

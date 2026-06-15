@@ -406,7 +406,7 @@ class CommsOutbox:
                 closed.add(pkg.link_id)
                 result.deferred.append(pkg.package_id)
                 continue
-            accepted = comms.tx(pkg.link_id, pkg.size_bytes)
+            accepted = comms.tx(pkg.link_id, pkg.size_bytes, now_s=now_s)
             if accepted <= 0:
                 pkg.attempts += 1
                 closed.add(pkg.link_id)

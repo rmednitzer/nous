@@ -174,12 +174,14 @@ class CommsSubsystem:
             return
         link.forced_state = None
 
-    def tx(self, link_id: str, n_bytes: int) -> int:
+    def tx(self, link_id: str, n_bytes: int, *, now_s: float | None = None) -> int:
         """Record a transmission, returning the bytes accepted.
 
         A send is rejected (returns 0, and ``age_s`` is left unchanged) when the
         link is unknown, the controller has forced it down, the active EMCON
-        profile forbids emitting on it (BL-060 / ADR 0065), its modeled
+        profile forbids emitting on it (the profile excludes the link, or its
+        duty-cycle window is closed at ``now_s``; ADR 0065 and ADR 0066), its
+        modeled
         ``capacity_bps`` has collapsed to zero (a propagation link below its SNR
         floor carries nothing; audit 2026-06-14b H-1), or ``n_bytes`` is
         non-positive. Only an accepted send resets ``age_s`` to 0 and updates
@@ -194,7 +196,7 @@ class CommsSubsystem:
             return 0
         if link.forced_state is False:
             return 0
-        if not self.emcon.permits(link_id):
+        if not self.emcon.permits(link_id, now_s=now_s):
             return 0
         if link.capacity_bps <= 0.0:
             # A propagation link driven below its SNR floor carries nothing:

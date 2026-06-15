@@ -78,3 +78,4 @@ comms:
     default: unrestricted
     profiles:
       low_pi: { permit_links: [lte] }  # low-probability-of-intercept: cellular only
+      lte_burst: { permit_links: [lte], window: { period_s: 60, on_s: 5 } }  # ADR 0066: emit 5s per 60s

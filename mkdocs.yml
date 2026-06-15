@@ -149,6 +149,7 @@ nav:
       - "0063 Contact-graph routing and an explicit custody acknowledgement": adr/0063-dtn-contact-graph-routing-and-custody-ack.md
       - "0064 Persisting the DTN store across a restart": adr/0064-dtn-store-persistence.md
       - "0065 EMCON emission-control postures": adr/0065-emcon-emission-control.md
+      - "0066 EMCON scheduled emission windows": adr/0066-emcon-scheduled-emission-windows.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md
