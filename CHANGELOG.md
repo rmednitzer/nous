@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documented (comms_state: CONNECTED keeps its all-configured-links meaning, BL-095 / ADR 0059)
+
+- `comms_state.derive` reports CONNECTED only when every configured link is
+  connected and healthy, so a dark or aged-out backup caps the report at LIMITED.
+  The 2026-06-14b audit (M-3) asked whether this should relax to "all
+  currently-connected links healthy"; the deliberate decision is to keep the
+  conservative meaning, because a profile's link inventory is the redundancy the
+  top-line label should reflect, and the alternative would make CONNECTED mean
+  only "the link I happen to have up is fine". No behaviour change: the
+  CONNECTED-vs-LIMITED distinction is reporting-only (the `REQ_COMMS_LINK` gate,
+  the engine link-mode auto-degrade, and the self-model situation read all key on
+  DENIED), and `derive` is unchanged beyond a clarifying comment. Recorded in ADR
+  0059 and pinned as the `TestM3` regression class (ADR 0023).
+
 ### Changed (estimators/interop: read rejections through health, stringify decode keys, BL-094 / ADR 0058)
 
 - `position_status` / `sensors_status` / `biometrics_status` now read

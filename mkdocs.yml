@@ -141,6 +141,7 @@ nav:
       - "0056 Distinguish a cap-persistence failure from exhaustion, and reuse the client": adr/0056-cap-persist-error-and-client-reuse.md
       - "0057 Authorize the breaking rename of tick_advance's count fields": adr/0057-tick-advance-field-rename.md
       - "0058 Read estimator rejections through health, and stringify decode keys": adr/0058-rejections-through-health-and-decode-key-coercion.md
+      - "0059 comms_state CONNECTED requires every configured link healthy": adr/0059-comms-connected-requires-all-configured-links.md
   - STPA:
       - Overview: stpa/README.md
       - "01 Purpose": stpa/01-purpose.md
