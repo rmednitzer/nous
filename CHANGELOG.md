@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documented (policy: inference_local stays T1 despite its usage counters, BL-096 / ADR 0060)
+
+- `inference_local` is T1 (reversible), yet it increments monotonic
+  `local_calls` / `total_tokens` / `total_energy_j` counters that nothing undoes.
+  The 2026-06-14b audit (LOW-2) asked whether that side effect warrants T2; the
+  deliberate decision is to keep it T1. Those counters are pure accounting with
+  no feedback into battery or thermal physics (so unbounded calls exhaust no
+  modelled resource), `tick_advance` already advances the whole clock
+  monotonically under T1, and local inference is the fallback that must stay
+  admittable in guarded mode, the posture used when comms are degraded (whereas
+  `inference_cloud` is correctly T2: it spends the daily cap and makes an
+  external call). No behaviour change: a comment on the `_REVERSIBLE_TOOLS`
+  membership records the rationale. Recorded in ADR 0060 and pinned as the
+  `TestLow2` regression class (ADR 0023).
+
 ### Documented (comms_state: CONNECTED keeps its all-configured-links meaning, BL-095 / ADR 0059)
 
 - `comms_state.derive` reports CONNECTED only when every configured link is

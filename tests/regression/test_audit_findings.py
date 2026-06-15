@@ -1344,3 +1344,31 @@ class TestM3CommsConnectedRequiresAllConfiguredLinks:
         # reports LIMITED, not CONNECTED.
         label, _ = derive([healthy, down_backup])
         assert label is CommsState.LIMITED
+
+
+class TestLow2InferenceLocalStaysReversibleT1:
+    """LOW-2: inference_local stays T1 (reversible), admitted under guarded mode.
+
+    Deliberate decision (ADR 0060): ``inference_local`` increments monotonic usage
+    counters (``local_calls`` / ``total_tokens`` / ``total_energy_j``) that no tool
+    undoes, which strains the literal T1 "trivially undone" criterion. But those
+    counters are pure accounting with no feedback into battery or thermal physics,
+    ``tick_advance`` (T1) already advances the whole sim clock monotonically, and
+    local inference is the fallback that must stay admittable in the guarded
+    posture used when comms are degraded. The audit (``docs/audit-2026-06-14b.md``
+    LOW-2) raised reclassifying to T2; it was considered and rejected. This pins
+    the disposition so a reclassification is a deliberate, visible change.
+    """
+
+    def test_local_inference_is_reversible_and_admitted_when_guarded(self) -> None:
+        from nous.policy import PolicyMode, Tier, classify, decide
+
+        assert classify("inference_local")[0] is Tier.REVERSIBLE
+        # Guarded mode admits T1 without an allowlist, so the local fallback
+        # stays available in the locked-down posture ...
+        assert decide(Tier.REVERSIBLE, PolicyMode.GUARDED).allowed is True
+        # ... unlike the cloud path, which is T2 (it consumes the daily cap and
+        # makes an external call) and is refused under guarded mode without an
+        # allowlist match.
+        assert classify("inference_cloud")[0] is Tier.STATEFUL
+        assert decide(Tier.STATEFUL, PolicyMode.GUARDED).allowed is False

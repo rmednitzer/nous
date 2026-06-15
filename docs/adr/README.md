@@ -62,3 +62,4 @@
 | 0057 | [Authorize the breaking rename of tick_advance's count fields](0057-tick-advance-field-rename.md) | Accepted | 2026-06-15 |
 | 0058 | [Read estimator rejections through health, and stringify decode keys](0058-rejections-through-health-and-decode-key-coercion.md) | Accepted | 2026-06-15 |
 | 0059 | [comms_state CONNECTED requires every configured link healthy](0059-comms-connected-requires-all-configured-links.md) | Accepted | 2026-06-15 |
+| 0060 | [inference_local stays T1 (reversible) despite its usage counters](0060-inference-local-stays-reversible.md) | Accepted | 2026-06-15 |

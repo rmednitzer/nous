@@ -100,6 +100,11 @@ _REVERSIBLE_TOOLS = frozenset(
         "scenario_resume",
         "scenario_reset",
         "tick_advance",
+        # T1 despite its monotonic usage counters (local_calls / total_tokens /
+        # total_energy_j): those are pure accounting with no battery or thermal
+        # feedback, tick_advance already advances the clock monotonically under
+        # T1, and the local fallback must stay admittable in guarded mode, the
+        # posture used when comms are degraded (ADR 0060, audit 2026-06-14b LOW-2).
         "inference_local",
         "interop_encode",
         "interop_decode",

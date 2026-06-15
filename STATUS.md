@@ -87,7 +87,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0059` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0060` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -137,7 +137,12 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1009 tests pass at HEAD: BL-095 added one (the
+  feature branch before merge. 1010 tests pass at HEAD: BL-096 added one (the
+  `TestLow2` regression pin in `tests/regression/test_audit_findings.py` per ADR
+  0023, asserting `inference_local` classifies T1 and is admitted under guarded
+  mode while `inference_cloud` is T2 and refused, recording the ADR 0060 decision
+  to keep local inference reversible; no behaviour change), on top of the 1009
+  from BL-095, which added one (the
   `TestM3` comms-connected-semantics regression pin in
   `tests/regression/test_audit_findings.py` per ADR 0023, asserting a healthy
   active link plus a disconnected backup reports LIMITED, recording the ADR 0059
