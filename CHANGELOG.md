@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (comms: EMCON metadata minimisation, BL-060 / ADR 0067)
+
+- A `minimize` policy on an EMCON profile: `{ position_decimals, drop }`.
+  `position_decimals` rounds recognised position fields (`lat`, `lon`,
+  `latitude`, `longitude`) to a coarser grid (two decimals is roughly a
+  kilometre); `drop` removes named fields from a published payload. The policy is
+  applied by `Emcon.minimize` at the `encode_and_tx` publish seam, before the
+  interop adapter encodes, so the coarsened mapping is what a restricted posture
+  emits (and, if the link is silent, what the outbox holds and later ships). It
+  composes with the rest of EMCON: a profile can permit one link, burst on a
+  schedule, and coarsen its content at once. `emcon_status` reports the active
+  profile's `minimize` policy and the per-profile `minimizers` map. Inert under a
+  profile without a policy and the default `unrestricted` posture; the raw
+  `comms_send` byte path has no structured content and is untouched. The
+  spot-core `low_pi` profile now ships a demonstrative policy (two-decimal grid,
+  biometrics dropped). This is increment 3 of BL-060; a first-class denied audit
+  record remains.
+
 ### Added (comms: EMCON scheduled emission windows, BL-060 / ADR 0066)
 
 - A duty-cycle emission `window` on an EMCON profile: `{ period_s, on_s, phase_s }`

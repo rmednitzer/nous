@@ -1,4 +1,4 @@
-"""EMCON emission-control postures (BL-060, ADR 0065 and ADR 0066).
+"""EMCON emission-control postures (BL-060; ADR 0065, ADR 0066, ADR 0067).
 
 EMCON (emission control) is an orthogonal, operator-imposed posture, like the
 operator and comms states: it gates which comms links may emit, independent of
@@ -16,6 +16,12 @@ emit only inside a scheduled burst (``on_s`` open out of every ``period_s``,
 offset by ``phase_s``) and stay silent between bursts. The window is evaluated
 against the injected ``now_s`` sim clock, so a send offered between bursts is
 held in the store-and-forward outbox and ships when the next burst opens.
+
+A profile may carry a ``minimize`` policy (ADR 0067): when active it coarsens
+what the device emits, rounding position fields to a coarser grid and dropping
+named fields from a published message before it is encoded, so an intercepted
+emission carries less. Minimisation applies at the publish seam and is identity
+under a profile without a policy, so an unrestricted posture is unchanged.
 """
 
 from __future__ import annotations
@@ -43,6 +49,33 @@ class _Window:
         return (now_s - self.phase_s) % self.period_s < self.on_s
 
 
+_POSITION_KEYS = frozenset({"lat", "lon", "latitude", "longitude"})
+
+
+@dataclass(frozen=True)
+class _Minimize:
+    """A metadata-minimisation policy: coarsen position, drop named fields."""
+
+    position_decimals: int | None = None
+    drop: frozenset[str] = frozenset()
+
+    def apply(self, data: Mapping[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for key, value in data.items():
+            if key in self.drop:
+                continue
+            if (
+                self.position_decimals is not None
+                and key in _POSITION_KEYS
+                and isinstance(value, (int, float))
+                and not isinstance(value, bool)
+            ):
+                out[key] = round(float(value), self.position_decimals)
+            else:
+                out[key] = value
+        return out
+
+
 class Emcon:
     """The active emission posture over a set of named profiles."""
 
@@ -56,6 +89,7 @@ class Emcon:
             SILENT: set(),
         }
         self._windows: dict[str, _Window] = {}
+        self._minimizers: dict[str, _Minimize] = {}
         default = UNRESTRICTED
         if isinstance(section, Mapping):
             raw_profiles = section.get("profiles")
@@ -67,6 +101,9 @@ class Emcon:
                         window = _parse_window(body)
                         if window is not None:
                             self._windows[key] = window
+                        minimizer = _parse_minimize(body)
+                        if minimizer is not None:
+                            self._minimizers[key] = minimizer
             raw_default = section.get("default")
             if isinstance(raw_default, str) and raw_default.strip() in self._profiles:
                 default = raw_default.strip()
@@ -114,13 +151,31 @@ class Emcon:
             "permitted_links": sorted(permitted),
             "emitting": bool(permitted) and in_window,
             "window": _window_dict(window),
+            "minimize": _minimize_dict(self._minimizers.get(self._active)),
             "profiles": {
                 name: sorted(links) for name, links in sorted(self._profiles.items())
             },
             "windows": {
                 name: _window_dict(w) for name, w in sorted(self._windows.items())
             },
+            "minimizers": {
+                name: _minimize_dict(m)
+                for name, m in sorted(self._minimizers.items())
+            },
         }
+
+    def minimize(self, data: Mapping[str, Any]) -> dict[str, Any]:
+        """Coarsen a publish payload under the active profile's policy.
+
+        Always returns a new ``dict``, never the input mapping: position fields
+        are rounded to the configured grid and dropped fields removed. With no
+        policy for the active profile the returned copy is value-equal to the
+        input, so an unrestricted posture emits in full.
+        """
+        policy = self._minimizers.get(self._active)
+        if policy is None:
+            return dict(data)
+        return policy.apply(data)
 
 
 def _links_from_cfg(comms_cfg: Mapping[str, Any] | None) -> list[str]:
@@ -184,3 +239,32 @@ def _window_dict(window: _Window | None) -> dict[str, float] | None:
     if window is None:
         return None
     return {"period_s": window.period_s, "on_s": window.on_s, "phase_s": window.phase_s}
+
+
+def _parse_minimize(body: Any) -> _Minimize | None:
+    if not isinstance(body, Mapping):
+        return None
+    raw = body.get("minimize")
+    if not isinstance(raw, Mapping):
+        return None
+    decimals = raw.get("position_decimals")
+    pos = (
+        decimals
+        if isinstance(decimals, int) and not isinstance(decimals, bool) and decimals >= 0
+        else None
+    )
+    drop_raw = raw.get("drop")
+    drop = (
+        {x.strip() for x in drop_raw if isinstance(x, str) and x.strip()}
+        if isinstance(drop_raw, (list, tuple))
+        else set()
+    )
+    if pos is None and not drop:
+        return None
+    return _Minimize(position_decimals=pos, drop=frozenset(drop))
+
+
+def _minimize_dict(policy: _Minimize | None) -> dict[str, Any] | None:
+    if policy is None:
+        return None
+    return {"position_decimals": policy.position_decimals, "drop": sorted(policy.drop)}

@@ -159,3 +159,46 @@ def test_non_finite_window_values_are_ignored() -> None:
     inf_period.set_profile("burst")
     assert inf_period.status(now_s=0.0)["window"] is None
     assert inf_period.permits("lte", now_s=999.0) is True
+
+
+def _minimizing(policy: dict[str, Any]) -> Emcon:
+    return Emcon(
+        {
+            "links": [{"id": "lte"}],
+            "emcon": {"profiles": {"min": {"permit_links": ["lte"], "minimize": policy}}},
+        }
+    )
+
+
+def test_minimize_coarsens_position_fields() -> None:
+    emcon = _minimizing({"position_decimals": 2})
+    emcon.set_profile("min")
+    out = emcon.minimize({"uid": "x", "lat": 47.123456, "lon": 13.654321})
+    assert out["lat"] == 47.12
+    assert out["lon"] == 13.65
+    assert out["uid"] == "x"
+
+
+def test_minimize_drops_named_fields() -> None:
+    emcon = _minimizing({"drop": ["heart_rate_bpm", "uid"]})
+    emcon.set_profile("min")
+    out = emcon.minimize({"uid": "x", "heart_rate_bpm": 70, "lat": 47.0})
+    assert "uid" not in out
+    assert "heart_rate_bpm" not in out
+    assert out["lat"] == 47.0
+
+
+def test_minimize_is_identity_without_a_policy() -> None:
+    emcon = Emcon({"links": [{"id": "lte"}]})  # unrestricted, no policy
+    data = {"lat": 47.123456, "uid": "x"}
+    out = emcon.minimize(data)
+    assert out == data
+    assert out is not data  # a defensive copy, not the original mapping
+
+
+def test_minimize_status_reports_the_active_policy() -> None:
+    emcon = _minimizing({"position_decimals": 1, "drop": ["uid"]})
+    emcon.set_profile("min")
+    status = emcon.status()
+    assert status["minimize"] == {"position_decimals": 1, "drop": ["uid"]}
+    assert "min" in status["minimizers"]
