@@ -20,9 +20,13 @@ plus optional `ce` / `le` accuracy, `detail.contact.callsign`,
 `detail.remarks`. The encoded byte stream is suitable for a TAK
 server's TCP / UDP listener.
 
-**What is omitted:** Mesh delivery, COP overlays, encrypted variants,
-the wider `detail` schema (track, image, shape). The TAK-protocol
-negotiation lands with the streaming adapter follow-up.
+**What is omitted:** COP overlays, encrypted variants, the wider
+`detail` schema (track, image, shape), and TAK-protocol negotiation
+(lands with the streaming adapter follow-up). A CoT event published
+through `self_model_publish` rides the generic comms stack, so the
+store-and-forward outbox (BL-077) and DTN mesh (BL-056) can hold and
+relay it and an EMCON posture (BL-060) can defer or coarsen it; what is
+not modelled is TAK's own mesh and COP semantics.
 
 **Conformance claim:** None. This is a documented best-effort
 compatibility posture, not a certified conformance claim. The 2026-05-23

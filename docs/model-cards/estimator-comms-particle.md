@@ -7,7 +7,10 @@
 ## Inputs
 
 - Per-link RSSI, throughput, and packet-loss samples from
-  `CommsSubsystem.sensor_obs()`.
+  `CommsSubsystem.sensor_obs()`. For a link with a `propagation` block
+  these are solved each tick from the link budget (BL-048 / BL-088), so
+  RSSI and the SNR-derived `capacity_bps` track range and terrain rather
+  than holding the profile nominal.
 - Subsystem-provided `connected` flag (treated as a weak observation
   channel; the filter does not blindly trust it when throughput
   evidence disagrees).
@@ -38,8 +41,11 @@ Per-link Sequential Importance Resampling (SIR) particle filter:
   flip toward disconnected faster than a steady one.
 * **Observation model (update):** likelihood of the observation given
   each hidden state. The connected hypothesis is favoured by throughput
-  near the expected envelope (Gaussian on log-throughput residual,
-  sigma = 25% of expected). The disconnected hypothesis is favoured by
+  near the expected envelope (the propagation-modelled `capacity_bps`
+  where a link defines one, else the profile nominal; Gaussian on
+  log-throughput residual, sigma = 25% of expected), so an observed rate
+  far below the modelled capacity weighs against the connected
+  hypothesis. The disconnected hypothesis is favoured by
   zero-throughput observations and high packet loss. The `connected`
   flag from the subsystem nudges both likelihoods but does not
   dominate.
@@ -57,10 +63,12 @@ Per-link Sequential Importance Resampling (SIR) particle filter:
 
 ## Known failure modes
 
-- Without a propagation model (`LIMITATIONS.md` L7) the filter cannot
-  anticipate terrain-driven blackouts; the particles only react after
-  RSSI degrades. BL-048 (propagation-aware comms model) is the right
-  place to fix this.
+- The propagation model (BL-048 / BL-088, `LIMITATIONS.md` L7) now solves
+  RSSI and capacity from a link budget, so the filter tracks range- and
+  terrain-driven degradation instead of only reacting once a static RSSI
+  drops. What it still cannot anticipate is a blackout the single
+  knife-edge diffraction term misses; multi-obstacle DEM terrain is BL-089
+  (planned).
 - Bursty fading destabilises the belief; resampling helps but does not
   rescue a link whose RSSI bounces near the threshold every tick.
 - The particle count is fixed at construction; very high link counts

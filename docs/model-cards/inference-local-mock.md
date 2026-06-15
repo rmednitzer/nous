@@ -28,9 +28,10 @@ echoes the first 160 characters of the prompt prefixed with
 
 - The mock is not a model. It cannot answer questions; it cannot
   reason. Treat its outputs as deterministic placeholders. For a scenario
-  that needs an actual response, use the cloud path (the Anthropic client
-  gated by the daily cap; the `inference_cloud` tool is classified but not
-  yet registered, see STATUS L1).
+  that needs an actual response, use the cloud path: the `inference_cloud`
+  tool (T2) routes the SC-5 fallback ladder to the daily-capped Anthropic
+  client and degrades to this local mock (ADR 0034 / BL-013, enriched in
+  BL-069 / ADR 0035).
 
 ## Replacement
 

@@ -19,6 +19,7 @@ the same questions:
 | Compute subsystem (load curve + draw) | [subsystem-compute.md](subsystem-compute.md) |
 | Storage subsystem (NAND wear + capacity) | [subsystem-storage.md](subsystem-storage.md) |
 | Environmental sensor subsystem (ambient ground truth) | [subsystem-sensors.md](subsystem-sensors.md) |
+| Comms subsystem (per-link envelope, propagation, outbox, DTN, EMCON) | [subsystem-comms.md](subsystem-comms.md) |
 
 | Estimator / Model | Card |
 |-------------------|------|

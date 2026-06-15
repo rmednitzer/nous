@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation (model-card and conformance completeness pass)
+
+- Brought the model cards and conformance posture docs up to the current
+  comms-stack feature set. New: a comms subsystem model card
+  (`docs/model-cards/subsystem-comms.md`) covering the per-link envelope,
+  propagation, the store-and-forward outbox, the DTN mesh, and EMCON; and a
+  DTN / BPv7 conformance posture (`docs/conformance/dtn-bpv7.md`) stating the
+  RFC 4838 / RFC 9171 behaviour modelled and the wire format omitted (no CBOR
+  bundle, no BPSec, BPv6-style custody). Refreshed: the comms particle-filter
+  card no longer calls the propagation model absent (BL-048 / BL-088 shipped;
+  multi-obstacle DEM is the remaining BL-089); the inference-local-mock card
+  drops the stale "inference_cloud not yet registered" note (it is a live T2
+  tool); and the sensors and CoT/TAK conformance docs stop citing the done
+  BL-056 as an omission. Nav and the model-card index updated for the two new
+  pages.
+
 ### Fixed (docs + hardware profiles: cross-check against trusted sources, AUDIT-2026-06-15b)
 
 - A documentation and hardware-profile audit (`docs/audit-2026-06-15b.md`) swept
