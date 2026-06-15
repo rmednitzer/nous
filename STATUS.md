@@ -87,7 +87,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0056` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0057` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -137,7 +137,17 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1005 tests pass at HEAD: BL-092 added three (the
+  feature branch before merge. 1006 tests pass at HEAD: BL-093 added one (the
+  `TestMed2` tick_advance-count regression pin in
+  `tests/regression/test_audit_findings.py` per ADR 0023, which monkeypatches the
+  advance's checkpoint to fire an extra tick and proves the loop's interleaved
+  ticks count as `ticks_elapsed` not `ticks_requested`; the existing
+  `tests/integration/test_tick_advance_tool.py` moved to the new field names,
+  closing the 2026-06-14b audit's MED-2; ADR 0057 authorises the breaking
+  `tick_advance` output rename from `ticks_advanced` to
+  `ticks_requested` / `ticks_elapsed` under the ADR 0007 additive-surface rule),
+  on top of the 1005 from BL-092, which
+  added three (the
   `TestMed1` client-reuse and `TestLow3` cap-persist-error regression pins in
   `tests/regression/test_audit_findings.py` per ADR 0023, plus the honest
   `cap not persisted` fallback reason in `tests/unit/test_inference_fallback.py`;

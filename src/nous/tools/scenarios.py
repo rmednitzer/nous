@@ -236,9 +236,15 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         alongside the live tick loop -- tools and the loop share one event
         loop and a tick is synchronous, so steps never interleave; the
         wall-clock cadence simply gains ``n`` extra ticks, and the loop may
-        add its own ticks while a long advance yields (ADR 0040). ``n`` is
-        bounded to [1, 600] to keep one call from monopolising the server;
-        chain calls for longer jumps.
+        add its own ticks while a long advance yields (ADR 0040). The result
+        reports ``ticks_requested`` (the ticks this call stepped, ``n``)
+        distinctly from ``ticks_elapsed`` (the net engine advance, larger when
+        the background loop interleaved); ``tick`` and ``ts_s`` are the
+        resulting absolute state, so ``ts_s`` tracks ``ticks_elapsed`` rather
+        than ``ticks_requested`` (audit 2026-06-14b MED-2; the rename from the
+        former single ``ticks_advanced`` field is an ADR 0007 breaking change
+        authorised by ADR 0057). ``n`` is bounded to [1, 600] to keep one call
+        from monopolising the server; chain calls for longer jumps.
         """
 
         async def _work() -> str:
@@ -251,6 +257,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                         "tick": app.engine.state.tick,
                     }
                 )
+            start_tick = app.engine.state.tick
             for done in range(1, count + 1):
                 app.engine.tick()
                 if done % _TICK_ADVANCE_YIELD_EVERY == 0:
@@ -258,7 +265,8 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
             return json.dumps(
                 {
                     "ok": True,
-                    "ticks_advanced": count,
+                    "ticks_requested": count,
+                    "ticks_elapsed": app.engine.state.tick - start_tick,
                     "tick": app.engine.state.tick,
                     "ts_s": round(app.engine.state.ts_s, 3),
                     "mode": app.engine.state.mode.value,
