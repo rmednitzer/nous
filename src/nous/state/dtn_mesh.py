@@ -19,7 +19,9 @@ time-windowed contact graph that still meets the bundle's deadline, so a bundle
 moves toward a node where a future contact will open and waits there. Custody
 transfer models a separately-lossy acknowledgement: a lost custody ack makes the
 previous custodian retain and retransmit, and the resulting duplicate is
-deduplicated per node on the bundle id (ADR 0061).
+deduplicated per node on the bundle id (ADR 0061). Each node's custody store is
+bounded (ADR 0068): an admit beyond the cap sheds the triage-worst held bundle,
+so an unroutable or no-expiry bundle cannot grow a store without bound.
 """
 
 from __future__ import annotations
@@ -46,6 +48,10 @@ _DEDUP_LEDGER_SIZE = 1024
 # Routing-loop guard: a bundle that has been forwarded this many hops without
 # reaching its destination is dropped rather than circulating forever.
 _MAX_HOPS = 32
+# Per-node custody-store bound (BL-098 / ADR 0068): a node sheds its triage-worst
+# held bundle when an admit would exceed this, so a stream of unroutable or
+# no-expiry bundles cannot grow a store without bound.
+_DEFAULT_MAX_STORE = 256
 
 
 class BundleState(StrEnum):
@@ -183,6 +189,7 @@ class DtnMesh:
         self.custody_retries: int = cfg["custody_retries"]
         self.default_lifetime_s: float = cfg["default_lifetime_s"]
         self.ack_loss_pct: float = cfg["ack_loss_pct"]
+        self.max_store: int = cfg["max_store"]
         self._rng = rng
         self.nodes: dict[str, DtnNode] = {
             eid: DtnNode(eid) for eid in cfg["node_eids"]
@@ -197,6 +204,7 @@ class DtnMesh:
         self.dropped_total = 0
         self.expired_total = 0
         self.deduped_total = 0
+        self.restore_lost_total = 0
         self._dirty = False
 
     # -- origination -------------------------------------------------------
@@ -250,8 +258,8 @@ class DtnMesh:
             self.delivered_total += 1
         else:
             node = self.nodes[self.self_eid]
-            node.store.append(bundle)
             node.seen.add(bid)
+            self._admit(node, bundle)
         self._dirty = True
         return bundle
 
@@ -421,7 +429,7 @@ class DtnMesh:
             self.deduped_total += 1
         else:
             nxt.seen.add(proceed.bundle_id)
-            nxt.store.append(proceed)
+            self._admit(nxt, proceed)
 
     def _forward_lost(self, contact: Contact) -> bool:
         return self._loss_draw(contact.loss_pct)
@@ -450,6 +458,23 @@ class DtnMesh:
         bundle.state = BundleState.DROPPED
         self.dropped_total += 1
         self._dirty = True
+
+    def _admit(self, node: DtnNode, bundle: MeshBundle) -> None:
+        """Append a bundle, shedding the triage-worst held bundle over the cap.
+
+        Bounds a node's custody store (BL-098 / ADR 0068): an admit that would
+        exceed ``max_store`` drops the lowest-precedence, newest held bundle (the
+        tail of triage order), so a stream of unroutable or no-expiry bundles
+        cannot grow without bound. A lower-precedence newcomer is itself the worst
+        and is shed, so it never displaces an equal-or-higher held bundle.
+        """
+        node.store.append(bundle)
+        while len(node.store) > self.max_store:
+            worst = self._triage(node.store)[-1]
+            node.store.remove(worst)
+            worst.state = BundleState.DROPPED
+            self.dropped_total += 1
+            self._dirty = True
 
     @staticmethod
     def _triage(store: list[MeshBundle]) -> list[MeshBundle]:
@@ -495,6 +520,7 @@ class DtnMesh:
             "enabled": self.enabled,
             "self_eid": self.self_eid,
             "ack_loss_pct": self.ack_loss_pct,
+            "max_store": self.max_store,
             "nodes": [
                 {"eid": eid, "held": len(self.nodes[eid].store)}
                 for eid in sorted(self.nodes)
@@ -520,6 +546,7 @@ class DtnMesh:
                 "dropped": self.dropped_total,
                 "expired": self.expired_total,
                 "deduped": self.deduped_total,
+                "restore_lost": self.restore_lost_total,
             },
         }
 
@@ -566,6 +593,7 @@ class DtnMesh:
         """
         if not self.enabled:
             return
+        self.restore_lost_total = 0  # reflects this restore, not a running total
         delta = float(now_s) - float(snapshot.get("ts_s", now_s))
         self._next_seq = int(snapshot.get("next_seq", self._next_seq))
         counters: Mapping[str, Any] = snapshot.get("counters", {})
@@ -582,6 +610,10 @@ class DtnMesh:
         for eid, node_snap in snapshot.get("nodes", {}).items():
             node = self.nodes.get(eid)
             if node is None:
+                # BL-100 / ADR 0068: a custodial bundle whose holder left the
+                # topology between restarts is lost; count it rather than drop it
+                # silently, so the gap is visible through the mesh read.
+                self.restore_lost_total += len(node_snap.get("bundles", []))
                 continue
             node.store.clear()
             node.seen = _RecentIds(_DEDUP_LEDGER_SIZE)
@@ -589,8 +621,8 @@ class DtnMesh:
                 node.seen.add(str(bid))
             for row in node_snap.get("bundles", []):
                 bundle = self._bundle_from_row(row, holder_eid=eid, delta=delta)
-                node.store.append(bundle)
                 node.seen.add(bundle.bundle_id)
+                self._admit(node, bundle)  # the cap holds even if max_store shrank
 
     @staticmethod
     def _bundle_to_row(bundle: MeshBundle) -> dict[str, Any]:
@@ -667,6 +699,7 @@ def _mesh_cfg(profile: Mapping[str, Any] | None) -> dict[str, Any]:
         "ack_loss_pct": max(
             0.0, min(100.0, _positive_float(section.get("ack_loss_pct"), _DEFAULT_ACK_LOSS_PCT))
         ),
+        "max_store": _positive_int(section.get("max_store"), _DEFAULT_MAX_STORE),
     }
 
 
