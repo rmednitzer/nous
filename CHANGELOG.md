@@ -6,6 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (comms: DTN contact-graph routing and an explicit custody ack, BL-056 / ADR 0063)
+
+- Increment 3 of the DTN layer. Routing moves from the increment-2 hop-count
+  shortest path to contact-graph routing: a `Contact` carries an optional
+  schedule (`start_s` / `end_s`), and each held bundle is routed along the
+  earliest-arrival path over the time-windowed contact graph that still meets its
+  deadline, so a bundle moves toward a node where a future contact will open and
+  waits there rather than being held in place. Custody transfer now models a
+  separately-lossy acknowledgement (`ack_loss_pct`, default zero): a lost ack
+  makes the previous custodian retain and retransmit, and the duplicate that
+  creates is deduplicated per node on the bundle id (a bounded recent-id ledger,
+  the ADR 0061 pattern), so a guaranteed
+  bundle survives a lost ack as a deduplicated duplicate rather than a silent
+  second delivery. With `ack_loss_pct` at zero and no contact schedules the mesh
+  behaves exactly as increment 2, so the change is additive and inert without a
+  `dtn` profile section. The `dtn_mesh` read adds a `deduped` counter, the
+  acknowledgement-loss fraction, and each contact's window. Replay on reconnect
+  follows.
+
 ### Added (comms: multi-node DTN mesh with custody transfer, BL-056 / ADR 0062)
 
 - A delay-tolerant-networking overlay above the BL-077 outbox: a configured graph

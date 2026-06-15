@@ -65,3 +65,4 @@
 | 0060 | [inference_local stays T1 (reversible) despite its usage counters](0060-inference-local-stays-reversible.md) | Accepted | 2026-06-15 |
 | 0061 | [BPv7 bundle identity and a delivered-bundle ledger for the DTN layer](0061-dtn-bundle-identity-and-dedup.md) | Accepted | 2026-06-15 |
 | 0062 | [Multi-node DTN mesh with custody transfer](0062-dtn-multi-node-mesh-with-custody.md) | Accepted | 2026-06-15 |
+| 0063 | [Contact-graph routing and an explicit custody acknowledgement](0063-dtn-contact-graph-routing-and-custody-ack.md) | Accepted | 2026-06-15 |
