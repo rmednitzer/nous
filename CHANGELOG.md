@@ -6,17 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Fixed (scenarios: tick_advance reports an honest count, BL-093)
+### Changed (scenarios: tick_advance reports an honest, breaking tick count, BL-093 / ADR 0057)
 
-- `tick_advance` returned `ticks_advanced=n`, but the call yields to the event
-  loop every 50 ticks and the concurrent tick loop can fire its own
+- **BREAKING CHANGE:** `tick_advance`'s result drops the `ticks_advanced` field
+  and replaces it with `ticks_requested` (the ticks this call stepped) and
+  `ticks_elapsed` (the net engine advance, `state.tick - start_tick`). The former
+  `ticks_advanced` was set to the requested count `n`, but the call yields to the
+  event loop every 50 ticks and the concurrent tick loop can fire its own
   `engine.tick()` during the yield, so the engine's `tick` / `ts_s` advanced by
-  more than `n`; a caller computing `start_ts + n*dt` disagreed with the reported
-  `ts_s`. The result now reports `ticks_requested` (the ticks this call stepped)
-  distinctly from `ticks_elapsed` (the net engine advance, `state.tick -
-  start_tick`), so `ts_s` is consistent with `ticks_elapsed`. The advance itself
-  is unchanged; only the reported contract is now honest. Pinned as the
-  `TestMed2` regression class (ADR 0023).
+  more than `n` and a caller computing `start_ts + n*dt` disagreed with the
+  reported `ts_s`. `ts_s` now tracks `ticks_elapsed`; the advance itself is
+  unchanged. Renaming a field on the MCP tool surface is a breaking change under
+  ADR 0007, authorised here by ADR 0057. Pinned as the `TestMed2` regression
+  class (ADR 0023).
 
 ### Fixed (inference: reuse the Anthropic client and name a cap durability fault honestly, BL-092 / ADR 0056)
 

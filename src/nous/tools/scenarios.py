@@ -241,9 +241,10 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         distinctly from ``ticks_elapsed`` (the net engine advance, larger when
         the background loop interleaved); ``tick`` and ``ts_s`` are the
         resulting absolute state, so ``ts_s`` tracks ``ticks_elapsed`` rather
-        than ``ticks_requested`` (audit 2026-06-14b MED-2). ``n`` is bounded to
-        [1, 600] to keep one call from monopolising the server; chain calls for
-        longer jumps.
+        than ``ticks_requested`` (audit 2026-06-14b MED-2; the rename from the
+        former single ``ticks_advanced`` field is an ADR 0007 breaking change
+        authorised by ADR 0057). ``n`` is bounded to [1, 600] to keep one call
+        from monopolising the server; chain calls for longer jumps.
         """
 
         async def _work() -> str:
