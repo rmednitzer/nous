@@ -137,9 +137,10 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1060 tests pass at HEAD: BL-060 increment 2 added
-  six (the scheduled-emission-window tests: the duty-cycle gate, the phase
-  offset, an ignored malformed window, and the window status read in
+  feature branch before merge. 1062 tests pass at HEAD: BL-060 increment 2 added
+  eight (the scheduled-emission-window tests: the duty-cycle gate, the phase
+  offset, an ignored malformed window, the window status read, the silent posture
+  reporting not-emitting, and non-finite window values being ignored in
   `tests/unit/test_emcon.py`, and a burst window holding a publish between bursts
   then draining on the open, plus the window fields on the `emcon_status` tool, in
   `tests/integration/test_emcon_tools.py`; ADR 0066, the duty-cycle window at the

@@ -20,6 +20,7 @@ held in the store-and-forward outbox and ships when the next burst opens.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -105,11 +106,13 @@ class Emcon:
     def status(self, now_s: float | None = None) -> dict[str, Any]:
         """The read surface for the ``emcon_status`` tool."""
         window = self._windows.get(self._active)
+        permitted = self._profiles.get(self._active, self._all)
+        in_window = window is None or now_s is None or window.open_at(now_s)
         return {
             "active": self._active,
             "configured": self.configured,
-            "permitted_links": sorted(self._profiles.get(self._active, self._all)),
-            "emitting": window is None or now_s is None or window.open_at(now_s),
+            "permitted_links": sorted(permitted),
+            "emitting": bool(permitted) and in_window,
             "window": _window_dict(window),
             "profiles": {
                 name: sorted(links) for name, links in sorted(self._profiles.items())
@@ -173,7 +176,8 @@ def _parse_window(body: Any) -> _Window | None:
 def _as_float(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value)
+    result = float(value)
+    return result if math.isfinite(result) else None
 
 
 def _window_dict(window: _Window | None) -> dict[str, float] | None:

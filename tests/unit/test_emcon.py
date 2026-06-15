@@ -138,3 +138,24 @@ def test_status_reports_window_and_emitting() -> None:
     assert open_status["emitting"] is True
     assert open_status["window"] == {"period_s": 60.0, "on_s": 5.0, "phase_s": 0.0}
     assert emcon.status(now_s=30.0)["emitting"] is False
+
+
+def test_silent_profile_reports_not_emitting() -> None:
+    emcon = Emcon({"links": [{"id": "wifi"}, {"id": "lte"}]})
+    emcon.set_profile(SILENT)
+    status = emcon.status(now_s=0.0)
+    assert status["emitting"] is False
+    assert status["permitted_links"] == []
+
+
+def test_non_finite_window_values_are_ignored() -> None:
+    # A NaN phase must not register an always-closed window: it falls back to
+    # no offset rather than silently black-holing the profile's traffic.
+    nan_phase = _windowed({"period_s": 60, "on_s": 5, "phase_s": float("nan")})
+    nan_phase.set_profile("burst")
+    assert nan_phase.permits("lte", now_s=0.0) is True
+    # A non-finite period is malformed and dropped, leaving the profile unwindowed.
+    inf_period = _windowed({"period_s": float("inf"), "on_s": 5})
+    inf_period.set_profile("burst")
+    assert inf_period.status(now_s=0.0)["window"] is None
+    assert inf_period.permits("lte", now_s=999.0) is True
