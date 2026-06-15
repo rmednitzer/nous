@@ -74,6 +74,17 @@ def test_load_degrades_on_a_corrupt_ledger(config: Settings) -> None:
         session.commit()
     assert store.load() is None
     assert store.degraded is True
+    # AUDIT-2026-06-15 M-1 / BL-101: a corrupt restore is a read fault, not a
+    # write fault. It must not inflate the save counters; a controller reads the
+    # distinct load fields to tell a read fault from a write fault.
+    assert store.load_failures == 1
+    assert store.last_load_error != ""
+    assert store.save_failures == 0
+    assert store.last_error == ""
+    snapshot = store.status()
+    assert snapshot["load_failures"] == 1
+    assert snapshot["save_failures"] == 0
+    assert snapshot["last_load_error"] == store.last_load_error
 
 
 def test_engine_threads_db_init_error_to_the_dtn_store(config: Settings) -> None:

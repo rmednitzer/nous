@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (DTN persistence: distinguish a load fault from a save fault, BL-101)
+
+- `DtnStore.load()` incremented `save_failures` on a corrupt or unreadable
+  restore, so a read fault showed up as a save-shaped `last_error` and a
+  controller could not tell the two apart (AUDIT-2026-06-15 M-1). `load()` now
+  increments a runtime `load_failures` and records `last_load_error`; `degraded`
+  is true on either counter, and the `dtn_mesh` persistence `status()` surfaces
+  both pairs additively. Runtime-only fields, no schema change or migration.
+
 ### Changed (comms-stack hygiene and performance, AUDIT-2026-06-15 L-1/L-2/M-2)
 
 - Three low-risk audit follow-ons. The store-and-forward outbox dedup is now

@@ -281,12 +281,14 @@ class DtnStore:
         self.init_error = init_error
         self.save_failures = 0
         self.last_error = ""
+        self.load_failures = 0
+        self.last_load_error = ""
 
     @property
     def degraded(self) -> bool:
         if self.engine is None:
             return bool(self.init_error)
-        return self.save_failures > 0
+        return self.save_failures > 0 or self.load_failures > 0
 
     def status(self) -> dict[str, Any]:
         """Read-only DTN persistence health for the ``dtn_mesh`` read."""
@@ -296,6 +298,8 @@ class DtnStore:
             "init_error": self.init_error,
             "save_failures": self.save_failures,
             "last_error": self.last_error,
+            "load_failures": self.load_failures,
+            "last_load_error": self.last_load_error,
         }
 
     def save(self, snapshot: Mapping[str, Any]) -> None:
@@ -400,6 +404,6 @@ class DtnStore:
                 "nodes": nodes,
             }
         except Exception as exc:  # noqa: BLE001
-            self.save_failures += 1
-            self.last_error = exc.__class__.__name__
+            self.load_failures += 1
+            self.last_load_error = exc.__class__.__name__
             return None
