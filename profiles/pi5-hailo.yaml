@@ -6,7 +6,8 @@ description: Raspberry Pi 5 with a Hailo-8L accelerator. Lightweight profile.
 #   battery:   3S 2P 18650 pack (6x Samsung INR18650-25R, 2500 mAh),
 #              ~55 Wh @ 11.1 V nominal (6 x 2.5 Ah x 3.7 V; common COTS pack).
 #   compute:   Raspberry Pi 5 (3 W idle, 8-10 W typical) + Hailo-8L
-#              accelerator (~1.5 W typical, up to ~6.6 W). Combined ~3-12 W.
+#              accelerator (~1.5 W typical, up to ~6.6 W). Combined ~3-12 W
+#              typical (the modelled envelope; absolute peaks run higher).
 #   solar:     PowerFilm F15-300N class (~20 W foldable).
 #   fuel cell: not modelled (no fuel cell on this class of build).
 #   vehicle:   12 V automotive accessory bus.
