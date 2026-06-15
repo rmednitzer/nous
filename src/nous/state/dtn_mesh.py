@@ -154,6 +154,10 @@ class _RecentIds:
     def __contains__(self, item: str) -> bool:
         return item in self._ids
 
+    def as_list(self) -> list[str]:
+        """The retained ids, oldest first (for persistence)."""
+        return list(self._order)
+
 
 @dataclass
 class DtnNode:
@@ -193,6 +197,7 @@ class DtnMesh:
         self.dropped_total = 0
         self.expired_total = 0
         self.deduped_total = 0
+        self._dirty = False
 
     # -- origination -------------------------------------------------------
 
@@ -247,6 +252,7 @@ class DtnMesh:
             node = self.nodes[self.self_eid]
             node.store.append(bundle)
             node.seen.add(bid)
+        self._dirty = True
         return bundle
 
     # -- routing (contact-graph, ADR 0063) ---------------------------------
@@ -367,6 +373,7 @@ class DtnMesh:
                     continue
                 if self._forward_lost(contact):
                     bundle.attempts += 1
+                    self._dirty = True
                     if bundle.custody and bundle.attempts <= self.custody_retries:
                         self.retransmits_total += 1
                     else:
@@ -380,6 +387,7 @@ class DtnMesh:
         self, bundle: MeshBundle, node: DtnNode, next_eid: str, moved: set[int]
     ) -> None:
         """Move a successfully-forwarded bundle, honouring the custody ack and dedup."""
+        self._dirty = True
         proceed = bundle
         if bundle.custody and self._ack_lost():
             bundle.attempts += 1
@@ -435,11 +443,13 @@ class DtnMesh:
                 node.store.remove(bundle)
                 bundle.state = BundleState.EXPIRED
                 self.expired_total += 1
+                self._dirty = True
 
     def _drop(self, node: DtnNode, bundle: MeshBundle) -> None:
         node.store.remove(bundle)
         bundle.state = BundleState.DROPPED
         self.dropped_total += 1
+        self._dirty = True
 
     @staticmethod
     def _triage(store: list[MeshBundle]) -> list[MeshBundle]:
@@ -512,6 +522,111 @@ class DtnMesh:
                 "deduped": self.deduped_total,
             },
         }
+
+    # -- persistence (ADR 0064) --------------------------------------------
+
+    def consume_dirty(self) -> bool:
+        """Whether the store changed since the last call; resets the flag."""
+        was = self._dirty
+        self._dirty = False
+        return was
+
+    def snapshot(self, now_s: float) -> dict[str, Any]:
+        """Capture the whole-mesh store for persistence (ADR 0064)."""
+        return {
+            "ts_s": float(now_s),
+            "next_seq": self._next_seq,
+            "counters": {
+                "originated": self.originated_total,
+                "delivered": self.delivered_total,
+                "forwarded": self.forwarded_total,
+                "retransmits": self.retransmits_total,
+                "dropped": self.dropped_total,
+                "expired": self.expired_total,
+                "deduped": self.deduped_total,
+            },
+            "delivered_ids": self.delivered_ids.as_list(),
+            "nodes": {
+                eid: {
+                    "seen": node.seen.as_list(),
+                    "bundles": [self._bundle_to_row(b) for b in node.store],
+                }
+                for eid, node in self.nodes.items()
+            },
+        }
+
+    def restore(self, snapshot: Mapping[str, Any], *, now_s: float) -> None:
+        """Replace the store from a persisted snapshot, rebasing lifetimes.
+
+        ``now_s`` is the current simulated time; each bundle's creation and
+        expiry shift by ``now_s - snapshot_ts`` so a clock reset on a true
+        process restart preserves the remaining lifetime rather than the absolute
+        expiry (on a hot reload the clock is unchanged, so the shift is zero). A
+        disabled mesh ignores the snapshot.
+        """
+        if not self.enabled:
+            return
+        delta = float(now_s) - float(snapshot.get("ts_s", now_s))
+        self._next_seq = int(snapshot.get("next_seq", self._next_seq))
+        counters: Mapping[str, Any] = snapshot.get("counters", {})
+        self.originated_total = int(counters.get("originated", 0))
+        self.delivered_total = int(counters.get("delivered", 0))
+        self.forwarded_total = int(counters.get("forwarded", 0))
+        self.retransmits_total = int(counters.get("retransmits", 0))
+        self.dropped_total = int(counters.get("dropped", 0))
+        self.expired_total = int(counters.get("expired", 0))
+        self.deduped_total = int(counters.get("deduped", 0))
+        self.delivered_ids = _RecentIds(_DEDUP_LEDGER_SIZE)
+        for bid in snapshot.get("delivered_ids", []):
+            self.delivered_ids.add(str(bid))
+        for eid, node_snap in snapshot.get("nodes", {}).items():
+            node = self.nodes.get(eid)
+            if node is None:
+                continue
+            node.store.clear()
+            node.seen = _RecentIds(_DEDUP_LEDGER_SIZE)
+            for bid in node_snap.get("seen", []):
+                node.seen.add(str(bid))
+            for row in node_snap.get("bundles", []):
+                bundle = self._bundle_from_row(row, holder_eid=eid, delta=delta)
+                node.store.append(bundle)
+                node.seen.add(bundle.bundle_id)
+
+    @staticmethod
+    def _bundle_to_row(bundle: MeshBundle) -> dict[str, Any]:
+        return {
+            "bundle_id": bundle.bundle_id,
+            "source_eid": bundle.source_eid,
+            "dest_eid": bundle.dest_eid,
+            "sequence": bundle.sequence,
+            "size_bytes": bundle.size_bytes,
+            "precedence": bundle.precedence.value,
+            "created_ts_s": bundle.created_ts_s,
+            "expiry_ts_s": bundle.expiry_ts_s,
+            "custody": bundle.custody,
+            "hops": bundle.hops,
+            "attempts": bundle.attempts,
+        }
+
+    @staticmethod
+    def _bundle_from_row(
+        row: Mapping[str, Any], *, holder_eid: str, delta: float
+    ) -> MeshBundle:
+        expiry = row.get("expiry_ts_s")
+        return MeshBundle(
+            bundle_id=str(row["bundle_id"]),
+            source_eid=str(row["source_eid"]),
+            dest_eid=str(row["dest_eid"]),
+            sequence=int(row["sequence"]),
+            size_bytes=int(row["size_bytes"]),
+            precedence=Precedence.parse(str(row["precedence"])),
+            created_ts_s=float(row["created_ts_s"]) + delta,
+            expiry_ts_s=(None if expiry is None else float(expiry) + delta),
+            custody=bool(row["custody"]),
+            holder_eid=holder_eid,
+            hops=int(row["hops"]),
+            attempts=int(row["attempts"]),
+        )
 
 
 def _mesh_cfg(profile: Mapping[str, Any] | None) -> dict[str, Any]:

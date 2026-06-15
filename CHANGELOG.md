@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (comms: DTN store persistence across a restart, BL-056 / ADR 0064)
+
+- Increment 4 of the DTN layer, the replay increment, completing BL-056. The
+  mesh store (every node's held bundles, the bounded dedup ledgers, the
+  disposition counters, and the next sequence) is now checkpointed to the
+  `state.db` SQLite database after a mutating tick and restored whenever a fresh
+  `DtnMesh` is built, so in-flight and in-custody bundles survive a process
+  restart or a hot reload, not just a link drop. A new `DtnStore` wrapper
+  persists a `DtnMesh.snapshot()` through two tables (`dtn_bundles` relational,
+  `dtn_meta` single-row) behind an Alembic migration; writes are best effort and
+  degrade silently like the FSM transition log, carrying only the exception
+  class. Restore rebases each bundle's lifetime to its remaining TTL so a clock
+  reset on a true restart preserves the remaining lifetime. The `dtn_mesh` read
+  gains a `persistence` block. Inert without a `dtn` profile section and in the
+  memory-only mode, so every shipped profile is unchanged.
+
 ### Added (comms: DTN contact-graph routing and an explicit custody ack, BL-056 / ADR 0063)
 
 - Increment 3 of the DTN layer. Routing moves from the increment-2 hop-count

@@ -366,3 +366,41 @@ def test_recent_ids_evicts_oldest_beyond_maxlen() -> None:
     recent.add("c")
     assert "a" not in recent
     assert "b" in recent and "c" in recent
+
+
+def test_snapshot_and_restore_round_trip() -> None:
+    cfg = {
+        "self_eid": "dtn://dev/",
+        "contacts": [{"a": "dtn://dev/", "b": "dtn://ground/", "up": False}],
+    }
+    mesh = _mesh(cfg)
+    mesh.originate("dtn://ground/", 100, now_s=0.0, custody=True)
+    mesh.originate("dtn://ground/", 200, now_s=0.0)
+    snap = mesh.snapshot(now_s=5.0)
+
+    fresh = _mesh(cfg)
+    fresh.restore(snap, now_s=5.0)
+
+    # Restoring at the snapshot's own time is a lossless round trip.
+    assert fresh.snapshot(now_s=5.0) == snap
+    assert len(fresh.in_transit()) == 2
+    assert fresh._next_seq == mesh._next_seq
+    assert fresh.originated_total == 2
+    assert sum(1 for b in fresh.in_transit() if b.custody) == 1
+
+
+def test_restore_rebases_lifetime_across_a_clock_reset() -> None:
+    cfg = {
+        "self_eid": "dtn://dev/",
+        "contacts": [{"a": "dtn://dev/", "b": "dtn://ground/", "up": False}],
+    }
+    mesh = _mesh(cfg)
+    mesh.originate("dtn://ground/", 100, now_s=100.0, custody=True, lifetime_s=500.0)
+    # Absolute expiry is 600.0; snapshot at t=300 leaves 300s of lifetime.
+    snap = mesh.snapshot(now_s=300.0)
+
+    fresh = _mesh(cfg)
+    fresh.restore(snap, now_s=0.0)  # the clock resets to 0 on a true restart
+    restored = fresh.in_transit()[0]
+    # The remaining 300s is preserved, not the absolute expiry of 600.
+    assert restored.expiry_ts_s == 300.0
