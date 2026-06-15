@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (comms: multi-node DTN mesh with custody transfer, BL-056 / ADR 0062)
+
+- A delay-tolerant-networking overlay above the BL-077 outbox: a configured graph
+  of nodes (the device as the `self` node plus abstract hold-and-forward peers)
+  connected by contacts, from a new optional `dtn` profile section. `dtn_send`
+  (T2) originates a bundle at the device toward a destination EID; the tick loop
+  routes it hop by hop over the shortest path on the currently-up contact
+  subgraph (one hop per tick), storing it at each hop while a contact is down.
+  Custody transfer is the reliability distinction: a custodial bundle is retained
+  and retransmitted on a lost forward (a Bernoulli draw on the contact loss, the
+  ADR 0019 RNG seam) up to a retry bound, while a best-effort bundle is dropped;
+  a bundle past its lifetime expires. `dtn_mesh` (T0) reads the topology, per-node
+  holdings, in-transit bundles, and the disposition counters. The mesh is inert
+  without a `dtn` profile section, so existing profiles are unchanged. This is
+  increment 2 of BL-056 (the multi-node model chosen over a device-centric one);
+  intermittent-contact routing and replay follow.
+
 ### Added (comms: BPv7 bundle identity and dedup for the DTN layer, BL-056 / ADR 0061)
 
 - The store-and-forward outbox (BL-077) now stamps every queued package with a

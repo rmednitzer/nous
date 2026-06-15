@@ -26,6 +26,8 @@ the committed copy after changing a tool's signature or docstring.
 | `compute_status` | T0 | Compute subsystem: load fraction, electrical draw, throttling. |
 | `device_health` | T0 | Engine snapshot: tick, ts_s, mode, operator/comms state. |
 | `device_info` | T0 | Report version, profile, transport, policy, audit/anchor, persistence, safety posture. |
+| `dtn_mesh` | T0 | Read the DTN mesh: nodes, contacts, in-transit bundles, counters (T0, BL-056). |
+| `dtn_send` | T2 | Originate a bundle at the device node toward a remote EID (T2, BL-056). |
 | `inference_cloud` | T2 | Cloud-path inference through the SC-5 fallback ladder (ADR 0034). |
 | `inference_local` | T1 | Local-path inference. |
 | `inference_status` | T0 | Inference subsystem totals: calls, tokens, joules, last latency. |
@@ -373,6 +375,73 @@ tool registry.
 {
   "properties": {},
   "title": "device_infoArguments",
+  "type": "object"
+}
+```
+
+### `dtn_mesh`
+
+```json
+{
+  "properties": {},
+  "title": "dtn_meshArguments",
+  "type": "object"
+}
+```
+
+### `dtn_send`
+
+```json
+{
+  "properties": {
+    "bundle_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Bundle Id"
+    },
+    "custody": {
+      "default": false,
+      "title": "Custody",
+      "type": "boolean"
+    },
+    "dest_eid": {
+      "title": "Dest Eid",
+      "type": "string"
+    },
+    "lifetime_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lifetime S"
+    },
+    "n_bytes": {
+      "default": 1024,
+      "title": "N Bytes",
+      "type": "integer"
+    },
+    "precedence": {
+      "default": "routine",
+      "title": "Precedence",
+      "type": "string"
+    }
+  },
+  "required": [
+    "dest_eid"
+  ],
+  "title": "dtn_sendArguments",
   "type": "object"
 }
 ```
