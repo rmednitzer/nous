@@ -346,6 +346,24 @@ def test_tx_caps_throughput_at_solved_capacity() -> None:
     assert relay.throughput_bps == pytest.approx(relay.capacity_bps)
 
 
+def test_tx_rejects_send_on_zero_capacity_link() -> None:
+    # H-1: a propagation link driven below its SNR floor has capacity_bps == 0.
+    # tx must reject the send (return 0) and stamp the zero achieved rate rather
+    # than reporting bytes accepted on a link that carries nothing (audit
+    # 2026-06-14b H-1). The carrier is still present (the link is live).
+    pos = {"lat": 47.0, "lon": 13.30, "alt": 500.0}
+    c = _prop_subsystem(pos)
+    c.step(1.0)
+    relay = c.link("relay")
+    assert relay is not None
+    assert relay.is_live() is True
+    assert relay.capacity_bps == 0.0
+    assert c.tx("relay", 1500) == 0
+    assert relay.throughput_bps == pytest.approx(0.0)
+    # A rejected send does not reset the age-out timer.
+    assert relay.age_s > 0.0
+
+
 def test_derive_degraded_when_capacity_collapses() -> None:
     pos = {"lat": 47.0, "lon": 13.30, "alt": 500.0}
     c = _prop_subsystem(pos)

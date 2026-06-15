@@ -173,20 +173,30 @@ class CommsSubsystem:
         link.forced_state = None
 
     def tx(self, link_id: str, n_bytes: int) -> int:
-        """Record a transmission. Resets ``age_s`` and returns bytes accepted.
+        """Record a transmission, returning the bytes accepted.
 
-        A transmission on a link that the controller has forced down is
-        rejected (returns 0). Otherwise ``age_s`` is reset to 0 and
-        ``throughput_bps`` is updated to the achieved rate: the bits sent over
-        the interval since this link last transmitted, capped at the link's
-        sustainable ``capacity_bps`` (the rated bandwidth for a static link, the
-        SNR-derived capacity for a propagation link; achieved-rate audit COMMS-3 /
-        ADR 0051, the capacity cap per BL-048 / ADR 0053).
+        A send is rejected (returns 0, and ``age_s`` is left unchanged) when the
+        link is unknown, the controller has forced it down, its modeled
+        ``capacity_bps`` has collapsed to zero (a propagation link below its SNR
+        floor carries nothing; audit 2026-06-14b H-1), or ``n_bytes`` is
+        non-positive. Only an accepted send resets ``age_s`` to 0 and updates
+        ``throughput_bps`` to the achieved rate: the bits sent over the interval
+        since this link last transmitted, capped at the link's sustainable
+        ``capacity_bps`` (the rated bandwidth for a static link, the SNR-derived
+        capacity for a propagation link; achieved-rate audit COMMS-3 / ADR 0051,
+        the capacity cap per BL-048 / ADR 0053).
         """
         link = self._links.get(link_id)
         if link is None:
             return 0
         if link.forced_state is False:
+            return 0
+        if link.capacity_bps <= 0.0:
+            # A propagation link driven below its SNR floor carries nothing:
+            # reject the send and stamp the zero achieved rate rather than
+            # reporting bytes accepted on a dead link (audit 2026-06-14b H-1,
+            # consistent with the forced-down guard above).
+            link.throughput_bps = 0.0
             return 0
         amount = max(0, int(n_bytes))
         if amount <= 0:
@@ -301,6 +311,10 @@ class CommsSubsystem:
                 "loss_pct": link.loss_pct,
                 "throughput_bps": link.throughput_bps if link.is_live() else 0.0,
                 "capacity_bps": link.capacity_bps if link.is_live() else 0.0,
+                # Rated bandwidth is static (not gated on liveness); it lets the
+                # filter's LinkEstimate carry a bandwidth so comms_state uses the
+                # per-link capacity fraction, not the legacy floor (M-1).
+                "bandwidth_bps": link.bandwidth_bps,
                 "connected": link.is_live(),
             }
             for link in self._links.values()

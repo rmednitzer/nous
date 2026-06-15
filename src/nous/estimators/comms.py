@@ -60,6 +60,7 @@ class LinkBelief:
 
     __slots__ = (
         "_rng",
+        "bandwidth_bps",
         "capacity_bps",
         "collapses",
         "expected_throughput_bps",
@@ -95,6 +96,7 @@ class LinkBelief:
         self.throughput_bps = 0.0
         self.expected_throughput_bps = 0.0
         self.capacity_bps = 0.0
+        self.bandwidth_bps = 0.0
         self.collapses = 0
         self._rng = rng
 
@@ -129,6 +131,7 @@ class LinkBelief:
         throughput_bps: float,
         expected_throughput_bps: float,
         capacity_bps: float = 0.0,
+        bandwidth_bps: float = 0.0,
         observed_connected_flag: bool,
     ) -> None:
         """Weight particles by likelihood of the observation, then resample."""
@@ -137,6 +140,7 @@ class LinkBelief:
         self.throughput_bps = max(0.0, throughput_bps)
         self.expected_throughput_bps = max(_THROUGHPUT_FLOOR_BPS, expected_throughput_bps)
         self.capacity_bps = max(0.0, capacity_bps)
+        self.bandwidth_bps = max(0.0, bandwidth_bps)
 
         likelihood_connected = _likelihood_given_connected(
             self.throughput_bps,
@@ -225,6 +229,7 @@ class CommsParticleFilter:
                 loss = float(entry.get("loss_pct", 100.0))
                 throughput = float(entry.get("throughput_bps", 0.0))
                 capacity = float(entry.get("capacity_bps", 0.0))
+                bandwidth = float(entry.get("bandwidth_bps", 0.0))
             except (TypeError, ValueError):
                 continue
             connected_flag = bool(entry.get("connected", False))
@@ -255,13 +260,17 @@ class CommsParticleFilter:
                 throughput_bps=throughput,
                 expected_throughput_bps=expected_throughput,
                 capacity_bps=capacity,
+                bandwidth_bps=bandwidth,
                 observed_connected_flag=connected_flag,
             )
             self._link_estimates[link_id] = _link_estimate_from_belief(belief)
 
         for missing in set(self._links) - seen:
-            self._link_estimates.setdefault(
-                missing, _link_estimate_from_belief(self._links[missing])
+            # Refresh unconditionally: setdefault only wrote on first absence, so
+            # a genuinely-missing link's estimate froze while its particle belief
+            # kept drifting under predict() (audit 2026-06-14b H-2).
+            self._link_estimates[missing] = _link_estimate_from_belief(
+                self._links[missing]
             )
 
         collapses_after = sum(b.collapses for b in self._links.values())
@@ -332,6 +341,10 @@ def _link_estimate_from_belief(belief: LinkBelief) -> LinkEstimate:
         rssi_dbm=belief.rssi_dbm,
         loss_pct=belief.loss_pct,
         throughput_bps=belief.throughput_bps if connected else 0.0,
+        # Rated bandwidth is the static denominator for the comms_state health
+        # fraction; carry it unconditionally (as the subsystem estimate does) so
+        # a connected link uses the capacity fraction, not the legacy floor (M-1).
+        bandwidth_bps=belief.bandwidth_bps,
         capacity_bps=belief.capacity_bps if connected else 0.0,
     )
 
@@ -366,7 +379,10 @@ def _likelihood_given_connected(
     flag: bool,
 ) -> float:
     """P(observation | actually connected). Gaussian on log-throughput residual."""
-    if throughput_bps <= _THROUGHPUT_FLOOR_BPS:
+    if throughput_bps < _THROUGHPUT_FLOOR_BPS:
+        # Strictly below the 1 bps floor is treated as disconnected; a link
+        # exactly at the floor is processed, matching the >= floor liveness
+        # boundary in _link_estimate_from_belief (audit 2026-06-14b M-2).
         return _LIKELIHOOD_FLOOR
     log_obs = math.log(max(throughput_bps, _THROUGHPUT_FLOOR_BPS))
     log_exp = math.log(max(expected_throughput_bps, _THROUGHPUT_FLOOR_BPS))

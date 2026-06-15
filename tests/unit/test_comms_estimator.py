@@ -195,6 +195,97 @@ def test_state_covariance_is_finite_and_non_negative() -> None:
     assert cov < 1.0
 
 
+def test_missing_link_estimate_is_refreshed_not_frozen() -> None:
+    # H-2: a link absent from the current observation has its estimate
+    # recomputed from the live belief each update, not frozen at the value it
+    # held the first time it went missing (audit 2026-06-14b H-2).
+    import numpy as np
+
+    f = CommsParticleFilter()
+    f.update(
+        _obs(
+            {
+                "link_id": "lte",
+                "rssi_dbm": -70.0,
+                "loss_pct": 1.0,
+                "throughput_bps": 1_000_000.0,
+                "connected": True,
+            }
+        )
+    )
+    assert f.links()[0].connected is True
+    other: dict[str, float | bool | str] = {
+        "link_id": "other",
+        "rssi_dbm": -70.0,
+        "loss_pct": 1.0,
+        "throughput_bps": 500_000.0,
+        "connected": True,
+    }
+    # First absence: both the old setdefault and the fix write lte's estimate.
+    f.update(_obs(other))
+    # Drive lte's belief to fully disconnected, then a second absence must
+    # refresh its estimate; the old setdefault would leave it frozen connected.
+    f._links["lte"].particles = np.zeros_like(f._links["lte"].particles)
+    f.update(_obs(other))
+    lte_est = next(e for e in f.links() if e.link_id == "lte")
+    assert lte_est.connected is False
+
+
+def test_estimate_carries_bandwidth_for_capacity_fraction_health() -> None:
+    # M-1: the filter's LinkEstimate carries the rated bandwidth_bps from the
+    # observation, so comms_state uses the per-link capacity fraction rather
+    # than the legacy flat floor (audit 2026-06-14b M-1).
+    f = CommsParticleFilter()
+    f.update(
+        _obs(
+            {
+                "link_id": "relay",
+                "rssi_dbm": -70.0,
+                "loss_pct": 1.0,
+                "throughput_bps": 1_000_000.0,
+                "capacity_bps": 1_500_000.0,
+                "bandwidth_bps": 2_000_000.0,
+                "connected": True,
+            }
+        )
+    )
+    assert f.links()[0].bandwidth_bps == pytest.approx(2_000_000.0)
+    # An observation without the field falls back to 0 (additive default).
+    f2 = CommsParticleFilter()
+    f2.update(
+        _obs(
+            {
+                "link_id": "lte",
+                "rssi_dbm": -70.0,
+                "loss_pct": 1.0,
+                "throughput_bps": 1_000_000.0,
+                "connected": True,
+            }
+        )
+    )
+    assert f2.links()[0].bandwidth_bps == pytest.approx(0.0)
+
+
+def test_likelihood_at_exactly_floor_is_processed_not_floored() -> None:
+    # M-2: a throughput exactly at the 1 bps floor is processed (matching the
+    # >= floor liveness boundary), not early-returned as disconnected; strictly
+    # below the floor still returns the likelihood floor (audit 2026-06-14b M-2).
+    from nous.estimators.comms import (
+        _LIKELIHOOD_FLOOR,
+        _THROUGHPUT_FLOOR_BPS,
+        _likelihood_given_connected,
+    )
+
+    at_floor = _likelihood_given_connected(
+        _THROUGHPUT_FLOOR_BPS, _THROUGHPUT_FLOOR_BPS, 0.0, True
+    )
+    below = _likelihood_given_connected(
+        _THROUGHPUT_FLOOR_BPS - 0.1, _THROUGHPUT_FLOOR_BPS, 0.0, True
+    )
+    assert at_floor > _LIKELIHOOD_FLOOR
+    assert below == pytest.approx(_LIKELIHOOD_FLOOR)
+
+
 def test_deterministic_under_seed() -> None:
     """Two filters with the same seed produce identical particle trajectories."""
     obs = _obs(
