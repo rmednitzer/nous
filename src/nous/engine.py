@@ -423,7 +423,7 @@ class Engine:
         new_biometrics = BiometricsSubsystem(new_profile, rng=self.rng)
 
         # Every subsystem constructed: commit the new generation atomically.
-        if name and name != self.settings.profile:
+        if new_name != self.settings.profile:
             self.settings = self.settings.model_copy(update={"profile": new_name})
         self.profile = new_profile
         self.power = new_power
