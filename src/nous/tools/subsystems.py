@@ -497,7 +497,10 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         EMCON (emission control, ADR 0065) is an operator-imposed posture that
         gates which comms links the device may emit on, orthogonal to physical
         link health. Returns the active profile, whether a ``comms.emcon`` profile
-        section configured it, the links the active profile permits, and every
+        section configured it, ``default_requested`` / ``default_valid`` (which
+        distinguish an operator who chose ``unrestricted`` from one whose
+        configured ``default`` named an unknown profile and was rejected back to
+        ``unrestricted``), the links the active profile permits, and every
         available profile with its permitted links, plus any duty-cycle emission
         ``window`` on a profile and whether the active posture is ``emitting``
         right now (ADR 0066), and any ``minimize`` policy that coarsens emitted

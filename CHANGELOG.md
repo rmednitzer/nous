@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (EMCON rejected-default legibility and MCP-path coverage, BL-104 / BL-105)
+
+- A configured `comms.emcon.default` that named an unknown profile silently fell
+  back to `unrestricted`, with no field distinguishing an operator who chose
+  `unrestricted` from one whose default was rejected (AUDIT-2026-06-15 M-3).
+  `Emcon.status()` (the `emcon_status` / `emcon_set` read) now surfaces
+  `default_requested` (the configured name, or null when none was set) and
+  `default_valid` (false only when a configured default named an unknown
+  profile). Additive and reporting-only: the fall-back-to-unrestricted behaviour
+  and `permits` / `active` are unchanged (BL-104).
+- The EMCON window-drain and silence-defer proofs exercised `outbox.flush` /
+  `encode_and_tx` directly, leaving the `comms_publish` / `comms_flush` /
+  `self_model_publish` MCP wrappers (audit, JSON shape, `now_s` injection, the
+  `_publish_shape` step) uncovered under those postures (AUDIT-2026-06-15 M-4).
+  New integration tests now drive those tools under silence, a duty-cycle window,
+  and a minimising posture (BL-105).
+
 ### Added (per-cause diagnostics for held and dropped traffic, BL-108)
 
 - The store-and-forward outbox and the DTN mesh each kept a single counter that
