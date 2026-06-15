@@ -39,6 +39,7 @@ schema:
 	uv run python scripts/gen_schemas.py
 	uv run python scripts/gen_tool_reference.py
 	uv run python scripts/gen_adr_index.py
+	uv run python scripts/gen_mkdocs_adr_nav.py
 	uv run python scripts/gen_backlog_summary.py
 
 docs-build:
