@@ -385,30 +385,31 @@ class Engine:
 
         Returns a small summary mapping the controller can audit:
         ``{"profile": ..., "rebuilt_subsystems": N, "previous": ...}``.
-        Raises ``FileNotFoundError`` or ``ValueError`` on a missing or
-        malformed YAML (the engine keeps the previous profile loaded).
+        The rebuild is atomic: every subsystem is constructed from the new
+        profile before any is committed, so a missing or malformed profile
+        raises (``FileNotFoundError`` / ``ValueError``, or a constructor error on
+        a section that passed top-level validation) with the previous profile and
+        subsystems left intact (BL-103 / ADR 0069).
         """
         new_name = (name or self.settings.profile).strip() or self.settings.profile
         new_profile = _load_profile(new_name)
         previous_name = self.settings.profile
 
-        if name and name != self.settings.profile:
-            self.settings = self.settings.model_copy(update={"profile": new_name})
-        self.profile = new_profile
-
-        # ADR 0019 follow-up: thread the engine RNG into every
-        # subsystem at construction so future noise sampling can draw
-        # from a deterministic seam.
-        self.power = PowerSubsystem(self.profile, rng=self.rng)
-        self.apu = ApuSubsystem(self.profile, rng=self.rng)
-        self.thermal = ThermalSubsystem(self.profile, rng=self.rng)
-        self.compute = ComputeSubsystem(self.profile, rng=self.rng)
-        self.inference = InferenceSubsystem(
-            self.profile, compute=self.compute, rng=self.rng
+        # Build every subsystem from the new profile into locals first (ADR 0019
+        # threads the engine RNG into each). If a malformed section crashes a
+        # constructor the error propagates with nothing committed, so the engine
+        # keeps the previous profile and subsystems rather than tearing into a
+        # mixed-generation state (BL-103 / ADR 0069).
+        new_power = PowerSubsystem(new_profile, rng=self.rng)
+        new_apu = ApuSubsystem(new_profile, rng=self.rng)
+        new_thermal = ThermalSubsystem(new_profile, rng=self.rng)
+        new_compute = ComputeSubsystem(new_profile, rng=self.rng)
+        new_inference = InferenceSubsystem(
+            new_profile, compute=new_compute, rng=self.rng
         )
-        self.storage = StorageSubsystem(self.profile, rng=self.rng)
-        self.comms = CommsSubsystem(
-            self.profile,
+        new_storage = StorageSubsystem(new_profile, rng=self.rng)
+        new_comms = CommsSubsystem(
+            new_profile,
             rng=self.rng,
             position_fn=lambda: (
                 self.position.lat,
@@ -416,11 +417,27 @@ class Engine:
                 self.position.alt_m,
             ),
         )
-        self.outbox = CommsOutbox(self.profile, rng=self.rng)
+        new_outbox = CommsOutbox(new_profile, rng=self.rng)
+        new_position = PositionSubsystem(new_profile, rng=self.rng)
+        new_sensors = SensorsSubsystem(new_profile, rng=self.rng)
+        new_biometrics = BiometricsSubsystem(new_profile, rng=self.rng)
+
+        # Every subsystem constructed: commit the new generation atomically.
+        if name and name != self.settings.profile:
+            self.settings = self.settings.model_copy(update={"profile": new_name})
+        self.profile = new_profile
+        self.power = new_power
+        self.apu = new_apu
+        self.thermal = new_thermal
+        self.compute = new_compute
+        self.inference = new_inference
+        self.storage = new_storage
+        self.comms = new_comms
+        self.outbox = new_outbox
+        self.position = new_position
+        self.sensors = new_sensors
+        self.biometrics = new_biometrics
         self._build_dtn_mesh()
-        self.position = PositionSubsystem(self.profile, rng=self.rng)
-        self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
-        self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
 
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
