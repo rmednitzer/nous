@@ -27,11 +27,12 @@ def test_baseline_revision_is_first() -> None:
     cfg = Config(str(ALEMBIC_INI))
     cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
     scripts = ScriptDirectory.from_config(cfg)
-    heads = scripts.get_heads()
-    assert len(heads) == 1
-    head = scripts.get_revision(heads[0])
-    assert head is not None and head.revision == "0001_baseline"
-    assert head.down_revision is None
+    # History stays linear (a single head) as migrations are added on top.
+    assert len(scripts.get_heads()) == 1
+    # 0001_baseline remains the root revision: the only one with no down_revision.
+    assert list(scripts.get_bases()) == ["0001_baseline"]
+    base = scripts.get_revision("0001_baseline")
+    assert base is not None and base.down_revision is None
 
 
 def test_baseline_upgrade_creates_tables(alembic_cfg: Config, tmp_path: Path) -> None:

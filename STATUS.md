@@ -87,7 +87,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0063` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0064` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -96,7 +96,7 @@ re-audit).
 
 | Component | State | Notes |
 |-----------|-------|-------|
-| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Forty-eight tools registered across device telemetry (T0), the eleven subsystem reads (T0; comms exposes both `comms_state` and `comms_status`), self-model and estimators (T0, including the BL-061 `self_model_situation` fused read, ADR 0038), self-model publish (T2 `self_model_publish`, ADR 0041), interop schema + codec (T0/T1), comms control (T2 `comms_send` / `comms_publish`, ADR 0033) plus the store-and-forward outbox (T0 `comms_outbox`, T2 `comms_enqueue` / `comms_flush`, BL-077 / ADR 0047) and the DTN mesh overlay (T0 `dtn_mesh`, T2 `dtn_send`, BL-056 / ADR 0062, 0063), local inference + cap (T0/T1), cloud inference (T2 `inference_cloud`, ADR 0034), scenarios and configuration (T2 `scenario_load` / `scenario_inject` / `profile_reload`, plus the ADR 0040 session surface: T0 `scenario_status`, T1 `scenario_pause` / `scenario_resume` / `scenario_reset`, T1 `tick_advance`), posture control (T2 `state_transition`, ADR 0031), terminal control (T3 `state_force_fault` / `state_force_shutdown`, ADR 0032), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
+| `src/nous/server.py` (FastMCP wiring + lifespan) + `src/nous/tools/` (tool surface) | in-progress | Forty-eight tools registered across device telemetry (T0), the eleven subsystem reads (T0; comms exposes both `comms_state` and `comms_status`), self-model and estimators (T0, including the BL-061 `self_model_situation` fused read, ADR 0038), self-model publish (T2 `self_model_publish`, ADR 0041), interop schema + codec (T0/T1), comms control (T2 `comms_send` / `comms_publish`, ADR 0033) plus the store-and-forward outbox (T0 `comms_outbox`, T2 `comms_enqueue` / `comms_flush`, BL-077 / ADR 0047) and the DTN mesh overlay (T0 `dtn_mesh`, T2 `dtn_send`, BL-056 / ADR 0062, 0063, 0064), local inference + cap (T0/T1), cloud inference (T2 `inference_cloud`, ADR 0034), scenarios and configuration (T2 `scenario_load` / `scenario_inject` / `profile_reload`, plus the ADR 0040 session surface: T0 `scenario_status`, T1 `scenario_pause` / `scenario_resume` / `scenario_reset`, T1 `tick_advance`), posture control (T2 `state_transition`, ADR 0031), terminal control (T3 `state_force_fault` / `state_force_shutdown`, ADR 0032), and operational recovery (T2 `audit_resync`, T0 `audit_verify` for the BL-016 hash chain, T0 `audit_anchor_verify` for the BL-031 daily anchor). Handlers live in per-capability modules under `src/nous/tools/` (ADR 0021); `server.py` wires them via each module's `register(mcp, app, wrap)`. See `docs/tool-reference.md` for the full table. The tick loop runs at process scope (ADR 0024), not on the server lifespan. |
 | `src/nous/tick.py` | in-progress | Async tick loop; the overrun branch checkpoints so cancellation lands even when every tick exceeds its budget (PR #42). Instrumented with OpenTelemetry metrics (`nous.tick.duration` histogram + `nous.tick.overruns` counter, no-op until a provider is configured; BL-037 / ADR 0036). |
 | `src/nous/policy.py` | stable | Tier classification + admission. Changes require an ADR. |
 | `src/nous/audit.py` | stable | JSONL append-only with a tamper-evident per-record hash chain (ADR 0025 / BL-016; `verify_chain` plus the `audit_verify` tool). The chain head tracks the on-disk tail, not the fsync confirmation, so it advances for every emitted record while durability is tracked separately (ADR 0050). Changes require an ADR. |
@@ -137,7 +137,15 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1036 tests pass at HEAD: BL-056 increment 3 added
+  feature branch before merge. 1042 tests pass at HEAD: BL-056 increment 4 added
+  six (the DTN store-persistence tests: a snapshot/restore round trip and a
+  lifetime rebased across a clock reset in `tests/unit/test_dtn_mesh.py`, and an
+  engine restart restoring a custodial bundle from SQLite, a disabled mesh
+  persisting nothing, a corrupt ledger degrading the load to a safe no-op, and
+  the DB init error threaded into the store's health in
+  `tests/integration/test_dtn_persistence.py`; ADR 0064,
+  the store checkpointed to the `state.db` SQLite database and restored on every
+  mesh build), on top of the 1036 from BL-056 increment 3, which added
   seven (the contact-graph-routing and custody-ack tests in
   `tests/unit/test_dtn_mesh.py`: a bundle held at a relay for a scheduled contact
   then delivered when its window opens, a bundle held when no route meets its

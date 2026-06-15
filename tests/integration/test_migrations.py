@@ -45,7 +45,12 @@ def _tables(url: str) -> set[str]:
 
 def test_upgrade_head_creates_schema(config: Settings) -> None:
     assert _MIGRATE.main(["upgrade"]) == 0
-    assert {"state_transitions", "audit_entries"} <= _tables(config.resolved_db_url())
+    assert {
+        "state_transitions",
+        "audit_entries",
+        "dtn_bundles",
+        "dtn_meta",
+    } <= _tables(config.resolved_db_url())
 
 
 def test_upgrade_stamps_head_revision(config: Settings) -> None:
@@ -72,6 +77,8 @@ def test_downgrade_base_drops_schema(config: Settings) -> None:
     remaining = _tables(config.resolved_db_url())
     assert "state_transitions" not in remaining
     assert "audit_entries" not in remaining
+    assert "dtn_bundles" not in remaining
+    assert "dtn_meta" not in remaining
 
 
 def test_upgrade_handles_percent_encoded_url(

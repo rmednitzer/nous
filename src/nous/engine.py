@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 from .audit import AuditLogger, AuditRecord, redact
 from .clocks import Clock, MonotonicClock
 from .config import Settings, get_settings
-from .db import StateTransitionLog
+from .db import DtnStore, StateTransitionLog
 from .estimators.apu import ApuEstimator
 from .estimators.biometrics import BiometricsKalman
 from .estimators.comms import CommsParticleFilter
@@ -217,6 +217,9 @@ class Engine:
         self.fsm = StateMachine(checker=self.safety)
         self.state = EngineState(mode=self.fsm.current)
         self.transition_log = transition_log or StateTransitionLog(None)
+        self.dtn_store = DtnStore(
+            self.transition_log.engine, init_error=self.transition_log.init_error
+        )
         self._started = False
         self._wall_start = 0.0
         self._failsafe = FailsafeArbiter(_FAILSAFE_CONDITIONS)
@@ -253,7 +256,7 @@ class Engine:
             ),
         )
         self.outbox = CommsOutbox(self.profile, rng=self.rng)
-        self.dtn_mesh = DtnMesh(self.profile, rng=self.rng)
+        self._build_dtn_mesh()
         self.position = PositionSubsystem(self.profile, rng=self.rng)
         self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
         self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
@@ -292,6 +295,19 @@ class Engine:
     @property
     def dt_s(self) -> float:
         return 1.0 / float(self.settings.tick_hz)
+
+    def _build_dtn_mesh(self) -> None:
+        """Construct the DTN mesh and restore any persisted store (BL-056 inc 4).
+
+        Runs on first boot and on every hot reload. ``dtn_store`` carries the
+        persisted store across a true process restart and across a reload; a
+        restore is a no-op when the mesh is disabled or nothing is stored.
+        """
+        mesh = DtnMesh(self.profile, rng=self.rng)
+        snapshot = self.dtn_store.load()
+        if snapshot is not None:
+            mesh.restore(snapshot, now_s=self.state.ts_s)
+        self.dtn_mesh = mesh
 
     def add_tick_hook(self, hook: TickHook) -> None:
         """Register a per-tick observer called with each tick's context (ADR 0040).
@@ -401,7 +417,7 @@ class Engine:
             ),
         )
         self.outbox = CommsOutbox(self.profile, rng=self.rng)
-        self.dtn_mesh = DtnMesh(self.profile, rng=self.rng)
+        self._build_dtn_mesh()
         self.position = PositionSubsystem(self.profile, rng=self.rng)
         self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
         self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
@@ -784,6 +800,8 @@ class Engine:
         # not a containment case like the external tick hooks.
         self.outbox.flush_tick(self.comms, dt, self.state.ts_s)
         self.dtn_mesh.step(dt, self.state.ts_s)
+        if self.dtn_mesh.enabled and self.dtn_mesh.consume_dirty():
+            self.dtn_store.save(self.dtn_mesh.snapshot(self.state.ts_s))
         self.position_est.predict(dt)
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est.predict(dt)

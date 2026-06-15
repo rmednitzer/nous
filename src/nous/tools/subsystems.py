@@ -464,8 +464,8 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
     async def dtn_mesh(ctx: Context | None = None) -> str:
         """Read the DTN mesh: nodes, contacts, in-transit bundles, counters (T0, BL-056).
 
-        The delay-tolerant-networking overlay (ADR 0062, ADR 0063) routes bundles
-        across a configured multi-node topology with store-and-forward and
+        The delay-tolerant-networking overlay (ADR 0062, ADR 0063, ADR 0064)
+        routes bundles across a configured multi-node topology with store-and-forward and
         custody transfer, using contact-graph routing over the contacts'
         schedules. Returns the self EID, the acknowledgement-loss percentage, the
         per-node held-bundle counts, the contact graph (up/down, rate, loss, and
@@ -474,8 +474,10 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         retransmits / dropped / expired / deduped), and the in-transit bundles
         grouped by holding node, each node's bundles in triage (forward) order
         (capped so the read stays bounded; ``bundles_truncated`` flags a deeper
-        backlog). With no ``dtn`` section in the profile the mesh is disabled:
-        ``enabled`` is false and the topology, bundles, and counters are empty.
+        backlog), and a ``persistence`` block reporting whether the store is
+        SQLite-backed and so survives a restart (ADR 0064). With no ``dtn``
+        section in the profile the mesh is disabled: ``enabled`` is false and the
+        topology, bundles, and counters are empty.
         """
 
         async def _work() -> str:
@@ -485,6 +487,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
             cap = 25
             body["bundles"] = [bundle.to_dict() for bundle in listed[:cap]]
             body["bundles_truncated"] = len(listed) > cap
+            body["persistence"] = app.engine.dtn_store.status()
             return json.dumps(body)
 
         return await wrap("dtn_mesh", {}, ctx, _work)

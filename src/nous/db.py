@@ -11,7 +11,8 @@ reads and writes do not block each other.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import json
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,9 @@ from sqlmodel import Field, Session, SQLModel, select
 
 __all__ = [
     "AuditEntry",
+    "DtnBundleRow",
+    "DtnMetaRow",
+    "DtnStore",
     "StateTransition",
     "StateTransitionLog",
     "init_db",
@@ -67,6 +71,56 @@ class AuditEntry(SQLModel, table=True):
     exit_code: int | None = None
     request_id: str = ""
     client_id: str = ""
+
+
+class DtnBundleRow(SQLModel, table=True):
+    """A persisted in-flight DTN bundle (BL-056 increment 4, ADR 0064).
+
+    One row per bundle held in a node's store at the last checkpoint. The holder
+    node EID owns the row; the bundle state is implicitly ``in_transit``
+    (delivered, dropped, and expired bundles are not held, so are not persisted).
+    """
+
+    __tablename__ = "dtn_bundles"
+
+    id: int | None = Field(default=None, primary_key=True)
+    holder_eid: str
+    bundle_id: str
+    source_eid: str
+    dest_eid: str
+    sequence: int
+    size_bytes: int
+    precedence: str
+    created_ts_s: float
+    expiry_ts_s: float | None = None
+    custody: bool = False
+    hops: int = 0
+    attempts: int = 0
+
+
+class DtnMetaRow(SQLModel, table=True):
+    """The single-row DTN mesh bookkeeping snapshot (BL-056 increment 4).
+
+    Holds what the bundle rows do not: the snapshot's simulated time (for
+    lifetime rebasing on restore across a clock reset), the next origination
+    sequence, the disposition counters, and the bounded dedup ledgers (the
+    mesh-wide delivered-id list and the per-node seen lists, JSON-encoded).
+    """
+
+    __tablename__ = "dtn_meta"
+
+    id: int | None = Field(default=None, primary_key=True)
+    ts_s: float = 0.0
+    next_seq: int = 1
+    originated: int = 0
+    delivered: int = 0
+    forwarded: int = 0
+    retransmits: int = 0
+    dropped: int = 0
+    expired: int = 0
+    deduped: int = 0
+    delivered_ids: str = ""
+    node_seen: str = ""
 
 
 def _enable_wal(dbapi_conn: Any, _record: Any) -> None:
@@ -195,3 +249,157 @@ class StateTransitionLog:
             self.append_failures += 1
             self.last_error = exc.__class__.__name__
             return []
+
+
+_DTN_COUNTER_KEYS = (
+    "originated",
+    "delivered",
+    "forwarded",
+    "retransmits",
+    "dropped",
+    "expired",
+    "deduped",
+)
+
+
+class DtnStore:
+    """Persist and restore the DTN mesh store across a restart (ADR 0064).
+
+    The engine checkpoints the mesh after a mutating tick and restores it when a
+    fresh ``DtnMesh`` is built (a process restart or a hot reload), so in-flight
+    and in-custody bundles survive a node restart, not just a link drop. Writes
+    are best effort and degrade silently like :class:`StateTransitionLog`: a
+    flaky DB cannot stall the tick loop. A ``None`` engine is the intentional
+    memory-only mode (nothing persists); a non-empty ``init_error`` flags a
+    configured-but-failed DB. Only the exception *class* is retained, never the
+    message, so a DB URL with credentials cannot leak through the ``dtn_mesh``
+    read.
+    """
+
+    def __init__(self, engine: Engine | None, *, init_error: str = "") -> None:
+        self.engine = engine
+        self.init_error = init_error
+        self.save_failures = 0
+        self.last_error = ""
+
+    @property
+    def degraded(self) -> bool:
+        if self.engine is None:
+            return bool(self.init_error)
+        return self.save_failures > 0
+
+    def status(self) -> dict[str, Any]:
+        """Read-only DTN persistence health for the ``dtn_mesh`` read."""
+        return {
+            "persistent": self.engine is not None,
+            "degraded": self.degraded,
+            "init_error": self.init_error,
+            "save_failures": self.save_failures,
+            "last_error": self.last_error,
+        }
+
+    def save(self, snapshot: Mapping[str, Any]) -> None:
+        """Replace the persisted store with ``snapshot`` in one transaction."""
+        if self.engine is None:
+            return
+        counters: Mapping[str, Any] = snapshot.get("counters", {})
+        nodes: Mapping[str, Any] = snapshot.get("nodes", {})
+        try:
+            with Session(self.engine) as session:
+                for bundle_row in session.exec(select(DtnBundleRow)).all():
+                    session.delete(bundle_row)
+                for meta_row in session.exec(select(DtnMetaRow)).all():
+                    session.delete(meta_row)
+                session.add(
+                    DtnMetaRow(
+                        id=1,
+                        ts_s=float(snapshot.get("ts_s", 0.0)),
+                        next_seq=int(snapshot.get("next_seq", 1)),
+                        originated=int(counters.get("originated", 0)),
+                        delivered=int(counters.get("delivered", 0)),
+                        forwarded=int(counters.get("forwarded", 0)),
+                        retransmits=int(counters.get("retransmits", 0)),
+                        dropped=int(counters.get("dropped", 0)),
+                        expired=int(counters.get("expired", 0)),
+                        deduped=int(counters.get("deduped", 0)),
+                        delivered_ids=json.dumps(list(snapshot.get("delivered_ids", []))),
+                        node_seen=json.dumps(
+                            {eid: list(n.get("seen", [])) for eid, n in nodes.items()}
+                        ),
+                    )
+                )
+                for eid, node in nodes.items():
+                    for b in node.get("bundles", []):
+                        session.add(
+                            DtnBundleRow(
+                                holder_eid=eid,
+                                bundle_id=b["bundle_id"],
+                                source_eid=b["source_eid"],
+                                dest_eid=b["dest_eid"],
+                                sequence=int(b["sequence"]),
+                                size_bytes=int(b["size_bytes"]),
+                                precedence=str(b["precedence"]),
+                                created_ts_s=float(b["created_ts_s"]),
+                                expiry_ts_s=(
+                                    None
+                                    if b["expiry_ts_s"] is None
+                                    else float(b["expiry_ts_s"])
+                                ),
+                                custody=bool(b["custody"]),
+                                hops=int(b["hops"]),
+                                attempts=int(b["attempts"]),
+                            )
+                        )
+                session.commit()
+        except Exception as exc:  # noqa: BLE001
+            self.save_failures += 1
+            self.last_error = exc.__class__.__name__
+
+    def load(self) -> dict[str, Any] | None:
+        """Return the persisted snapshot, or ``None`` when nothing is stored.
+
+        Best effort: a DB read failure or a corrupt JSON ledger is caught,
+        counted as a degradation, and returned as ``None`` rather than raised, so
+        a bad store cannot crash engine init or a hot reload.
+        """
+        if self.engine is None:
+            return None
+        try:
+            with Session(self.engine) as session:
+                meta = session.exec(select(DtnMetaRow)).first()
+                if meta is None:
+                    return None
+                bundles = list(session.exec(select(DtnBundleRow)).all())
+            seen_map: dict[str, list[str]] = json.loads(meta.node_seen or "{}")
+            nodes: dict[str, dict[str, Any]] = {
+                eid: {"seen": list(seen), "bundles": []}
+                for eid, seen in seen_map.items()
+            }
+            for row in bundles:
+                node = nodes.setdefault(row.holder_eid, {"seen": [], "bundles": []})
+                node["bundles"].append(
+                    {
+                        "bundle_id": row.bundle_id,
+                        "source_eid": row.source_eid,
+                        "dest_eid": row.dest_eid,
+                        "sequence": row.sequence,
+                        "size_bytes": row.size_bytes,
+                        "precedence": row.precedence,
+                        "created_ts_s": row.created_ts_s,
+                        "expiry_ts_s": row.expiry_ts_s,
+                        "custody": row.custody,
+                        "hops": row.hops,
+                        "attempts": row.attempts,
+                    }
+                )
+            return {
+                "ts_s": meta.ts_s,
+                "next_seq": meta.next_seq,
+                "counters": {k: getattr(meta, k) for k in _DTN_COUNTER_KEYS},
+                "delivered_ids": json.loads(meta.delivered_ids or "[]"),
+                "nodes": nodes,
+            }
+        except Exception as exc:  # noqa: BLE001
+            self.save_failures += 1
+            self.last_error = exc.__class__.__name__
+            return None
