@@ -74,3 +74,7 @@ comms:
     - { id: wifi, bandwidth_bps: 100000000, rssi_dbm_nominal: -55, loss_pct_nominal: 0.1, max_age_s: 5 }
     - { id: lte, bandwidth_bps: 20000000, rssi_dbm_nominal: -75, loss_pct_nominal: 0.5, max_age_s: 30 }
   outbox: { enabled: true, max_packages: 256, max_bytes: 1048576, default_ttl_s: 300 }  # BL-077
+  emcon:  # BL-060: emission-control profiles; default unrestricted, inert until emcon_set
+    default: unrestricted
+    profiles:
+      low_pi: { permit_links: [lte] }  # low-probability-of-intercept: cellular only

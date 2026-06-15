@@ -28,6 +28,8 @@ the committed copy after changing a tool's signature or docstring.
 | `device_info` | T0 | Report version, profile, transport, policy, audit/anchor, persistence, safety posture. |
 | `dtn_mesh` | T0 | Read the DTN mesh: nodes, contacts, in-transit bundles, counters (T0, BL-056). |
 | `dtn_send` | T2 | Originate a bundle at the device node toward a remote EID (T2, BL-056). |
+| `emcon_set` | T2 | Set the active EMCON emission profile (T2, BL-060 / ADR 0065). |
+| `emcon_status` | T0 | Read the EMCON emission posture: active profile and permitted links (T0, BL-060). |
 | `inference_cloud` | T2 | Cloud-path inference through the SC-5 fallback ladder (ADR 0034). |
 | `inference_local` | T1 | Local-path inference. |
 | `inference_status` | T0 | Inference subsystem totals: calls, tokens, joules, last latency. |
@@ -442,6 +444,34 @@ tool registry.
     "dest_eid"
   ],
   "title": "dtn_sendArguments",
+  "type": "object"
+}
+```
+
+### `emcon_set`
+
+```json
+{
+  "properties": {
+    "profile": {
+      "title": "Profile",
+      "type": "string"
+    }
+  },
+  "required": [
+    "profile"
+  ],
+  "title": "emcon_setArguments",
+  "type": "object"
+}
+```
+
+### `emcon_status`
+
+```json
+{
+  "properties": {},
+  "title": "emcon_statusArguments",
   "type": "object"
 }
 ```

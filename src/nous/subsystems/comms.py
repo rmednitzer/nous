@@ -35,6 +35,7 @@ from typing import Any
 import numpy as np
 
 from ..state.comms_state import CommsState, derive
+from ..state.emcon import Emcon
 from ..types import LinkEstimate, Observation
 from .propagation import LinkPropagation, rician_fade_db, solve_link_budget
 
@@ -128,6 +129,7 @@ class CommsSubsystem:
                 continue
             self._links[link.link_id] = link
         self._t = 0.0
+        self.emcon = Emcon(comms_cfg)
 
     @property
     def link_ids(self) -> list[str]:
@@ -176,7 +178,8 @@ class CommsSubsystem:
         """Record a transmission, returning the bytes accepted.
 
         A send is rejected (returns 0, and ``age_s`` is left unchanged) when the
-        link is unknown, the controller has forced it down, its modeled
+        link is unknown, the controller has forced it down, the active EMCON
+        profile forbids emitting on it (BL-060 / ADR 0065), its modeled
         ``capacity_bps`` has collapsed to zero (a propagation link below its SNR
         floor carries nothing; audit 2026-06-14b H-1), or ``n_bytes`` is
         non-positive. Only an accepted send resets ``age_s`` to 0 and updates
@@ -190,6 +193,8 @@ class CommsSubsystem:
         if link is None:
             return 0
         if link.forced_state is False:
+            return 0
+        if not self.emcon.permits(link_id):
             return 0
         if link.capacity_bps <= 0.0:
             # A propagation link driven below its SNR floor carries nothing:

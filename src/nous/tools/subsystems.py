@@ -235,15 +235,42 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         Wraps the comms subsystem's ``tx`` seam: a successful send resets the
         link's age-out timer (keeping it live) and updates its coarse
         throughput. A send on an unknown link, a link the controller has forced
-        down, or a non-positive byte count is rejected. Returns ``{"ok": bool,
+        down, or a non-positive byte count is rejected. When the active EMCON
+        profile forbids emitting on the link (BL-060 / ADR 0065), the bytes are
+        held in the store-and-forward outbox (``reason`` ``emcon``) instead of
+        dropped, so they ship when emissions resume. Returns ``{"ok": bool,
         "link_id": str, "bytes_accepted": int, "connected": bool}``; ``ok`` is
-        ``false`` when no bytes were accepted. Tier T2 (stateful): the link's
-        live state changes and the call is audited.
+        ``false`` when no bytes were accepted. An EMCON defer adds ``reason``
+        (``emcon``), ``emcon_profile``, and ``enqueued`` (whether the outbox
+        took the held bytes); ``connected`` still reflects the link's real
+        ``is_live`` health, since EMCON is orthogonal to connectivity. Tier T2
+        (stateful): the link's live state changes and the call is audited.
         """
 
         async def _work() -> str:
-            accepted = app.engine.comms.tx(link_id, n_bytes)
-            link = app.engine.comms.link(link_id)
+            engine = app.engine
+            link = engine.comms.link(link_id)
+            if (
+                link is not None
+                and n_bytes > 0
+                and not engine.comms.emcon.permits(link_id)
+            ):
+                held = engine.outbox.enqueue(
+                    link_id, int(n_bytes), now_s=engine.state.ts_s, kind="emcon_deferred"
+                )
+                return json.dumps(
+                    {
+                        "ok": False,
+                        "link_id": link_id,
+                        "bytes_accepted": 0,
+                        "reason": "emcon",
+                        "emcon_profile": engine.comms.emcon.active,
+                        "enqueued": held.accepted,
+                        "connected": bool(link.is_live()),
+                    }
+                )
+            accepted = engine.comms.tx(link_id, n_bytes)
+            link = engine.comms.link(link_id)
             return json.dumps(
                 {
                     "ok": accepted > 0,
@@ -459,6 +486,49 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
             ctx,
             _work,
         )
+
+    @mcp.tool()
+    async def emcon_status(ctx: Context | None = None) -> str:
+        """Read the EMCON emission posture: active profile and permitted links (T0, BL-060).
+
+        EMCON (emission control, ADR 0065) is an operator-imposed posture that
+        gates which comms links the device may emit on, orthogonal to physical
+        link health. Returns the active profile, whether a ``comms.emcon`` profile
+        section configured it, the links the active profile permits, and every
+        available profile with its permitted links. ``unrestricted`` (all links)
+        and ``silent`` (none) are always present; with no ``comms.emcon`` section
+        the posture is ``unrestricted`` and inert.
+        """
+
+        async def _work() -> str:
+            return json.dumps(app.engine.comms.emcon.status())
+
+        return await wrap("emcon_status", {}, ctx, _work)
+
+    @mcp.tool()
+    async def emcon_set(profile: str, ctx: Context | None = None) -> str:
+        """Set the active EMCON emission profile (T2, BL-060 / ADR 0065).
+
+        Activates a named emission profile, changing which links the device may
+        emit on from this tick forward. ``silent`` imposes full radio silence,
+        ``unrestricted`` lifts EMCON, and a profile-defined name permits its
+        subset. While a profile forbids a link, a ``comms_send`` / ``comms_publish``
+        / ``self_model_publish`` on it is held in the store-and-forward outbox
+        rather than dropped, and the tick-driven drain ships the backlog once the
+        posture is lifted. Returns ``{"ok": bool, "reason": str, ...}`` with the
+        new posture; ``ok`` is false, and nothing changes, for an unknown profile.
+        Tier T2 (stateful).
+        """
+
+        async def _work() -> str:
+            emcon = app.engine.comms.emcon
+            ok = emcon.set_profile(profile)
+            body = emcon.status()
+            body["ok"] = ok
+            body["reason"] = "" if ok else f"unknown profile {profile}"
+            return json.dumps(body)
+
+        return await wrap("emcon_set", {"profile": profile}, ctx, _work)
 
     @mcp.tool()
     async def dtn_mesh(ctx: Context | None = None) -> str:

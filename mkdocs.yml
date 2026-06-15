@@ -148,6 +148,7 @@ nav:
       - "0062 Multi-node DTN mesh with custody transfer": adr/0062-dtn-multi-node-mesh-with-custody.md
       - "0063 Contact-graph routing and an explicit custody acknowledgement": adr/0063-dtn-contact-graph-routing-and-custody-ack.md
       - "0064 Persisting the DTN store across a restart": adr/0064-dtn-store-persistence.md
+      - "0065 EMCON emission-control postures": adr/0065-emcon-emission-control.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md
