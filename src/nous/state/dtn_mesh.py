@@ -323,7 +323,12 @@ class DtnMesh:
         return False
 
     def in_transit(self) -> list[MeshBundle]:
-        return [b for eid in sorted(self.nodes) for b in self.nodes[eid].store]
+        """Held bundles grouped by node EID, each node's store in triage order."""
+        return [
+            bundle
+            for eid in sorted(self.nodes)
+            for bundle in self._triage(self.nodes[eid].store)
+        ]
 
     def status(self) -> dict[str, Any]:
         """The read surface for the ``dtn_mesh`` tool."""

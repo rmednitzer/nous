@@ -469,9 +469,11 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         transfer. Returns the self EID, the per-node held-bundle counts, the
         contact graph (up/down, rate, loss), the in-transit total, the cumulative
         disposition counters (originated / delivered / forwarded / retransmits /
-        dropped / expired), and the in-transit bundles in triage order (capped so
-        the read stays bounded; ``bundles_truncated`` flags a deeper backlog).
-        Empty when the profile carries no ``dtn`` section.
+        dropped / expired), and the in-transit bundles grouped by holding node,
+        each node's bundles in triage (forward) order (capped so the read stays
+        bounded; ``bundles_truncated`` flags a deeper backlog). With no ``dtn``
+        section in the profile the mesh is disabled: ``enabled`` is false and the
+        topology, bundles, and counters are empty.
         """
 
         async def _work() -> str:
