@@ -151,6 +151,7 @@ nav:
       - "0065 EMCON emission-control postures": adr/0065-emcon-emission-control.md
       - "0066 EMCON scheduled emission windows": adr/0066-emcon-scheduled-emission-windows.md
       - "0067 EMCON metadata minimisation": adr/0067-emcon-metadata-minimisation.md
+      - "0068 DTN custody-store bound and restore-loss accounting": adr/0068-dtn-custody-store-bound-and-restore-loss-accounting.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md

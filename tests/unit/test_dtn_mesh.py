@@ -404,3 +404,62 @@ def test_restore_rebases_lifetime_across_a_clock_reset() -> None:
     restored = fresh.in_transit()[0]
     # The remaining 300s is preserved, not the absolute expiry of 600.
     assert restored.expiry_ts_s == 300.0
+
+
+def test_store_cap_sheds_bundles_over_capacity() -> None:
+    mesh = _mesh({"self_eid": "dtn://dev/", "max_store": 3}, rng=np.random.default_rng(0))
+    for _ in range(5):
+        mesh.originate("dtn://unreachable/", 100, now_s=0.0, lifetime_s=0)
+    status = mesh.status()
+    assert status["max_store"] == 3
+    assert status["nodes"][0]["held"] == 3  # the self node holds at most the cap
+    assert status["counters"]["dropped"] == 2  # the two over-cap bundles are shed
+
+
+def test_store_cap_keeps_higher_precedence() -> None:
+    from nous.state.comms_outbox import Precedence
+
+    mesh = _mesh({"self_eid": "dtn://dev/", "max_store": 2}, rng=np.random.default_rng(0))
+    for bid in ("r1", "r2"):
+        mesh.originate(
+            "dtn://u/", 100, now_s=0.0, precedence=Precedence.ROUTINE, lifetime_s=0, bundle_id=bid
+        )
+    mesh.originate(
+        "dtn://u/", 100, now_s=0.0, precedence=Precedence.FLASH, lifetime_s=0, bundle_id="f1"
+    )
+    held = {b.bundle_id for b in mesh.in_transit()}
+    assert "f1" in held  # flash displaced a routine one, not rejected
+    assert len(held) == 2
+
+
+def _ghost_row(bid: str) -> dict[str, Any]:
+    return {
+        "bundle_id": bid,
+        "source_eid": "dtn://x/",
+        "dest_eid": "dtn://y/",
+        "sequence": 1,
+        "size_bytes": 100,
+        "precedence": "routine",
+        "created_ts_s": 0.0,
+        "expiry_ts_s": None,
+        "custody": True,
+        "hops": 0,
+        "attempts": 0,
+    }
+
+
+def test_restore_counts_bundles_for_a_removed_node() -> None:
+    mesh = _mesh({"self_eid": "dtn://dev/"}, rng=np.random.default_rng(0))
+    snapshot: dict[str, Any] = {
+        "ts_s": 0.0,
+        "next_seq": 9,
+        "counters": {},
+        "delivered_ids": [],
+        "nodes": {
+            "dtn://dev/": {"seen": [], "bundles": []},
+            "dtn://ghost/": {"seen": [], "bundles": [_ghost_row("g1"), _ghost_row("g2")]},
+        },
+    }
+    mesh.restore(snapshot, now_s=0.0)
+    assert mesh.restore_lost_total == 2
+    assert mesh.status()["counters"]["restore_lost"] == 2

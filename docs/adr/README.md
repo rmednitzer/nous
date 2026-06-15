@@ -70,3 +70,4 @@
 | 0065 | [EMCON emission-control postures](0065-emcon-emission-control.md) | Accepted | 2026-06-15 |
 | 0066 | [EMCON scheduled emission windows](0066-emcon-scheduled-emission-windows.md) | Accepted | 2026-06-15 |
 | 0067 | [EMCON metadata minimisation](0067-emcon-metadata-minimisation.md) | Accepted | 2026-06-15 |
+| 0068 | [DTN custody-store bound and restore-loss accounting](0068-dtn-custody-store-bound-and-restore-loss-accounting.md) | Accepted | 2026-06-15 |

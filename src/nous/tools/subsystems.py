@@ -540,14 +540,15 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
     async def dtn_mesh(ctx: Context | None = None) -> str:
         """Read the DTN mesh: nodes, contacts, in-transit bundles, counters (T0, BL-056).
 
-        The delay-tolerant-networking overlay (ADR 0062, ADR 0063, ADR 0064)
+        The delay-tolerant-networking overlay (ADR 0062, ADR 0063, ADR 0064, ADR 0068)
         routes bundles across a configured multi-node topology with store-and-forward and
         custody transfer, using contact-graph routing over the contacts'
         schedules. Returns the self EID, the acknowledgement-loss percentage, the
-        per-node held-bundle counts, the contact graph (up/down, rate, loss, and
-        the optional ``start_s`` / ``end_s`` window), the in-transit total, the
-        cumulative disposition counters (originated / delivered / forwarded /
-        retransmits / dropped / expired / deduped), and the in-transit bundles
+        per-node held-bundle counts and the per-node store cap (``max_store``,
+        ADR 0068), the contact graph (up/down, rate, loss, and the optional
+        ``start_s`` / ``end_s`` window), the in-transit total, the cumulative
+        disposition counters (originated / delivered / forwarded / retransmits /
+        dropped / expired / deduped / restore_lost), and the in-transit bundles
         grouped by holding node, each node's bundles in triage (forward) order
         (capped so the read stays bounded; ``bundles_truncated`` flags a deeper
         backlog), and a ``persistence`` block reporting whether the store is

@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (comms: DTN custody-store bound and restore-loss accounting, BL-098 / BL-100 / ADR 0068)
+
+- The 2026-06-15 audit's three DTN custody gaps are addressed. A node's store is
+  now bounded by `dtn.max_store` (default 256): an admit beyond the cap sheds the
+  triage-worst held bundle (lowest precedence, newest) and counts it as `dropped`,
+  so a stream of unroutable or no-expiry bundles cannot grow memory without bound
+  (BL-098), and a low-precedence flood cannot evict a high-precedence custody
+  bundle. `restore()` now counts every bundle it skips because the holder node
+  left the topology into a `restore_lost` counter on the `dtn_mesh` read, so the
+  custody loss is no longer silent (BL-100). The retransmit storm (BL-099) was
+  over-stated: per-node dedup already bounds live copies to the node count and the
+  persisted `attempts` cap bounds each lineage, and the new store cap makes the
+  per-node bound explicit, so no second cap was needed. Migration-free: `max_store`
+  is config, the eviction reuses `dropped`, and `restore_lost` is runtime.
+
 ### Fixed (comms: EMCON OPSEC remediations from the 2026-06-15 audit, BL-060)
 
 - An adversarial audit pass (`docs/audit-2026-06-15.md`) found and fixed three
