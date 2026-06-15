@@ -29,7 +29,10 @@ async def test_tick_advance_steps_engine_time(config: Settings) -> None:
     out = _payload(await app.mcp.call_tool("tick_advance", {"n": 5}))
 
     assert out["ok"] is True
-    assert out["ticks_advanced"] == 5
+    assert out["ticks_requested"] == 5
+    # No background loop in this app, so the net engine advance equals the
+    # ticks this call stepped.
+    assert out["ticks_elapsed"] == 5
     assert out["tick"] == before + 5
     assert app.engine.state.tick == before + 5
     assert out["ts_s"] == pytest.approx(5 * app.engine.dt_s)
@@ -42,7 +45,7 @@ async def test_tick_advance_defaults_to_one(config: Settings) -> None:
 
     out = _payload(await app.mcp.call_tool("tick_advance", {}))
 
-    assert out["ok"] is True and out["ticks_advanced"] == 1
+    assert out["ok"] is True and out["ticks_requested"] == 1
     assert app.engine.state.tick == before + 1
 
 

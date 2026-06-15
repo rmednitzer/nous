@@ -17,6 +17,7 @@ import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from xml.etree import ElementTree
 
 import pytest
@@ -953,7 +954,6 @@ class TestH1CommsTxRejectsZeroCapacityLink:
 
     def test_tx_rejects_and_stamps_zero_rate(self) -> None:
         from collections.abc import Mapping
-        from typing import Any
 
         from nous.subsystems.comms import CommsSubsystem
 
@@ -1162,3 +1162,51 @@ class TestLow3CapPersistErrorIsDistinctFromExhaustion:
         with pytest.raises(CapPersistError):
             CallCap(tmp_path / "cap.json", cap=5).increment()
         assert not issubclass(CapPersistError, CapExhausted)
+
+
+class TestMed2TickAdvanceCountIsHonest:
+    """MED-2: tick_advance must not report ``n`` as the net engine advance.
+
+    Original defect (``docs/audit-2026-06-14b.md`` MED-2): the tool returned
+    ``ticks_advanced=n``, but the concurrent tick loop can fire ``engine.tick()``
+    during the periodic checkpoint yield, so the engine's ``tick`` / ``ts_s``
+    advanced by more than ``n``. A caller computing ``start_ts + n*dt`` then
+    disagreed with the reported ``ts_s``.
+
+    Fix (BL-093): the field is ``ticks_requested`` (the ticks this call stepped),
+    and a new ``ticks_elapsed`` reports the true net engine delta, so ``ts_s`` is
+    consistent with ``ticks_elapsed`` rather than with ``ticks_requested``.
+    """
+
+    async def test_loop_ticks_during_a_yield_count_as_elapsed_not_requested(
+        self, config: Settings, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import anyio
+
+        from nous.server import build_app
+
+        app = build_app(config)
+        real_checkpoint = anyio.lowlevel.checkpoint
+
+        async def _checkpoint_that_also_ticks() -> None:
+            # Simulate the background tick loop firing during the advance's yield.
+            app.engine.tick()
+            await real_checkpoint()
+
+        monkeypatch.setattr(
+            "nous.tools.scenarios.anyio.lowlevel.checkpoint",
+            _checkpoint_that_also_ticks,
+        )
+        before = app.engine.state.tick
+        result: Any = await app.mcp.call_tool("tick_advance", {"n": 100})
+        content, _ = result
+        out = json.loads(content[0].text)
+
+        # 100 stepped here; the checkpoints at done=50 and done=100 each added a
+        # tick, so the engine advanced 102 -- more than this call stepped.
+        assert out["ticks_requested"] == 100
+        assert out["ticks_elapsed"] == 102
+        assert out["ticks_elapsed"] > out["ticks_requested"]
+        assert out["tick"] == before + 102
+        # ts_s tracks the true elapsed advance, not the requested count.
+        assert out["ts_s"] == pytest.approx(out["tick"] * app.engine.dt_s)
