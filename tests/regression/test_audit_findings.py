@@ -1222,9 +1222,10 @@ class TestMed3StatusReadsRejectionsThroughHealth:
     attribute, so a Protocol-conforming replacement that omitted it would
     ``AttributeError`` inside the T0 read.
 
-    Fix (ADR 0058 / ADR 0045): the tools read the count from
-    ``estimate.state().health``, a Protocol-method path, and an estimator that
-    reports no health block reads as zero rejections instead of raising.
+    Fix (ADR 0058 / ADR 0045): the tools read the count from the health block of
+    the estimator's ``state()`` return (``est.state().health``), a
+    Protocol-method path, and an estimator that reports no health block reads as
+    zero rejections instead of raising.
     """
 
     async def test_status_survives_a_protocol_estimator_without_the_attribute(
