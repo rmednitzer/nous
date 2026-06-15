@@ -137,7 +137,12 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1010 tests pass at HEAD: BL-096 added one (the
+  feature branch before merge. 1012 tests pass at HEAD: BL-097 added two (the
+  MkDocs nav drift gate in `tests/unit/test_docs_nav.py`: the ADR nav block is
+  generator-current from each ADR's H1, and every `docs/**/*.md` page is in the
+  nav or on the dated-logs / showcase-gallery exemption list, so a new ADR or
+  reference page cannot ship an out-of-date nav; docs tooling, no ADR), on top of
+  the 1010 from BL-096, which added one (the
   `TestLow2` regression pin in `tests/regression/test_audit_findings.py` per ADR
   0023, asserting `inference_local` classifies T1 and is admitted under guarded
   mode while `inference_cloud` is T2 and refused, recording the ADR 0060 decision

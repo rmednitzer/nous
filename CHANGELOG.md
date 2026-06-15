@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (docs: generate the MkDocs ADR nav with a drift gate, BL-097)
+
+- A new `scripts/gen_mkdocs_adr_nav.py` regenerates the `mkdocs.yml` ADR nav
+  block from each ADR's H1 (the source `gen_adr_index.py` already uses), between
+  `# BEGIN/END generated ADR nav` markers, wired into `make schema` and the docs
+  workflow. The 2026-06-14b audit (DOC-1) found the hand-maintained nav had
+  drifted to list only ADRs 0000 through 0017, and a page absent from the nav is
+  only an INFO line under `mkdocs build --strict`, so CI never caught it.
+  `tests/unit/test_docs_nav.py` is the drift gate the strict build cannot be: it
+  runs on every PR, asserting the ADR block is generator-current and that every
+  `docs/**/*.md` page is in the nav or on the dated-logs / showcase-gallery
+  exemption list. Generating from each H1 also normalised the 0001 through 0017
+  nav labels, which had been hand-abbreviated, to their full ADR titles.
+
 ### Documented (policy: inference_local stays T1 despite its usage counters, BL-096 / ADR 0060)
 
 - `inference_local` is T1 (reversible), yet it increments monotonic

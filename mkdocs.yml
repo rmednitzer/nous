@@ -82,24 +82,25 @@ nav:
       - Self-model: model-cards/self-model.md
   - ADRs:
       - Index: adr/README.md
+      # BEGIN generated ADR nav (scripts/gen_mkdocs_adr_nav.py; make schema)
       - "0000 Template": adr/0000-template.md
-      - "0001 FastMCP and tiered policy": adr/0001-fastmcp-and-tiered-policy.md
-      - "0002 SQLite, Alembic, JSONL audit": adr/0002-sqlite-alembic-and-jsonl-audit.md
-      - "0003 Hardware profile YAML": adr/0003-hardware-profile-yaml.md
-      - "0004 Hand-rolled FSM": adr/0004-hand-rolled-fsm.md
-      - "0005 Anthropic client and daily cap": adr/0005-anthropic-client-and-daily-cap.md
-      - "0006 Internal vocabularies": adr/0006-internal-vocabularies.md
-      - "0007 Additive-surface rule": adr/0007-additive-surface-rule.md
-      - "0008 VM deployment pattern": adr/0008-vm-deployment-pattern.md
-      - "0009 STPA-Pro as safety method": adr/0009-stpa-pro-as-safety-method.md
+      - "0001 FastMCP server with a tiered policy + audited runner": adr/0001-fastmcp-and-tiered-policy.md
+      - "0002 SQLite with Alembic, JSONL audit alongside": adr/0002-sqlite-alembic-and-jsonl-audit.md
+      - "0003 Hardware-profile YAML as the source of truth": adr/0003-hardware-profile-yaml.md
+      - "0004 Hand-rolled finite-state machine": adr/0004-hand-rolled-fsm.md
+      - "0005 Anthropic client with a hard daily cap and prompt-cache discipline": adr/0005-anthropic-client-and-daily-cap.md
+      - "0006 Internal vocabularies for OperatorState and CommsState": adr/0006-internal-vocabularies.md
+      - "0007 Additive-surface rule beyond L0": adr/0007-additive-surface-rule.md
+      - "0008 VM deployment pattern (Ubuntu 24.04 + systemd + Caddy)": adr/0008-vm-deployment-pattern.md
+      - "0009 STPA-Pro as the safety analysis method": adr/0009-stpa-pro-as-safety-method.md
       - "0010 Self-model and estimation layer": adr/0010-self-model-and-estimation-layer.md
-      - "0011 Interoperability adapters": adr/0011-interoperability-adapters.md
-      - "0012 Versioned schemas": adr/0012-versioned-schemas.md
-      - "0013 Tier-classified subsystems": adr/0013-tier-classified-subsystems.md
-      - "0014 Docs site MkDocs Pages": adr/0014-docs-site-mkdocs-pages.md
-      - "0015 APU strictly auxiliary": adr/0015-apu-strictly-auxiliary.md
-      - "0016 Deployment baseline Ubuntu 26.04": adr/0016-deployment-baseline-ubuntu-2604.md
-      - "0017 Public showcase site": adr/0017-public-showcase-site.md
+      - "0011 Interoperability adapters as a single Protocol": adr/0011-interoperability-adapters.md
+      - "0012 Versioned schemas for profiles, scenarios, and tool I/O": adr/0012-versioned-schemas.md
+      - "0013 Tier-classified subsystem read/write tools": adr/0013-tier-classified-subsystems.md
+      - "0014 Docs site on MkDocs with GitHub Pages": adr/0014-docs-site-mkdocs-pages.md
+      - "0015 APU is strictly auxiliary; the primary battery is the sole bus": adr/0015-apu-strictly-auxiliary.md
+      - "0016 Deployment baseline upgrades to Ubuntu 26.04 LTS": adr/0016-deployment-baseline-ubuntu-2604.md
+      - "0017 Public showcase site on the existing docs Pages target": adr/0017-public-showcase-site.md
       - "0018 FSM transition guards for STPA safety constraints": adr/0018-fsm-guards-for-stpa-constraints.md
       - "0019 Deterministic seed and clock seam at the engine boundary": adr/0019-deterministic-seed-and-clock-seam.md
       - "0020 Property-based invariants for subsystem physics": adr/0020-subsystem-physics-invariants.md
@@ -143,6 +144,7 @@ nav:
       - "0058 Read estimator rejections through health, and stringify decode keys": adr/0058-rejections-through-health-and-decode-key-coercion.md
       - "0059 comms_state CONNECTED requires every configured link healthy": adr/0059-comms-connected-requires-all-configured-links.md
       - "0060 inference_local stays T1 (reversible) despite its usage counters": adr/0060-inference-local-stays-reversible.md
+      # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md
       - "01 Purpose": stpa/01-purpose.md
