@@ -32,7 +32,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from .anthropic_client import CapExhausted
+from .anthropic_client import CapExhausted, CapPersistError
 from .state.comms_state import CommsState
 
 __all__ = ["FallbackResult", "InferenceFallback"]
@@ -94,6 +94,10 @@ class InferenceFallback:
             body = await self._cloud_call(prompt, system)
         except CapExhausted as exc:
             return await self._do_local(prompt, reason=f"cap exhausted: {exc}")
+        except CapPersistError as exc:
+            # A durability fault, not a spent budget: fail closed to the mock
+            # but report it honestly rather than as exhaustion (ADR 0056).
+            return await self._do_local(prompt, reason=f"cap not persisted: {exc}")
         except Exception as exc:  # noqa: BLE001
             return await self._do_local(
                 prompt, reason=f"cloud call failed: {exc.__class__.__name__}"

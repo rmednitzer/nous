@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nous.anthropic_client import CapExhausted
+from nous.anthropic_client import CapExhausted, CapPersistError
 from nous.inference_fallback import InferenceFallback
 from nous.state.comms_state import CommsState
 
@@ -83,6 +83,29 @@ async def test_local_used_when_cloud_raises_cap_exhausted() -> None:
     result = await f.call("hi")
     assert result.path == "local_mock"
     assert "cap exhausted" in result.reason
+
+
+@pytest.mark.asyncio
+async def test_local_used_when_cloud_raises_cap_persist_error() -> None:
+    # A durability fault (an fsync failure) is reported honestly as "cap not
+    # persisted", not as exhaustion, while still failing closed to the mock
+    # (ADR 0056).
+    async def cloud(_p: str, _s: str) -> str:
+        raise CapPersistError("counter could not be fsynced")
+
+    async def local(_p: str) -> str:
+        return "local-mock"
+
+    f = InferenceFallback(
+        cloud_call=cloud,
+        local_call=local,
+        comms_state=lambda: CommsState.CONNECTED,
+        cap_remaining=lambda: 1,
+    )
+    result = await f.call("hi")
+    assert result.path == "local_mock"
+    assert "cap not persisted" in result.reason
+    assert "cap exhausted" not in result.reason
 
 
 @pytest.mark.asyncio

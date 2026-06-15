@@ -13,12 +13,14 @@ import contextlib
 import sys
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from functools import cached_property
 from typing import Any
 
 import anyio
 from mcp.server.fastmcp import Context, FastMCP
 from starlette.applications import Starlette
 
+from .anthropic_client import AnthropicClient
 from .audit import AuditLogger
 from .audit_anchor import AnchorLog
 from .config import Settings, get_settings
@@ -92,6 +94,16 @@ class Nous:
     @property
     def policy_mode(self) -> PolicyMode:
         return PolicyMode(self.settings.policy)
+
+    @cached_property
+    def anthropic_client(self) -> AnthropicClient:
+        """Process-scoped Anthropic client built from this app's settings.
+
+        Reused across ``inference_cloud`` calls so one httpx pool serves the
+        process and ``last_cache_read_input_tokens`` stays observable, instead
+        of building a fresh client per call (MED-1, ADR 0056).
+        """
+        return AnthropicClient(self.settings)
 
 
 @asynccontextmanager

@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (inference: reuse the Anthropic client and name a cap durability fault honestly, BL-092 / ADR 0056)
+
+- `inference_cloud` built a fresh `AnthropicClient` per call, churning the httpx
+  pool and discarding the prompt-cache token metric. `Nous` now caches one client
+  via a `cached_property` built from its own settings, and the tool reuses it, so
+  one pool serves the process and `last_cache_read_input_tokens` stays observable
+  (the dead `build_client()` global, which read the wrong settings, is left in
+  place but superseded). And `CallCap.increment` raised `CapExhausted` on an
+  `os.fsync` failure, so a transient durability fault read to a controller as a
+  spent budget; it now raises a distinct `CapPersistError`, the fallback ladder
+  reports it as `cap not persisted` while still failing closed to the local mock,
+  and the cache-control markers in `call` are untouched.
+
 ### Fixed (comms: propagation-link correctness fixes, BL-091)
 
 - Four contained fixes to the BL-048 / BL-088 propagation code, all additive and

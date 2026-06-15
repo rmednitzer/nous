@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from ..anthropic_client import AnthropicClient
 from ..anthropic_status import cap_status
 from ..inference_fallback import InferenceFallback
 
@@ -91,7 +90,9 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         )
 
         async def _work() -> str:
-            client = AnthropicClient(cfg)
+            # One process-scoped client (MED-1, ADR 0056): reused across calls
+            # so the httpx pool and the prompt-cache metric persist.
+            client = app.anthropic_client
 
             async def _cloud(p: str, _s: str) -> str:
                 return await client.call(
