@@ -9,8 +9,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed (inference: reuse the Anthropic client and name a cap durability fault honestly, BL-092 / ADR 0056)
 
 - `inference_cloud` built a fresh `AnthropicClient` per call, churning the httpx
-  pool and discarding the prompt-cache token metric. `Nous` now caches one client
-  via a `cached_property` built from its own settings, and the tool reuses it, so
+  pool and discarding the prompt-cache token metric. `Nous` now builds one client
+  eagerly in its constructor (from its own settings), and the tool reuses it, so
   one pool serves the process and `last_cache_read_input_tokens` stays observable
   (the dead `build_client()` global, which read the wrong settings, is left in
   place but superseded). And `CallCap.increment` raised `CapExhausted` on an

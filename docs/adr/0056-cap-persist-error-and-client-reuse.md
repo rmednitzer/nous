@@ -26,14 +26,18 @@ conclude the daily budget was spent when it was not.
 
 ## Decision
 
-For MED-1, the app owns one client. `Nous` gains a `cached_property`,
-`anthropic_client`, built from `self.settings`, and `inference_cloud` reads
-`app.anthropic_client` instead of constructing its own. The client is built once
-per process on first use (inside the event loop), reused across calls so the
-httpx pool and the cache metric persist, and honours an injected `Settings`. The
-dead `build_client()` global is left untouched but is superseded for the tool
-path; the cache-control markers in `AnthropicClient.call` are unchanged, so the
-prompt-cache discipline is preserved (reuse only strengthens it).
+For MED-1, the app owns one client. `Nous` builds one `AnthropicClient` from
+`self.settings` eagerly in its constructor and exposes it as `anthropic_client`;
+`inference_cloud` reads `app.anthropic_client` instead of constructing its own.
+The eager single assignment makes the one-per-process guarantee hold
+unconditionally rather than via a `cached_property`, whose first-access compute
+is not thread-safe on Python 3.12+ (the SDK construction needs no running event
+loop, so building at construction is safe). The client is reused across calls so
+the httpx pool and the cache metric persist, and it honours an injected
+`Settings`. The dead `build_client()` global is left untouched but is superseded
+for the tool path; the cache-control markers in `AnthropicClient.call` are
+unchanged, so the prompt-cache discipline is preserved (reuse only strengthens
+it).
 
 For LOW-3, the fsync-durability failure raises a new `CapPersistError`,
 independent of `CapExhausted` (both subclass `RuntimeError`). The fallback ladder
@@ -54,8 +58,9 @@ ADR 0035 discipline is observable as intended. The only behaviour a caller sees
 change is the fallback reason on the rare fsync-failure path, and a single client
 identity for the process.
 
-The cost is one more exception type on the cap surface and a `cached_property`
-on `Nous`. The audit's literal suggestion (wire `build_client()`) was rejected
+The cost is one more exception type on the cap surface and one client built at
+`Nous` construction. The audit's literal suggestion (wire `build_client()`) was
+rejected
 because it would bind the tool to the global settings rather than the app's.
 Closes BL-092. Covered by additions to `tests/unit/test_anthropic_client.py`,
 `tests/unit/test_inference_fallback.py`, and the `TestMed1` / `TestLow3`

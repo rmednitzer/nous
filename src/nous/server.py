@@ -13,7 +13,6 @@ import contextlib
 import sys
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from functools import cached_property
 from typing import Any
 
 import anyio
@@ -86,6 +85,13 @@ class Nous:
         self.engine = Engine(
             settings=settings, transition_log=self.transition_log, audit=self.audit
         )
+        # One process-scoped Anthropic client (MED-1, ADR 0056): built once here,
+        # not per inference_cloud call, so a single httpx pool serves the process
+        # and the prompt-cache metric stays observable. Eager (a single
+        # assignment) so the one-per-process guarantee holds unconditionally,
+        # rather than via cached_property, whose first-access compute is not
+        # thread-safe on 3.12+ (the SDK construction needs no running loop).
+        self.anthropic_client = AnthropicClient(self.settings)
         # The active scenario session (ADR 0040). Process-scoped like the
         # engine itself (ADR 0024), so it survives stateless-HTTP requests.
         self.scenario_session: ScenarioSession | None = None
@@ -94,16 +100,6 @@ class Nous:
     @property
     def policy_mode(self) -> PolicyMode:
         return PolicyMode(self.settings.policy)
-
-    @cached_property
-    def anthropic_client(self) -> AnthropicClient:
-        """Process-scoped Anthropic client built from this app's settings.
-
-        Reused across ``inference_cloud`` calls so one httpx pool serves the
-        process and ``last_cache_read_input_tokens`` stays observable, instead
-        of building a fresh client per call (MED-1, ADR 0056).
-        """
-        return AnthropicClient(self.settings)
 
 
 @asynccontextmanager
