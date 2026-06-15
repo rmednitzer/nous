@@ -64,3 +64,4 @@
 | 0059 | [comms_state CONNECTED requires every configured link healthy](0059-comms-connected-requires-all-configured-links.md) | Accepted | 2026-06-15 |
 | 0060 | [inference_local stays T1 (reversible) despite its usage counters](0060-inference-local-stays-reversible.md) | Accepted | 2026-06-15 |
 | 0061 | [BPv7 bundle identity and a delivered-bundle ledger for the DTN layer](0061-dtn-bundle-identity-and-dedup.md) | Accepted | 2026-06-15 |
+| 0062 | [Multi-node DTN mesh with custody transfer](0062-dtn-multi-node-mesh-with-custody.md) | Accepted | 2026-06-15 |

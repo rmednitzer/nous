@@ -461,6 +461,99 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         )
 
     @mcp.tool()
+    async def dtn_mesh(ctx: Context | None = None) -> str:
+        """Read the DTN mesh: nodes, contacts, in-transit bundles, counters (T0, BL-056).
+
+        The delay-tolerant-networking overlay (ADR 0062) routes bundles across a
+        configured multi-node topology with store-and-forward and custody
+        transfer. Returns the self EID, the per-node held-bundle counts, the
+        contact graph (up/down, rate, loss), the in-transit total, the cumulative
+        disposition counters (originated / delivered / forwarded / retransmits /
+        dropped / expired), and the in-transit bundles grouped by holding node,
+        each node's bundles in triage (forward) order (capped so the read stays
+        bounded; ``bundles_truncated`` flags a deeper backlog). With no ``dtn``
+        section in the profile the mesh is disabled: ``enabled`` is false and the
+        topology, bundles, and counters are empty.
+        """
+
+        async def _work() -> str:
+            mesh = app.engine.dtn_mesh
+            body = mesh.status()
+            listed = mesh.in_transit()
+            cap = 25
+            body["bundles"] = [bundle.to_dict() for bundle in listed[:cap]]
+            body["bundles_truncated"] = len(listed) > cap
+            return json.dumps(body)
+
+        return await wrap("dtn_mesh", {}, ctx, _work)
+
+    @mcp.tool()
+    async def dtn_send(
+        dest_eid: str,
+        n_bytes: int = 1024,
+        precedence: str = "routine",
+        custody: bool = False,
+        lifetime_s: float | None = None,
+        bundle_id: str | None = None,
+        ctx: Context | None = None,
+    ) -> str:
+        """Originate a bundle at the device node toward a remote EID (T2, BL-056).
+
+        Injects a bundle into the DTN mesh (ADR 0062) bound for ``dest_eid``; the
+        tick loop routes it hop by hop over the up-contacts toward the
+        destination, storing it at each hop while a contact is down. ``custody``
+        requests reliable delivery: a custodial bundle is retained and
+        retransmitted on a lost forward rather than dropped, up to the profile's
+        retry bound. ``precedence`` is military message precedence (the mesh
+        forwards the highest first), ``lifetime_s`` overrides the default bundle
+        lifetime, and ``bundle_id`` names the bundle. Returns the assigned bundle,
+        or an error when the mesh is disabled (no ``dtn`` profile section) or the
+        size is non-positive. Tier T2 (stateful).
+        """
+
+        async def _work() -> str:
+            from ..state.comms_outbox import Precedence
+
+            mesh = app.engine.dtn_mesh
+            bundle = mesh.originate(
+                dest_eid,
+                int(n_bytes),
+                now_s=app.engine.state.ts_s,
+                precedence=Precedence.parse(precedence),
+                custody=bool(custody),
+                lifetime_s=lifetime_s,
+                bundle_id=bundle_id,
+            )
+            if bundle is None:
+                reason = (
+                    "dtn mesh disabled (no dtn profile section)"
+                    if not mesh.enabled
+                    else "non-positive size"
+                )
+                return json.dumps({"ok": False, "reason": reason})
+            return json.dumps(
+                {
+                    "ok": True,
+                    "bundle": bundle.to_dict(),
+                    "in_transit": len(mesh.in_transit()),
+                }
+            )
+
+        return await wrap(
+            "dtn_send",
+            {
+                "dest_eid": dest_eid,
+                "n_bytes": n_bytes,
+                "precedence": precedence,
+                "custody": custody,
+                "lifetime_s": lifetime_s,
+                "bundle_id": bundle_id,
+            },
+            ctx,
+            _work,
+        )
+
+    @mcp.tool()
     async def position_status(ctx: Context | None = None) -> str:
         """Position subsystem: lat/lon/alt ground truth, fix state, drift."""
 

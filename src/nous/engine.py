@@ -37,6 +37,7 @@ from .policy import Tier
 from .safety import SafetyResult
 from .state.comms_outbox import CommsOutbox
 from .state.comms_state import CommsState
+from .state.dtn_mesh import DtnMesh
 from .state.failsafe import FailsafeArbiter, FailsafeCondition
 from .state.machine import (
     REQ_COMMS_LINK,
@@ -252,6 +253,7 @@ class Engine:
             ),
         )
         self.outbox = CommsOutbox(self.profile, rng=self.rng)
+        self.dtn_mesh = DtnMesh(self.profile, rng=self.rng)
         self.position = PositionSubsystem(self.profile, rng=self.rng)
         self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
         self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
@@ -399,6 +401,7 @@ class Engine:
             ),
         )
         self.outbox = CommsOutbox(self.profile, rng=self.rng)
+        self.dtn_mesh = DtnMesh(self.profile, rng=self.rng)
         self.position = PositionSubsystem(self.profile, rng=self.rng)
         self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
         self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
@@ -780,6 +783,7 @@ class Engine:
         # like the estimators above -- a raising flush is a bug tests must catch,
         # not a containment case like the external tick hooks.
         self.outbox.flush_tick(self.comms, dt, self.state.ts_s)
+        self.dtn_mesh.step(dt, self.state.ts_s)
         self.position_est.predict(dt)
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est.predict(dt)
