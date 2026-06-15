@@ -64,6 +64,50 @@ def test_unknown_profile_is_rejected() -> None:
     assert emcon.active == UNRESTRICTED
 
 
+def test_rejected_default_profile_is_surfaced() -> None:
+    # A configured default naming an unknown profile falls back to unrestricted,
+    # but the rejection is legible rather than silent (BL-104).
+    emcon = Emcon(
+        {
+            "links": [{"id": "wifi"}, {"id": "lte"}],
+            "emcon": {
+                "default": "typo",
+                "profiles": {"low_pi": {"permit_links": ["lte"]}},
+            },
+        }
+    )
+    assert emcon.active == UNRESTRICTED  # fell back, did not crash
+    assert emcon.default_requested == "typo"
+    assert emcon.default_valid is False
+    status = emcon.status()
+    assert status["default_requested"] == "typo"
+    assert status["default_valid"] is False
+
+
+def test_valid_default_profile_reports_valid() -> None:
+    emcon = Emcon({"links": [{"id": "wifi"}], "emcon": {"default": "silent"}})
+    assert emcon.active == SILENT
+    assert emcon.default_requested == "silent"
+    assert emcon.default_valid is True
+    assert emcon.status()["default_valid"] is True
+
+
+def test_no_configured_default_is_valid_and_unrequested() -> None:
+    # An operator who configured no default is distinguishable from one whose
+    # default was rejected: requested is None, valid is True.
+    none_configured = Emcon({"links": [{"id": "wifi"}]})
+    assert none_configured.default_requested is None
+    assert none_configured.default_valid is True
+    # An operator who explicitly chose unrestricted is also valid, and is
+    # distinguishable from the rejected case by a non-null requested name.
+    chose_unrestricted = Emcon(
+        {"links": [{"id": "wifi"}], "emcon": {"default": "unrestricted"}}
+    )
+    assert chose_unrestricted.active == UNRESTRICTED
+    assert chose_unrestricted.default_requested == "unrestricted"
+    assert chose_unrestricted.default_valid is True
+
+
 def test_tx_is_gated_by_the_active_profile() -> None:
     comms = CommsSubsystem(_PROFILE, rng=np.random.default_rng(0))
     assert comms.tx("wifi", 100) == 100  # unrestricted: accepted

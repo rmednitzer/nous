@@ -9,7 +9,11 @@ transmit; the device emits on a link only when the active profile permits it.
 Two profiles are always available: ``unrestricted`` (every configured link) and
 ``silent`` (no link, full radio silence). Further named profiles come from an
 optional ``comms.emcon`` profile section, so a profile without one leaves EMCON
-unrestricted and inert, exactly as before.
+unrestricted and inert, exactly as before. A configured ``default`` that names an
+unknown profile falls back to ``unrestricted`` rather than failing; the fallback
+is surfaced (``default_requested`` / ``default_valid`` on ``status()``) so a
+controller can tell an operator who chose ``unrestricted`` from one whose default
+was rejected.
 
 A profile may also carry a duty-cycle emission ``window`` (ADR 0066): its links
 emit only inside a scheduled burst (``on_s`` open out of every ``period_s``,
@@ -85,6 +89,8 @@ class Emcon:
         all_links = _links_from_cfg(comms_cfg)
         section = comms_cfg.get("emcon") if isinstance(comms_cfg, Mapping) else None
         self.configured: bool = isinstance(section, Mapping) and bool(section)
+        self.default_requested: str | None = None
+        self.default_valid: bool = True
         self._all: set[str] = set(all_links)
         self._profiles: dict[str, set[str]] = {
             UNRESTRICTED: set(all_links),
@@ -108,8 +114,13 @@ class Emcon:
                     if minimizer is not None:
                         self._minimizers[key] = minimizer
             raw_default = section.get("default")
-            if isinstance(raw_default, str) and raw_default.strip() in self._profiles:
-                default = raw_default.strip()
+            if isinstance(raw_default, str) and raw_default.strip():
+                requested = raw_default.strip()
+                self.default_requested = requested
+                if requested in self._profiles:
+                    default = requested
+                else:
+                    self.default_valid = False  # rejected, fell back to unrestricted
         self._active = default
 
     def permits(self, link_id: str, now_s: float | None = None) -> bool:
@@ -151,6 +162,8 @@ class Emcon:
         return {
             "active": self._active,
             "configured": self.configured,
+            "default_requested": self.default_requested,
+            "default_valid": self.default_valid,
             "permitted_links": sorted(permitted),
             "emitting": bool(permitted) and in_window,
             "window": _window_dict(window),
