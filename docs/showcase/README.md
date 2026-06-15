@@ -21,11 +21,13 @@ authored and reviewed when the code they describe changes.
 The showcase is deliberately not a marketing page. The simulator is
 pre-1.0 and runs entirely in software. The L1 subsystem rollout is on
 `main` (ten subsystems, nine estimators), the self-model layer emits
-calibrated capability claims (BL-018, BL-035), and the scenario loader
-and injectors drive the engine end to end (BL-014). What it is not: no
-number has been compared against measured traces from real hardware, and
-the interop conformance is self-declared, not certified. See the
-[2026-06-06 audit](../audit-2026-06-06.md) and `AUDIT.md` for the
+calibrated capability claims (BL-018, BL-035), the comms stack carries a
+store-and-forward outbox, a multi-node DTN mesh, and operator EMCON
+posture (BL-077, BL-056, BL-060), and the scenario loader and injectors
+drive the engine end to end (BL-014). What it is not: no number has been
+compared against measured traces from real hardware, and the interop
+conformance is self-declared, not certified. See the
+[2026-06-15b audit](../audit-2026-06-15b.md) and `AUDIT.md` for the
 substance findings. The fidelity badges exist to keep the showcase
 honest about that. ADR 0017 records the decision behind this section.
 
@@ -33,5 +35,5 @@ If you are looking for the live reference instance, it remains
 private and gated; see `docs/deployment.md` for the deployment
 pattern. The live VM tracks `origin/main` via auto-update; if `main`
 lags the development line, the live MCP serves an older surface than
-this showcase claims (see audit-2026-06-06 §6 for the most recent
-probe).
+this showcase claims (see the 2026-06-14b audit for the most recent
+live probe).

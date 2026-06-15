@@ -35,7 +35,7 @@ rest as defaults. See [Fidelity](../fidelity.md) for the legend.
 
 - mode: `idle`
 - operator: `nominal`
-- comms: `degraded`
+- comms: `limited`
 - SoC: 82.013 %
 - APU offered: 0.0 W
 - fuel: 100.0 %

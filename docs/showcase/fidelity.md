@@ -10,7 +10,7 @@ extent the badge promises, and no further.
 | `filtered` | A substantive subsystem feeding a recursive estimator with a real predict and update step and a documented covariance bound. | Power SoC (Kalman over SoC and voltage). APU per-source (parallel Kalman). |
 | `parametric` | A substantive subsystem with profile-driven physics, but the estimator on top is a passthrough or stub. | Inference local path (profile-derived latency / energy / capacity, no estimator). Position estimator (v0.1 linear-Kalman passthrough; nonlinear IMU fusion is BL-026). Comms estimator (per-link belief tracker; full particle filter is BL-030). |
 | `stub` | A skeleton that returns plausible constants or simple time-additive values. No dynamics, no calibration. | None on the development line; the L1 subsystem rollout closed the previous stub posture. |
-| `planned` | A surface mentioned in the architecture or the backlog that does not yet exist as code. | The PMU/PDU subsystem (BL-005b); the propagation-aware comms model (BL-048); a learned self-model (BL-046). |
+| `planned` | A surface mentioned in the architecture or the backlog that does not yet exist as code. | The PMU/PDU subsystem (BL-005b); the full comms transition particle filter (BL-030); a learned self-model (BL-046). |
 
 The badges map directly onto the substance findings in the in-house
 audit (`AUDIT.md`) and the systems review at `docs/review-2026-05-21.md`.
