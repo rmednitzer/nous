@@ -467,3 +467,93 @@ def test_flush_tick_budget_tracks_capacity_not_bandwidth() -> None:
     # larger bandwidth budget the pre-fix code would have allowed.
     assert result.delivered_bytes <= cap_budget + 10_000
     assert result.delivered_bytes < bandwidth_budget
+
+
+# -- DTN bundle identity and dedup (BL-056 / ADR 0061) -------------------
+
+
+def test_enqueue_stamps_a_default_bundle_identity() -> None:
+    ob = _outbox()
+    result = ob.enqueue("lte", 100, now_s=5.0)
+    pkg = result.package
+    assert pkg is not None
+    assert pkg.source_eid == "dtn://nous-node/"
+    assert pkg.dest_eid == "dtn://controller/"
+    assert pkg.sequence == 1
+    assert pkg.bundle_id == "dtn://nous-node/1"
+    assert pkg.to_dict()["bundle"] == {
+        "id": "dtn://nous-node/1",
+        "source_eid": "dtn://nous-node/",
+        "dest_eid": "dtn://controller/",
+        "sequence": 1,
+    }
+
+
+def test_node_and_peer_eid_come_from_the_profile() -> None:
+    profile = {
+        "name": "jetson-agx-orin",
+        "comms": {"links": [], "peer_eid": "dtn://ground-station/"},
+    }
+    ob = CommsOutbox(profile)
+    assert ob.node_eid == "dtn://jetson-agx-orin/"
+    assert ob.default_peer_eid == "dtn://ground-station/"
+    result = ob.enqueue("lte", 100, now_s=0.0, dest_eid="dtn://relay/")
+    assert result.package is not None
+    assert result.package.source_eid == "dtn://jetson-agx-orin/"
+    assert result.package.dest_eid == "dtn://relay/"
+
+
+def test_node_eid_override_wins_over_profile_name() -> None:
+    ob = CommsOutbox({"name": "pi5", "comms": {"links": [], "node_eid": "ipn:7.0"}})
+    assert ob.node_eid == "ipn:7.0"
+
+
+def test_auto_bundle_ids_are_unique_and_sequenced() -> None:
+    ob = _outbox()
+    first = ob.enqueue("lte", 100, now_s=0.0)
+    second = ob.enqueue("lte", 100, now_s=1.0)
+    assert first.package is not None and second.package is not None
+    assert first.package.bundle_id != second.package.bundle_id
+    assert (first.package.sequence, second.package.sequence) == (1, 2)
+    assert ob.deduped_total == 0
+
+
+def test_explicit_bundle_id_dedups_a_queued_resubmission() -> None:
+    ob = _outbox()
+    first = ob.enqueue("lte", 100, now_s=0.0, bundle_id="report-1")
+    assert first.accepted is True
+    assert first.package is not None and first.package.bundle_id == "report-1"
+
+    again = ob.enqueue("lte", 100, now_s=1.0, bundle_id="report-1")
+    assert again.accepted is False
+    assert "duplicate bundle report-1" in again.reason
+    assert ob.depth() == 1
+    assert ob.deduped_total == 1
+    assert ob.enqueued_total == 1
+
+
+def test_delivered_bundle_is_deduped_on_resubmission() -> None:
+    comms = _comms()
+    ob = _outbox()
+    ob.enqueue("lte", 100, now_s=0.0, bundle_id="sitrep-9")
+    delivered = ob.flush(comms, now_s=1.0)
+    assert len(delivered.delivered) == 1
+    assert ob.depth() == 0
+
+    # The bundle is gone from the queue but remembered in the delivered ledger,
+    # so a controller that retries the same report does not ship it twice.
+    again = ob.enqueue("lte", 100, now_s=2.0, bundle_id="sitrep-9")
+    assert again.accepted is False
+    assert ob.deduped_total == 1
+    assert ob.depth() == 0
+
+
+def test_status_surfaces_eids_and_dedup_counter() -> None:
+    ob = _outbox()
+    ob.enqueue("lte", 100, now_s=0.0, bundle_id="x")
+    ob.enqueue("lte", 100, now_s=0.0, bundle_id="x")  # duplicate of a queued bundle
+    status = ob.status()
+    assert status["node_eid"] == "dtn://nous-node/"
+    assert status["peer_eid"] == "dtn://controller/"
+    assert status["counters"]["deduped"] == 1
+    assert status["depth"] == 1

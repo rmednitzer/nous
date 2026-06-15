@@ -144,6 +144,7 @@ nav:
       - "0058 Read estimator rejections through health, and stringify decode keys": adr/0058-rejections-through-health-and-decode-key-coercion.md
       - "0059 comms_state CONNECTED requires every configured link healthy": adr/0059-comms-connected-requires-all-configured-links.md
       - "0060 inference_local stays T1 (reversible) despite its usage counters": adr/0060-inference-local-stays-reversible.md
+      - "0061 BPv7 bundle identity and a delivered-bundle ledger for the DTN layer": adr/0061-dtn-bundle-identity-and-dedup.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md

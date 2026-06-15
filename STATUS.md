@@ -87,7 +87,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0060` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0061` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -137,7 +137,13 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1012 tests pass at HEAD: BL-097 added two (the
+  feature branch before merge. 1019 tests pass at HEAD: BL-056 increment 1 added
+  seven (the DTN bundle-identity and dedup tests in
+  `tests/unit/test_comms_outbox.py`: each outbox package carries a BPv7-shaped
+  bundle identity, an explicit `bundle_id` makes `comms_enqueue` idempotent, and
+  a re-submission of a queued or recently-delivered bundle is deduped; ADR 0061,
+  additive over the BL-077 outbox), on top of the 1012 from BL-097, which added
+  two (the
   MkDocs nav drift gate in `tests/unit/test_docs_nav.py`: the ADR nav block is
   generator-current from each ADR's H1, and every `docs/**/*.md` page is in the
   nav or on the dated-logs / showcase-gallery exemption list, so a new ADR or

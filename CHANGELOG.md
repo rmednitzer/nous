@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (comms: BPv7 bundle identity and dedup for the DTN layer, BL-056 / ADR 0061)
+
+- The store-and-forward outbox (BL-077) now stamps every queued package with a
+  BPv7-shaped bundle identity: a source EID (the device's node EID, `dtn://<profile
+  name>/` by default, overridable via `comms.node_eid`), a destination EID
+  (`comms.peer_eid` or a per-`comms_enqueue` `dest_eid`, default
+  `dtn://controller/`), a creation sequence, and a `bundle_id`, with the existing
+  TTL serving as the bundle lifetime. A bounded delivered-bundle ledger makes
+  `comms_enqueue` idempotent: pass an explicit `bundle_id` and a re-submission
+  whose id is still queued or recently delivered is refused as a duplicate
+  (counted, not an error). An unkeyed enqueue gets a unique auto-id and behaves
+  exactly as before, so the change is additive. This is the first increment of
+  the DTN layer (BL-056); multi-hop custody transfer, mesh routing, and replay
+  follow. The `comms_outbox` read surfaces the node and peer EIDs and the dedup
+  counter; each package's `bundle` block carries the identity.
+
 ### Added (docs: generate the MkDocs ADR nav with a drift gate, BL-097)
 
 - A new `scripts/gen_mkdocs_adr_nav.py` regenerates the `mkdocs.yml` ADR nav
