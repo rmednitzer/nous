@@ -240,14 +240,19 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         held in the store-and-forward outbox (``reason`` ``emcon``) instead of
         dropped, so they ship when emissions resume. Returns ``{"ok": bool,
         "link_id": str, "bytes_accepted": int, "connected": bool}``; ``ok`` is
-        ``false`` when no bytes were accepted. Tier T2 (stateful): the link's
-        live state changes and the call is audited.
+        ``false`` when no bytes were accepted. An EMCON defer adds ``reason``
+        (``emcon``), ``emcon_profile``, and ``enqueued`` (whether the outbox
+        took the held bytes); ``connected`` still reflects the link's real
+        ``is_live`` health, since EMCON is orthogonal to connectivity. Tier T2
+        (stateful): the link's live state changes and the call is audited.
         """
 
         async def _work() -> str:
             engine = app.engine
+            link = engine.comms.link(link_id)
             if (
-                engine.comms.link(link_id) is not None
+                link is not None
+                and n_bytes > 0
                 and not engine.comms.emcon.permits(link_id)
             ):
                 held = engine.outbox.enqueue(
@@ -261,7 +266,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                         "reason": "emcon",
                         "emcon_profile": engine.comms.emcon.active,
                         "enqueued": held.accepted,
-                        "connected": False,
+                        "connected": bool(link.is_live()),
                     }
                 )
             accepted = engine.comms.tx(link_id, n_bytes)

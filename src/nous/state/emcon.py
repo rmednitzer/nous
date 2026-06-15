@@ -56,9 +56,14 @@ class Emcon:
         return self._active
 
     def set_profile(self, name: str) -> bool:
-        """Activate a named profile. False (and no change) if it is unknown."""
-        if name in self._profiles:
-            self._active = name
+        """Activate a named profile. False (and no change) if it is unknown.
+
+        The name is stripped to match the config-loaded profile names, so stray
+        whitespace from a tool call does not defeat an otherwise valid match.
+        """
+        key = name.strip()
+        if key in self._profiles:
+            self._active = key
             return True
         return False
 
@@ -94,13 +99,15 @@ def _parse_links(body: Any, all_links: list[str]) -> set[str]:
         if isinstance(body, Mapping)
         else body
     )
+    configured = set(all_links)
     if isinstance(raw, str):
         low = raw.strip().lower()
         if low in ("all", "*"):
-            return set(all_links)
+            return configured
         if low in ("none", ""):
             return set()
-        return {raw.strip()}
+        return {raw.strip()} & configured
     if isinstance(raw, (list, tuple)):
-        return {x.strip() for x in raw if isinstance(x, str) and x.strip()}
+        parsed = {x.strip() for x in raw if isinstance(x, str) and x.strip()}
+        return parsed & configured
     return set()

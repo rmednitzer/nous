@@ -73,6 +73,29 @@ async def test_comms_send_under_silence_reports_emcon(config: Settings) -> None:
     assert out["bytes_accepted"] == 0
 
 
+async def test_emcon_defer_keeps_link_health_and_skips_nonpositive(
+    config: Settings,
+) -> None:
+    app = build_app(config)
+    link_id = app.engine.comms.link_ids[0]
+    await app.mcp.call_tool("emcon_set", {"profile": "silent"})
+
+    deferred = _payload(
+        await app.mcp.call_tool("comms_send", {"link_id": link_id, "n_bytes": 1500})
+    )
+    assert deferred["reason"] == "emcon"
+    link = app.engine.comms.link(link_id)
+    assert link is not None
+    assert deferred["connected"] == bool(link.is_live())
+
+    zero = _payload(
+        await app.mcp.call_tool("comms_send", {"link_id": link_id, "n_bytes": 0})
+    )
+    assert zero["ok"] is False
+    assert zero["bytes_accepted"] == 0
+    assert "reason" not in zero
+
+
 def test_emcon_silence_defers_a_publish_then_drains(config: Settings) -> None:
     engine = Engine(settings=config, profile=_emcon_profile(config), seed=0)
     assert engine.comms.emcon.set_profile("silent") is True

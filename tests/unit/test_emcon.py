@@ -72,3 +72,21 @@ def test_tx_is_gated_by_the_active_profile() -> None:
     assert comms.emcon.set_profile("low_pi") is True
     assert comms.tx("wifi", 100) == 0  # not permitted under low_pi
     assert comms.tx("lte", 100) == 100  # permitted
+
+
+def test_unconfigured_links_in_a_profile_are_dropped() -> None:
+    cfg: dict[str, Any] = {
+        "links": [{"id": "wifi"}, {"id": "lte"}],
+        "emcon": {"profiles": {"typo": {"permit_links": ["wifi", "satcom"]}}},
+    }
+    emcon = Emcon(cfg)
+    assert emcon.set_profile("typo") is True
+    assert emcon.permits("wifi") is True
+    assert emcon.permits("satcom") is False
+    assert emcon.status()["permitted_links"] == ["wifi"]
+
+
+def test_set_profile_strips_surrounding_whitespace() -> None:
+    emcon = Emcon(_PROFILE["comms"])
+    assert emcon.set_profile("  low_pi  ") is True
+    assert emcon.active == "low_pi"

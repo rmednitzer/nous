@@ -137,12 +137,15 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1051 tests pass at HEAD: BL-060 increment 1 added
-  nine (the EMCON emission-control tests: the named-profile posture model and the
-  comms tx gate in `tests/unit/test_emcon.py`, and the posture tools plus the
+  feature branch before merge. 1054 tests pass at HEAD: BL-060 increment 1 added
+  twelve (the EMCON emission-control tests: the named-profile posture model and
+  the comms tx gate in `tests/unit/test_emcon.py`, the posture tools plus the
   auto-triage of a silenced send to the store-and-forward outbox and its drain on
-  lift in `tests/integration/test_emcon_tools.py`; ADR 0065, the emission gate at
-  the comms tx seam), on top of the 1042 from BL-056 increment 4, which added
+  lift in `tests/integration/test_emcon_tools.py`, and review-driven cover for
+  dropping unconfigured links from a profile, whitespace-tolerant profile
+  selection, and a defer that keeps link health while rejecting non-positive
+  sends; ADR 0065, the emission gate at the comms tx seam), on top of the 1042
+  from BL-056 increment 4, which added
   six (the DTN store-persistence tests: a snapshot/restore round trip and a
   lifetime rebased across a clock reset in `tests/unit/test_dtn_mesh.py`, and an
   engine restart restoring a custodial bundle from SQLite, a disabled mesh
