@@ -36,8 +36,10 @@ central estimate).
 **What is omitted:** Per-channel sensor fusion across multiple
 physical sensors of the same channel (the simulator carries one
 sensor per channel); sensor degradation curves (drift, dropout); EO
-or IR imaging surfaces (BL-055); soil / water / radiation channels;
-sensor mesh and store-and-forward (BL-056). Real sensor hardware
+or IR imaging surfaces (BL-055); soil / water / radiation channels; a
+sensor-layer mesh (the shipped store-and-forward outbox and DTN bundle
+layer, BL-056, operate above the comms subsystem, not beneath the
+sensor pack). Real sensor hardware
 calibration is out of scope; v0.1 assumes the sigmas in the profile
 match the real spec sheet.
 

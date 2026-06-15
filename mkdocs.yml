@@ -57,6 +57,7 @@ nav:
       - STANAG 4677 DSSS: conformance/stanag-4677-dsss.md
       - NMEA 0183: conformance/nmea-0183.md
       - MQTT: conformance/mqtt.md
+      - DTN (RFC 4838 / BPv7): conformance/dtn-bpv7.md
       - SOSA: conformance/sosa.md
       - MOSA: conformance/mosa.md
       - Operator biometrics: conformance/biometrics.md
@@ -69,6 +70,7 @@ nav:
       - Compute subsystem: model-cards/subsystem-compute.md
       - Storage subsystem: model-cards/subsystem-storage.md
       - Environmental sensor subsystem: model-cards/subsystem-sensors.md
+      - Comms subsystem: model-cards/subsystem-comms.md
       - Position (CV Kalman): model-cards/estimator-position-kalman.md
       - Power SoC: model-cards/estimator-power-soc.md
       - APU per-source: model-cards/estimator-apu.md
