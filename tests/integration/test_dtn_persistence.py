@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlmodel import Session
+
 from nous.config import Settings
-from nous.db import StateTransitionLog, init_db
+from nous.db import DtnMetaRow, DtnStore, StateTransitionLog, init_db
 from nous.engine import Engine, _load_profile
 
 
@@ -57,3 +59,26 @@ def test_disabled_mesh_persists_nothing(config: Settings) -> None:
     engine = Engine(settings=config, transition_log=StateTransitionLog(init_db(url)))
     assert engine.dtn_mesh.enabled is False
     assert engine.dtn_store.load() is None
+
+
+def test_load_degrades_on_a_corrupt_ledger(config: Settings) -> None:
+    # A corrupt JSON ledger must not raise out of load(): it degrades to None.
+    db = init_db(config.resolved_db_url())
+    store = DtnStore(db)
+    with Session(db) as session:
+        session.add(
+            DtnMetaRow(
+                id=1, ts_s=0.0, next_seq=1, node_seen="not json", delivered_ids="[]"
+            )
+        )
+        session.commit()
+    assert store.load() is None
+    assert store.degraded is True
+
+
+def test_engine_threads_db_init_error_to_the_dtn_store(config: Settings) -> None:
+    # A configured-but-failed DB must show degraded DTN persistence, not healthy.
+    log = StateTransitionLog(None, init_error="OperationalError")
+    engine = Engine(settings=config, transition_log=log)
+    assert engine.dtn_store.init_error == "OperationalError"
+    assert engine.dtn_store.degraded is True

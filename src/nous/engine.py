@@ -217,7 +217,9 @@ class Engine:
         self.fsm = StateMachine(checker=self.safety)
         self.state = EngineState(mode=self.fsm.current)
         self.transition_log = transition_log or StateTransitionLog(None)
-        self.dtn_store = DtnStore(self.transition_log.engine)
+        self.dtn_store = DtnStore(
+            self.transition_log.engine, init_error=self.transition_log.init_error
+        )
         self._started = False
         self._wall_start = 0.0
         self._failsafe = FailsafeArbiter(_FAILSAFE_CONDITIONS)

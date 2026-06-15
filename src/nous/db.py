@@ -356,7 +356,12 @@ class DtnStore:
             self.last_error = exc.__class__.__name__
 
     def load(self) -> dict[str, Any] | None:
-        """Return the persisted snapshot, or ``None`` when nothing is stored."""
+        """Return the persisted snapshot, or ``None`` when nothing is stored.
+
+        Best effort: a DB read failure or a corrupt JSON ledger is caught,
+        counted as a degradation, and returned as ``None`` rather than raised, so
+        a bad store cannot crash engine init or a hot reload.
+        """
         if self.engine is None:
             return None
         try:
@@ -365,35 +370,36 @@ class DtnStore:
                 if meta is None:
                     return None
                 bundles = list(session.exec(select(DtnBundleRow)).all())
+            seen_map: dict[str, list[str]] = json.loads(meta.node_seen or "{}")
+            nodes: dict[str, dict[str, Any]] = {
+                eid: {"seen": list(seen), "bundles": []}
+                for eid, seen in seen_map.items()
+            }
+            for row in bundles:
+                node = nodes.setdefault(row.holder_eid, {"seen": [], "bundles": []})
+                node["bundles"].append(
+                    {
+                        "bundle_id": row.bundle_id,
+                        "source_eid": row.source_eid,
+                        "dest_eid": row.dest_eid,
+                        "sequence": row.sequence,
+                        "size_bytes": row.size_bytes,
+                        "precedence": row.precedence,
+                        "created_ts_s": row.created_ts_s,
+                        "expiry_ts_s": row.expiry_ts_s,
+                        "custody": row.custody,
+                        "hops": row.hops,
+                        "attempts": row.attempts,
+                    }
+                )
+            return {
+                "ts_s": meta.ts_s,
+                "next_seq": meta.next_seq,
+                "counters": {k: getattr(meta, k) for k in _DTN_COUNTER_KEYS},
+                "delivered_ids": json.loads(meta.delivered_ids or "[]"),
+                "nodes": nodes,
+            }
         except Exception as exc:  # noqa: BLE001
             self.save_failures += 1
             self.last_error = exc.__class__.__name__
             return None
-        seen_map: dict[str, list[str]] = json.loads(meta.node_seen or "{}")
-        nodes: dict[str, dict[str, Any]] = {
-            eid: {"seen": list(seen), "bundles": []} for eid, seen in seen_map.items()
-        }
-        for row in bundles:
-            node = nodes.setdefault(row.holder_eid, {"seen": [], "bundles": []})
-            node["bundles"].append(
-                {
-                    "bundle_id": row.bundle_id,
-                    "source_eid": row.source_eid,
-                    "dest_eid": row.dest_eid,
-                    "sequence": row.sequence,
-                    "size_bytes": row.size_bytes,
-                    "precedence": row.precedence,
-                    "created_ts_s": row.created_ts_s,
-                    "expiry_ts_s": row.expiry_ts_s,
-                    "custody": row.custody,
-                    "hops": row.hops,
-                    "attempts": row.attempts,
-                }
-            )
-        return {
-            "ts_s": meta.ts_s,
-            "next_seq": meta.next_seq,
-            "counters": {k: getattr(meta, k) for k in _DTN_COUNTER_KEYS},
-            "delivered_ids": json.loads(meta.delivered_ids or "[]"),
-            "nodes": nodes,
-        }

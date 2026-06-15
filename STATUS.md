@@ -137,11 +137,13 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1040 tests pass at HEAD: BL-056 increment 4 added
-  four (the DTN store-persistence tests: a snapshot/restore round trip and a
+  feature branch before merge. 1042 tests pass at HEAD: BL-056 increment 4 added
+  six (the DTN store-persistence tests: a snapshot/restore round trip and a
   lifetime rebased across a clock reset in `tests/unit/test_dtn_mesh.py`, and an
-  engine restart restoring a custodial bundle from SQLite plus a disabled mesh
-  persisting nothing in `tests/integration/test_dtn_persistence.py`; ADR 0064,
+  engine restart restoring a custodial bundle from SQLite, a disabled mesh
+  persisting nothing, a corrupt ledger degrading the load to a safe no-op, and
+  the DB init error threaded into the store's health in
+  `tests/integration/test_dtn_persistence.py`; ADR 0064,
   the store checkpointed to the `state.db` SQLite database and restored on every
   mesh build), on top of the 1036 from BL-056 increment 3, which added
   seven (the contact-graph-routing and custody-ack tests in
