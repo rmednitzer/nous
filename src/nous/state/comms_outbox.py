@@ -237,6 +237,7 @@ class CommsOutbox:
         self._delivered_ledger: deque[str] = deque(maxlen=_DELIVERED_LEDGER_SIZE)
         self._delivered_ids: set[str] = set()
         self._packages: list[OutboxPackage] = []
+        self._queued_ids: set[str] = set()
         self._next_id = 1
         self._queued_bytes = 0
         # Cumulative counters: the whole point of the queue is to make the
@@ -339,6 +340,7 @@ class CommsOutbox:
         self._next_id += 1
         self._next_seq += 1
         self._packages.append(pkg)
+        self._queued_ids.add(pkg.bundle_id)
         self._queued_bytes += pkg.size_bytes
         self.enqueued_total += 1
         return EnqueueResult(True, "enqueued", package=pkg, evicted=evicted)
@@ -580,13 +582,12 @@ class CommsOutbox:
 
     def _remove(self, pkg: OutboxPackage) -> None:
         self._packages.remove(pkg)
+        self._queued_ids.discard(pkg.bundle_id)
         self._queued_bytes -= pkg.size_bytes
 
     def _is_duplicate(self, bundle_id: str) -> bool:
         """True when ``bundle_id`` is already queued or recently delivered."""
-        if bundle_id in self._delivered_ids:
-            return True
-        return any(pkg.bundle_id == bundle_id for pkg in self._packages)
+        return bundle_id in self._delivered_ids or bundle_id in self._queued_ids
 
     def _record_delivered(self, bundle_id: str) -> None:
         """Remember a delivered bundle id in the bounded dedup window (ADR 0061)."""

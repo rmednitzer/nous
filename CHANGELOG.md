@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (comms-stack hygiene and performance, AUDIT-2026-06-15 L-1/L-2/M-2)
+
+- Three low-risk audit follow-ons. The store-and-forward outbox dedup is now
+  O(1): a `_queued_ids` set parallels the package list, so `_is_duplicate` no
+  longer linearly scans on every enqueue (BL-102). Tool bodies that catch an
+  exception inside `_work` now return the exception class name via a shared
+  `tools/_errors.error_class` helper instead of `str(exc)`, matching the runner's
+  escaped-exception redaction so a payload-derived message cannot leak through
+  `interop_encode` / `interop_decode` / `comms_publish` / `self_model_publish`
+  (or the adjacent `comms_enqueue` hex path) (BL-106). The never-read
+  `Engine._wall_start` field and its now-unused `import time` are removed
+  (BL-107). The BL-107 proposal to delete the forward-classified
+  `inference_request` / `db_reset` / `audit_rotate` names from `policy.py` was
+  re-assessed and not done (ADR 0033 keeps them on purpose); a guard test that
+  allowlists them now catches a real typo without touching the policy module.
+
 ### Documentation (model-card and conformance completeness pass)
 
 - Brought the model cards and conformance posture docs up to the current
