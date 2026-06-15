@@ -593,6 +593,7 @@ class DtnMesh:
         """
         if not self.enabled:
             return
+        self.restore_lost_total = 0  # reflects this restore, not a running total
         delta = float(now_s) - float(snapshot.get("ts_s", now_s))
         self._next_seq = int(snapshot.get("next_seq", self._next_seq))
         counters: Mapping[str, Any] = snapshot.get("counters", {})
@@ -620,8 +621,8 @@ class DtnMesh:
                 node.seen.add(str(bid))
             for row in node_snap.get("bundles", []):
                 bundle = self._bundle_from_row(row, holder_eid=eid, delta=delta)
-                node.store.append(bundle)
                 node.seen.add(bundle.bundle_id)
+                self._admit(node, bundle)  # the cap holds even if max_store shrank
 
     @staticmethod
     def _bundle_to_row(bundle: MeshBundle) -> dict[str, Any]:

@@ -463,3 +463,43 @@ def test_restore_counts_bundles_for_a_removed_node() -> None:
     mesh.restore(snapshot, now_s=0.0)
     assert mesh.restore_lost_total == 2
     assert mesh.status()["counters"]["restore_lost"] == 2
+
+
+def test_restore_enforces_the_store_cap() -> None:
+    mesh = _mesh({"self_eid": "dtn://dev/", "max_store": 2}, rng=np.random.default_rng(0))
+    snapshot: dict[str, Any] = {
+        "ts_s": 0.0,
+        "next_seq": 9,
+        "counters": {},
+        "delivered_ids": [],
+        "nodes": {
+            "dtn://dev/": {
+                "seen": [],
+                "bundles": [_ghost_row("b1"), _ghost_row("b2"), _ghost_row("b3")],
+            },
+        },
+    }
+    mesh.restore(snapshot, now_s=0.0)
+    assert mesh.status()["nodes"][0]["held"] == 2  # capped, though the snapshot held 3
+
+
+def test_restore_lost_reflects_only_the_latest_restore() -> None:
+    mesh = _mesh({"self_eid": "dtn://dev/"}, rng=np.random.default_rng(0))
+    with_ghost: dict[str, Any] = {
+        "ts_s": 0.0,
+        "next_seq": 1,
+        "counters": {},
+        "delivered_ids": [],
+        "nodes": {"dtn://ghost/": {"seen": [], "bundles": [_ghost_row("g1")]}},
+    }
+    mesh.restore(with_ghost, now_s=0.0)
+    assert mesh.restore_lost_total == 1
+    clean: dict[str, Any] = {
+        "ts_s": 0.0,
+        "next_seq": 1,
+        "counters": {},
+        "delivered_ids": [],
+        "nodes": {"dtn://dev/": {"seen": [], "bundles": []}},
+    }
+    mesh.restore(clean, now_s=0.0)
+    assert mesh.restore_lost_total == 0  # reset per restore, not accumulated

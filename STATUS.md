@@ -137,10 +137,11 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1073 tests pass at HEAD: BL-098/099/100 (DTN custody
-  robustness, ADR 0068) added three (the store cap shedding the triage-worst over
-  capacity, the cap preserving higher precedence, and restore counting bundles for
-  a removed node in `tests/unit/test_dtn_mesh.py`), on top of the 1070 from the
+  feature branch before merge. 1075 tests pass at HEAD: BL-098/099/100 (DTN custody
+  robustness, ADR 0068) added five (the store cap shedding the triage-worst over
+  capacity, the cap preserving higher precedence, restore counting bundles for a
+  removed node, restore enforcing the cap, and restore-lost reflecting only the
+  latest restore in `tests/unit/test_dtn_mesh.py`), on top of the 1070 from the
   2026-06-15 adversarial audit, which added three (the EMCON remediations: built-in
   postures immutable, altitude
   coarsened under minimisation, and an extreme window phase normalised, in
