@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (engine: atomic profile reload, BL-103 / ADR 0069)
+
+- `Engine.reload_profile` was committing the new profile and rebuilding the
+  subsystems in place, so a malformed section that passed top-level validation
+  (for example a non-mapping `comms`) crashed a constructor mid-rebuild and left
+  the engine in a mixed-generation state, contradicting the docstring's promise to
+  keep the previous profile loaded. The rebuild now constructs every subsystem
+  into locals first and commits only once they all succeed, so a malformed reload
+  raises with the previous profile and subsystems intact. This was the last HIGH
+  finding of the 2026-06-15 audit (H-4).
+
 ### Fixed (comms: DTN custody-store bound and restore-loss accounting, BL-098 / BL-100 / ADR 0068)
 
 - The 2026-06-15 audit's three DTN custody gaps are addressed. A node's store is

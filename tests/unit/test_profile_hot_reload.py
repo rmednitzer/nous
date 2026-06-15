@@ -75,3 +75,22 @@ def test_reload_refreshes_capability_cache(engine: Engine) -> None:
     engine.reload_profile()
     assert "stale_marker" not in engine.state.last_capabilities
     assert engine.state.last_capabilities  # recomputed from the rebuilt estimators
+
+
+def test_reload_fails_closed_on_a_malformed_section(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A section that passes top-level validation but crashes a subsystem
+    # constructor must leave the previous profile and subsystems intact: the
+    # rebuild is atomic (BL-103 / ADR 0069).
+    old_profile = engine.profile
+    old_comms = engine.comms
+    old_power = engine.power
+    bad = dict(engine.profile)
+    bad["comms"] = "not-a-mapping"
+    monkeypatch.setattr("nous.engine._load_profile", lambda _name: bad)
+    with pytest.raises(AttributeError):
+        engine.reload_profile(name="malformed")
+    assert engine.profile is old_profile
+    assert engine.comms is old_comms
+    assert engine.power is old_power  # a subsystem built before the failure did not commit

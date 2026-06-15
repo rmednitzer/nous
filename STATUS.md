@@ -137,8 +137,12 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1075 tests pass at HEAD: BL-098/099/100 (DTN custody
-  robustness, ADR 0068) added five (the store cap shedding the triage-worst over
+  feature branch before merge. 1076 tests pass at HEAD: BL-103 (atomic profile
+  reload, ADR 0069) added one (a reload to a profile with a malformed section fails
+  closed with the previous profile and subsystems intact, in
+  `tests/unit/test_profile_hot_reload.py`), on top of the 1075 from BL-098/099/100
+  (DTN custody robustness, ADR 0068), which added five (the store cap shedding the
+  triage-worst over
   capacity, the cap preserving higher precedence, restore counting bundles for a
   removed node, restore enforcing the cap, and restore-lost reflecting only the
   latest restore in `tests/unit/test_dtn_mesh.py`), on top of the 1070 from the
