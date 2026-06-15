@@ -184,3 +184,47 @@ async def test_emcon_status_includes_window_fields(config: Settings) -> None:
     assert out["emitting"] is True
     assert out["window"] is None
     assert "windows" in out
+
+
+def test_publish_under_minimizing_posture_coarsens_position(config: Settings) -> None:
+    from nous.interop import build_adapter
+
+    profile = dict(_load_profile(config.profile))
+    profile["comms"] = {
+        "links": [
+            {
+                "id": "lte",
+                "bandwidth_bps": 1_000_000,
+                "rssi_dbm_nominal": -75,
+                "loss_pct_nominal": 0.0,
+                "max_age_s": 300,
+            },
+        ],
+        "outbox": {
+            "enabled": True,
+            "max_packages": 16,
+            "max_bytes": 1_000_000,
+            "default_ttl_s": 300,
+        },
+        "emcon": {
+            "default": "low_pi",
+            "profiles": {
+                "low_pi": {"permit_links": ["lte"], "minimize": {"position_decimals": 2}}
+            },
+        },
+    }
+    engine = Engine(settings=config, profile=profile, seed=0)
+    ts = time.time()
+    result = encode_and_tx(
+        engine,
+        "lte",
+        "cot",
+        {"uid": "u", "ts_s": ts, "lat": 47.123456, "lon": 13.654321},
+    )
+    assert result["ok"] is True
+    # The emitted wire form is the encoding of the coarsened mapping, not the
+    # full-precision input: position is rounded to the configured two decimals.
+    expected = build_adapter("cot").encode(
+        {"uid": "u", "ts_s": ts, "lat": 47.12, "lon": 13.65}
+    )
+    assert bytes.fromhex(result["payload_hex"]) == expected

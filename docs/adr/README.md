@@ -69,3 +69,4 @@
 | 0064 | [Persisting the DTN store across a restart](0064-dtn-store-persistence.md) | Accepted | 2026-06-15 |
 | 0065 | [EMCON emission-control postures](0065-emcon-emission-control.md) | Accepted | 2026-06-15 |
 | 0066 | [EMCON scheduled emission windows](0066-emcon-scheduled-emission-windows.md) | Accepted | 2026-06-15 |
+| 0067 | [EMCON metadata minimisation](0067-emcon-metadata-minimisation.md) | Accepted | 2026-06-15 |

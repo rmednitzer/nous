@@ -37,7 +37,10 @@ def encode_and_tx(
     success body. When the active EMCON profile forbids emitting on the link
     (BL-060 / ADR 0065), nothing is transmitted: the encoded payload is held in
     the store-and-forward outbox (``reason`` ``emcon``, ``enqueued`` true) so it
-    ships when emissions resume.
+    ships when emissions resume. When the active profile carries a ``minimize``
+    policy (BL-060 / ADR 0067), the payload is coarsened (position rounded to a
+    grid, named fields dropped) before encoding, so a restricted posture emits
+    less detail.
     """
     from ..interop import StaleEstimateError, build_adapter
 
@@ -45,6 +48,7 @@ def encode_and_tx(
         impl = build_adapter(adapter)
     except KeyError as exc:
         return {"ok": False, "error": str(exc)}
+    data = engine.comms.emcon.minimize(data)
     try:
         payload = impl.encode(dict(data))
     except StaleEstimateError as exc:

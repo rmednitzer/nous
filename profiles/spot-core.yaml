@@ -77,5 +77,7 @@ comms:
   emcon:  # BL-060: emission-control profiles; default unrestricted, inert until emcon_set
     default: unrestricted
     profiles:
-      low_pi: { permit_links: [lte] }  # low-probability-of-intercept: cellular only
+      low_pi:  # low-probability-of-intercept: cellular only, coarsened emissions
+        permit_links: [lte]
+        minimize: { position_decimals: 2, drop: [heart_rate_bpm, core_temp_c] }  # ADR 0067
       lte_burst: { permit_links: [lte], window: { period_s: 60, on_s: 5 } }  # ADR 0066: emit 5s per 60s

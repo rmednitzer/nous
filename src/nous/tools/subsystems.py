@@ -499,7 +499,8 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         section configured it, the links the active profile permits, and every
         available profile with its permitted links, plus any duty-cycle emission
         ``window`` on a profile and whether the active posture is ``emitting``
-        right now (ADR 0066). ``unrestricted`` (all links)
+        right now (ADR 0066), and any ``minimize`` policy that coarsens emitted
+        metadata under a profile (ADR 0067). ``unrestricted`` (all links)
         and ``silent`` (none) are always present; with no ``comms.emcon`` section
         the posture is ``unrestricted`` and inert.
         """
