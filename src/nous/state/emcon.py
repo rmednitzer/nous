@@ -167,9 +167,10 @@ class Emcon:
     def minimize(self, data: Mapping[str, Any]) -> dict[str, Any]:
         """Coarsen a publish payload under the active profile's policy.
 
-        Returns a copy with position fields rounded to the configured grid and
-        dropped fields removed. With no policy for the active profile the data
-        is returned unchanged, so an unrestricted posture emits in full.
+        Always returns a new ``dict``, never the input mapping: position fields
+        are rounded to the configured grid and dropped fields removed. With no
+        policy for the active profile the returned copy is value-equal to the
+        input, so an unrestricted posture emits in full.
         """
         policy = self._minimizers.get(self._active)
         if policy is None:
