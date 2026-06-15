@@ -43,6 +43,11 @@ def derive(links: Iterable[LinkEstimate]) -> tuple[CommsState, str]:
     healthy = [
         link for link in connected if link.loss_pct < 5.0 and _rate_healthy(link)
     ]
+    # CONNECTED requires every *configured* link healthy, not merely every
+    # currently-connected one (the denominator is the inventory, not `connected`):
+    # a down or aged-out backup deliberately caps the report at LIMITED so reduced
+    # redundancy stays legible rather than hiding behind a healthy primary (ADR
+    # 0059, audit 2026-06-14b M-3).
     if len(healthy) == len(links):
         return CommsState.CONNECTED, "all links healthy"
     if not healthy:

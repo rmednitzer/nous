@@ -35,7 +35,7 @@ from nous.estimators.storage import StorageKalman
 from nous.estimators.thermal import ThermalKalman
 from nous.interop.cot import CotAdapter
 from nous.interop.misb_klv import MisbKlvAdapter
-from nous.types import Observation
+from nous.types import LinkEstimate, Observation
 
 
 def _oauth_client(client_id: str = "c-1") -> OAuthClientInformationFull:
@@ -1301,3 +1301,46 @@ class TestLow4DecodeToolCoercesNonStringKeys:
         decoded = out["decoded"]
         assert decoded["('a', 'b')"] == 1
         assert decoded["nested"][0]["3"] == "three"
+
+
+class TestM3CommsConnectedRequiresAllConfiguredLinks:
+    """M-3: comms_state CONNECTED requires every configured link healthy.
+
+    Deliberate decision (ADR 0059): ``derive`` reports CONNECTED only when every
+    link in the inventory is connected and healthy (``len(healthy) == len(links)``),
+    so a disconnected or aged-out backup degrades the reported label to LIMITED
+    even when the active link is healthy. The audit (``docs/audit-2026-06-14b.md``
+    M-3) raised the alternative (CONNECTED when every currently-connected link is
+    healthy), which was considered and rejected; this pins the chosen rule so a
+    future refactor does not silently relax it. The label is reporting-only: no
+    FSM transition distinguishes CONNECTED from LIMITED (the gates key on DENIED).
+    """
+
+    def test_disconnected_backup_caps_the_report_at_limited(self) -> None:
+        from nous.state.comms_state import CommsState, derive
+
+        healthy = LinkEstimate(
+            link_id="lte",
+            connected=True,
+            rssi_dbm=-70.0,
+            loss_pct=0.0,
+            throughput_bps=900_000.0,
+            bandwidth_bps=1_000_000.0,
+            capacity_bps=900_000.0,
+        )
+        down_backup = LinkEstimate(
+            link_id="lora",
+            connected=False,
+            rssi_dbm=-120.0,
+            loss_pct=100.0,
+            throughput_bps=0.0,
+            bandwidth_bps=50_000.0,
+            capacity_bps=0.0,
+        )
+        # The active link alone is healthy, so CONNECTED if the rule were
+        # "every connected link healthy".
+        assert derive([healthy]) == (CommsState.CONNECTED, "all links healthy")
+        # With the dark backup in the inventory, the configured-posture rule
+        # reports LIMITED, not CONNECTED.
+        label, _ = derive([healthy, down_backup])
+        assert label is CommsState.LIMITED

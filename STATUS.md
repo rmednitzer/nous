@@ -87,7 +87,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0058` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0059` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -137,7 +137,12 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1008 tests pass at HEAD: BL-094 added two (the
+  feature branch before merge. 1009 tests pass at HEAD: BL-095 added one (the
+  `TestM3` comms-connected-semantics regression pin in
+  `tests/regression/test_audit_findings.py` per ADR 0023, asserting a healthy
+  active link plus a disconnected backup reports LIMITED, recording the ADR 0059
+  decision to keep CONNECTED as "all configured links healthy"; no behaviour
+  change), on top of the 1008 from BL-094, which added two (the
   `TestMed3` and `TestLow4` regression pins in
   `tests/regression/test_audit_findings.py` per ADR 0023, closing the
   2026-06-14b audit's MED-3 and LOW-4; ADR 0058 reads estimator rejections
