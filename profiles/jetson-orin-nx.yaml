@@ -3,14 +3,14 @@ name: jetson-orin-nx
 description: Smaller Jetson Orin NX variant.
 
 # Hardware references:
-#   battery:   1x Bren-Tronics BB-2590/U (296 Wh, 14.4 V nominal).
+#   battery:   1x Bren-Tronics BB-2590/U (294 Wh, 14.4 V nominal).
 #   compute:   NVIDIA Jetson Orin NX 16GB datasheet (10 W -- 25 W envelope).
 #   solar:     Bren-Tronics MFC-40 class (40 W peak).
 #   fuel cell: SFC Energy EFOY-class (~15 W continuous, ~1.4 Wh/g electrical).
-#   vehicle:   NATO STANAG 4074 vehicle bus (28 V DC).
+#   vehicle:   MIL-STD-1275 28 V DC vehicle bus.
 
 power:
-  battery_wh: 296
+  battery_wh: 294
   voltage_v_nominal: 14.4
   voltage_v_min: 12.0
   voltage_v_max: 16.8

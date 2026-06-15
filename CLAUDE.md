@@ -55,7 +55,7 @@ src/nous/
   cli.py config.py policy.py audit.py runner.py server.py
   engine.py tick.py db.py anthropic_client.py types.py
   state/        machine.py operator_state.py comms_state.py failsafe.py
-                comms_outbox.py
+                comms_outbox.py dtn_mesh.py emcon.py
   subsystems/   power, apu, thermal, compute, storage, sensors,
                 position, biometrics, comms, inference, propagation
   estimators/   position, power, thermal, biometrics, comms, compute,

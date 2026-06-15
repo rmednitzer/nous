@@ -64,8 +64,10 @@ the redaction allowlist before being logged. On Linux, `chattr +a` on the
 file gives true append-only semantics; the `logrotate.conf` template in
 `deploy/` handles rotation under that constraint.
 
-A daily hash chain over the audit log is *optional* and shipped as a
-follow-up (`[BL-031]`); the v0.1 scaffold does not gate behaviour on it.
+A daily hash chain over the audit log is implemented (`[BL-031]`, ADR 0026):
+`audit_anchor_verify` cross-checks the per-day anchors against the chain. It
+is a tamper-evidence mechanism, so it surfaces a broken or back-dated log
+rather than gating runtime behaviour on it.
 
 ### SAST suppression catalog
 

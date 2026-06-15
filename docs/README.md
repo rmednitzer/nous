@@ -11,7 +11,7 @@ This tree is the source for the MkDocs site published at
 3. [architecture.md](architecture.md) -- how the engine, server, and
    self-model fit together.
 4. [state-machine.md](state-machine.md) -- the mission-posture FSM.
-5. [tool-reference.md](tool-reference.md) -- the forty-six-tool MCP surface (live VM may lag; see [audit-2026-06-14b.md](audit-2026-06-14b.md)).
+5. [tool-reference.md](tool-reference.md) -- the fifty-tool MCP surface (live VM may lag; see [audit-2026-06-14b.md](audit-2026-06-14b.md)).
 6. [hardware-profiles.md](hardware-profiles.md) -- the profile YAML
    schema, anchored to [bom.md](bom.md).
 7. [adr/README.md](adr/README.md) -- numbered architecture decisions.

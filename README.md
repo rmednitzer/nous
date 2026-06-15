@@ -141,8 +141,8 @@ tour.
 ## Cross-references
 
 - [STATUS.md](STATUS.md) -- maturity by phase and per-document state
-- [LIMITATIONS.md](LIMITATIONS.md) -- explicit boundaries (no mesh/DTN, single
-  operator, no hardware in the loop, etc.)
+- [LIMITATIONS.md](LIMITATIONS.md) -- explicit boundaries (single operator,
+  no hardware in the loop, linear-Gaussian estimators, etc.)
 - [docs/backlog.md](docs/backlog.md) -- BL-NNN line-item tracker
 - [docs/adr/](docs/adr/) -- numbered architecture decision records
 - [docs/stpa/](docs/stpa/) -- STPA-Pro safety analysis artefacts
