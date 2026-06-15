@@ -57,11 +57,14 @@ def encode_and_tx(
         }
     except (ValueError, TypeError) as exc:
         return {"ok": False, "adapter": adapter, "error": str(exc)}
-    if engine.comms.link(link_id) is not None and not engine.comms.emcon.permits(link_id):
+    now_s = engine.state.ts_s
+    if engine.comms.link(link_id) is not None and not engine.comms.emcon.permits(
+        link_id, now_s=now_s
+    ):
         held = engine.outbox.enqueue(
             link_id,
             len(payload),
-            now_s=engine.state.ts_s,
+            now_s=now_s,
             kind="emcon_deferred",
             payload=payload,
         )
@@ -77,7 +80,7 @@ def encode_and_tx(
             "bytes_accepted": 0,
             "enqueued": held.accepted,
         }
-    accepted = engine.comms.tx(link_id, len(payload))
+    accepted = engine.comms.tx(link_id, len(payload), now_s=now_s)
     return {
         "ok": accepted > 0,
         "link_id": link_id,

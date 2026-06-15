@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (comms: EMCON scheduled emission windows, BL-060 / ADR 0066)
+
+- A duty-cycle emission `window` on an EMCON profile: `{ period_s, on_s, phase_s }`
+  permits the profile's links only inside a scheduled burst (`on_s` open out of
+  every `period_s`) and silences them between bursts. The window is evaluated at
+  the same `CommsSubsystem.tx` seam against the injected `now_s` sim clock, so a
+  send offered between bursts is held in the BL-077 store-and-forward outbox and
+  ships on the next open burst, with no new plumbing. `emcon_status` reports the
+  active profile's `window` and whether it is `emitting` now, plus the per-profile
+  `windows` map. A window registers only as a genuine duty cycle (`0 < on_s <
+  period_s`); a malformed or always-open window is ignored, so a misconfiguration
+  cannot silently black-hole traffic. The `window` key is an additive extension of
+  the `comms.emcon` schema, inert for an unwindowed profile; the spot-core profile
+  ships a demonstrative `lte_burst` window. This is increment 2 of BL-060;
+  metadata minimisation and a first-class denied audit record remain.
+
 ### Added (comms: EMCON emission control with store-and-forward triage, BL-060 / ADR 0065)
 
 - An emission-control posture layer. EMCON is an orthogonal, operator-imposed

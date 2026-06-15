@@ -120,3 +120,67 @@ def test_emcon_silence_defers_a_publish_then_drains(config: Settings) -> None:
     drained = engine.outbox.flush(engine.comms, now_s=engine.state.ts_s)
     assert len(drained.delivered) == 1
     assert engine.outbox.depth() == 0
+
+
+def test_emcon_window_holds_a_send_then_drains_when_the_burst_opens(
+    config: Settings,
+) -> None:
+    profile = dict(_load_profile(config.profile))
+    profile["comms"] = {
+        "links": [
+            {
+                "id": "lte",
+                "bandwidth_bps": 1_000_000,
+                "rssi_dbm_nominal": -75,
+                "loss_pct_nominal": 0.0,
+                "max_age_s": 300,
+            },
+        ],
+        "outbox": {
+            "enabled": True,
+            "max_packages": 16,
+            "max_bytes": 1_000_000,
+            "default_ttl_s": 600,
+        },
+        "emcon": {
+            "default": "burst",
+            "profiles": {
+                "burst": {
+                    "permit_links": ["lte"],
+                    "window": {"period_s": 100, "on_s": 1, "phase_s": 50},
+                }
+            },
+        },
+    }
+    engine = Engine(settings=config, profile=profile, seed=0)
+    assert engine.comms.emcon.active == "burst"
+    # ts_s == 0 sits between bursts (the window opens at 50), so the send is held.
+    assert engine.comms.emcon.permits("lte", now_s=engine.state.ts_s) is False
+    result = encode_and_tx(
+        engine,
+        "lte",
+        "cot",
+        {"uid": "u", "ts_s": time.time(), "lat": 47.0, "lon": 13.0},
+    )
+    assert result["ok"] is False
+    assert result["reason"] == "emcon"
+    assert result["enqueued"] is True
+    assert engine.outbox.depth() == 1
+
+    # A flush still between bursts cannot emit: the package stays held.
+    held = engine.outbox.flush(engine.comms, now_s=0.0)
+    assert len(held.delivered) == 0
+    assert engine.outbox.depth() == 1
+
+    # A flush inside the open burst ships it.
+    drained = engine.outbox.flush(engine.comms, now_s=50.0)
+    assert len(drained.delivered) == 1
+    assert engine.outbox.depth() == 0
+
+
+async def test_emcon_status_includes_window_fields(config: Settings) -> None:
+    app = build_app(config)
+    out = _payload(await app.mcp.call_tool("emcon_status", {}))
+    assert out["emitting"] is True
+    assert out["window"] is None
+    assert "windows" in out
