@@ -9,8 +9,10 @@
 
 The audited runner classifies every tool into a tier (T0 read-only, T1
 reversible, T2 stateful, T3 irreversible) and the admission policy keys on it:
-under guarded mode a T1 tool is admitted unconditionally, while a T2 or T3 tool
-is refused without a `NOUS_POLICY_ALLOW` match. `inference_local` is T1. The
+under guarded mode a T1 tool is admitted without an allowlist match, while a T2
+or T3 tool is refused unless `NOUS_POLICY_ALLOW` matches (an operator's
+`NOUS_POLICY_DENY` regex can still refuse any tool in any mode). `inference_local`
+is T1. The
 2026-06-14b audit (LOW-2) noted that `inference_local` increments three monotonic
 counters (`local_calls`, `total_tokens`, `total_energy_j`) that no tool undoes,
 which strains the literal T1 criterion ("trivially undone"), and that the T2
