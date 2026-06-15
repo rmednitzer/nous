@@ -27,8 +27,9 @@ of adapter, without touching the adapters themselves.
 
 A profile may carry a `minimize` policy alongside its `permit_links` and
 `window`: `{ position_decimals, drop }`. `position_decimals` rounds recognised
-position fields (`lat`, `lon`, `latitude`, `longitude`) to that many decimal
-places, coarsening a fix to a grid cell (two decimals is roughly a kilometre, one
+position fields (`lat`, `lon`, `latitude`, `longitude`, and the altitude variants
+`hae`, `alt`, `alt_m`, `altitude`) to that many decimal places, coarsening a fix
+to a grid cell (two decimals is roughly a kilometre, one
 roughly ten); `drop` is a list of field names removed from the payload. The
 policy is applied by `Emcon.minimize(data)` at the `encode_and_tx` seam, before
 the adapter encodes, so the coarsened mapping is what gets encoded, transmitted,

@@ -202,3 +202,38 @@ def test_minimize_status_reports_the_active_policy() -> None:
     status = emcon.status()
     assert status["minimize"] == {"position_decimals": 1, "drop": ["uid"]}
     assert "min" in status["minimizers"]
+
+
+def test_minimize_coarsens_altitude_fields() -> None:
+    emcon = _minimizing({"position_decimals": 1})
+    emcon.set_profile("min")
+    out = emcon.minimize({"lat": 47.126, "hae": 612.347, "alt_m": 612.347})
+    assert out["lat"] == 47.1
+    assert out["hae"] == 612.3
+    assert out["alt_m"] == 612.3
+
+
+def test_builtin_postures_cannot_be_overridden_by_config() -> None:
+    # A config profile named like a built-in must not weaken radio silence.
+    emcon = Emcon(
+        {
+            "links": [{"id": "wifi"}, {"id": "lte"}],
+            "emcon": {"profiles": {"silent": {"permit_links": ["wifi", "lte"]}}},
+        }
+    )
+    assert emcon.set_profile(SILENT) is True
+    assert emcon.permits("wifi") is False
+    assert emcon.permits("lte") is False
+    assert emcon.status()["profiles"]["silent"] == []
+
+
+def test_extreme_phase_s_is_normalised_modulo_period() -> None:
+    # A phase beyond one period wraps, so a huge value cannot black-hole traffic.
+    emcon = _windowed({"period_s": 60, "on_s": 5, "phase_s": 65})  # 65 == 5 mod 60
+    emcon.set_profile("burst")
+    assert emcon.permits("lte", now_s=7.0) is True  # open over [5, 10)
+    assert emcon.permits("lte", now_s=3.0) is False
+    huge = _windowed({"period_s": 60, "on_s": 5, "phase_s": 1e18})
+    huge.set_profile("burst")
+    # Not permanently closed: some instant within a period is still open.
+    assert any(huge.permits("lte", now_s=float(t)) for t in range(60))

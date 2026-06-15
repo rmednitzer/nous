@@ -49,7 +49,9 @@ class _Window:
         return (now_s - self.phase_s) % self.period_s < self.on_s
 
 
-_POSITION_KEYS = frozenset({"lat", "lon", "latitude", "longitude"})
+_POSITION_KEYS = frozenset(
+    {"lat", "lon", "latitude", "longitude", "hae", "alt", "alt_m", "altitude"}
+)
 
 
 @dataclass(frozen=True)
@@ -95,15 +97,16 @@ class Emcon:
             raw_profiles = section.get("profiles")
             if isinstance(raw_profiles, Mapping):
                 for name, body in raw_profiles.items():
-                    if isinstance(name, str) and name.strip():
-                        key = name.strip()
-                        self._profiles[key] = _parse_links(body, all_links)
-                        window = _parse_window(body)
-                        if window is not None:
-                            self._windows[key] = window
-                        minimizer = _parse_minimize(body)
-                        if minimizer is not None:
-                            self._minimizers[key] = minimizer
+                    key = name.strip() if isinstance(name, str) else ""
+                    if not key or key in (UNRESTRICTED, SILENT):
+                        continue  # the built-in postures are immutable
+                    self._profiles[key] = _parse_links(body, all_links)
+                    window = _parse_window(body)
+                    if window is not None:
+                        self._windows[key] = window
+                    minimizer = _parse_minimize(body)
+                    if minimizer is not None:
+                        self._minimizers[key] = minimizer
             raw_default = section.get("default")
             if isinstance(raw_default, str) and raw_default.strip() in self._profiles:
                 default = raw_default.strip()
@@ -224,7 +227,7 @@ def _parse_window(body: Any) -> _Window | None:
     if period is None or on is None:
         return None
     if period > 0.0 and 0.0 < on < period:
-        return _Window(period_s=period, on_s=on, phase_s=phase or 0.0)
+        return _Window(period_s=period, on_s=on, phase_s=(phase or 0.0) % period)
     return None
 
 
