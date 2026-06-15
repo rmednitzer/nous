@@ -138,6 +138,7 @@ nav:
       - "0053 Propagation-aware comms link quality": adr/0053-propagation-aware-comms-model.md
       - "0054 Higher-fidelity comms propagation (path loss, diffraction, noise, antenna, fading)": adr/0054-higher-fidelity-propagation.md
       - "0055 Redact the runner's caught-exception body to the exception class": adr/0055-runner-redacts-caught-exception-body.md
+      - "0056 Distinguish a cap-persistence failure from exhaustion, and reuse the client": adr/0056-cap-persist-error-and-client-reuse.md
   - STPA:
       - Overview: stpa/README.md
       - "01 Purpose": stpa/01-purpose.md

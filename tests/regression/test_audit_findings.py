@@ -26,6 +26,7 @@ from pydantic import AnyHttpUrl
 from nous.anthropic_client import CallCap, CapExhausted
 from nous.audit import AuditLogger, AuditRecord, redact, verify_chain
 from nous.auth.oauth import FileOAuthProvider
+from nous.config import Settings
 from nous.estimators.biometrics import BiometricsKalman
 from nous.estimators.compute import ComputeKalman
 from nous.estimators.sensors import EnvironmentalKalman
@@ -73,9 +74,9 @@ class TestC1AnthropicCapFsyncsInsideLock:
     invariant documented in ADR-0005.
 
     Fix: ``fh.flush()`` + ``os.fsync(fh.fileno())`` are now executed
-    while the flock is still held, and an ``OSError`` from fsync raises
-    ``CapExhausted`` instead of returning a success that the caller
-    cannot rely on.
+    while the flock is still held, and an ``OSError`` from fsync raises an
+    error (``CapPersistError`` since ADR 0056) instead of returning a success
+    the caller cannot rely on.
     """
 
     def test_increment_persists_state_before_returning(self, tmp_path: Path) -> None:
@@ -114,7 +115,8 @@ class TestCap1PeekAgreesWithIncrement:
     Fix (ADR 0049): both readers parse through one ``_parse_count`` helper.
     A counter that makes increment refuse now makes peek report
     ``corrupt=True`` (and the status tool report unavailable/exhausted), and
-    increment fails closed uniformly with ``CapExhausted``.
+    increment fails closed on a corrupt or spent counter with ``CapExhausted``
+    (ADR 0056 later split the fsync-durability fault off as ``CapPersistError``).
     """
 
     @pytest.mark.parametrize(
@@ -1107,3 +1109,56 @@ class TestM2CommsLikelihoodFloorBoundary:
         )
         assert at_floor > _LIKELIHOOD_FLOOR
         assert below == _LIKELIHOOD_FLOOR
+
+
+class TestMed1InferenceCloudReusesOneClient:
+    """MED-1: inference_cloud must reuse one Anthropic client, not build per call.
+
+    Original defect (``docs/audit-2026-06-14b.md`` MED-1): ``inference_cloud``
+    constructed a fresh ``AnthropicClient`` inside its per-call ``_work`` body,
+    so every call built a new ``AsyncAnthropic`` (a new httpx pool) and discarded
+    the previous client's ``last_cache_read_input_tokens``, the metric that makes
+    the prompt-cache discipline observable.
+
+    Fix (ADR 0056): ``Nous`` caches one client via a ``cached_property`` built
+    from its own settings, and ``inference_cloud`` reads ``app.anthropic_client``.
+    """
+
+    def test_app_caches_one_client_from_its_settings(self, config: Settings) -> None:
+        from nous.anthropic_client import AnthropicClient
+        from nous.server import build_app
+
+        app = build_app(config)
+        first = app.anthropic_client
+        second = app.anthropic_client
+        assert isinstance(first, AnthropicClient)
+        assert first is second  # cached, not rebuilt per access
+        # Built from the app's settings, not the global get_settings().
+        assert first.settings is config
+
+
+class TestLow3CapPersistErrorIsDistinctFromExhaustion:
+    """LOW-3: an fsync durability failure must not read as cap exhaustion.
+
+    Original defect (``docs/audit-2026-06-14b.md`` LOW-3): ``CallCap.increment``
+    raised ``CapExhausted`` on an ``os.fsync`` ``OSError``, so a transient
+    durability fault surfaced through the fallback ladder as a spent budget
+    (``reason: "cap exhausted"``).
+
+    Fix (ADR 0056): the fsync path raises ``CapPersistError``, independent of
+    ``CapExhausted`` (so a cap-exhausted handler does not swallow it), and the
+    spend path still fails closed.
+    """
+
+    def test_fsync_failure_raises_a_distinct_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from nous.anthropic_client import CallCap, CapExhausted, CapPersistError
+
+        def _fail_fsync(_fd: int) -> None:
+            raise OSError("simulated fsync failure")
+
+        monkeypatch.setattr("nous.anthropic_client.os.fsync", _fail_fsync)
+        with pytest.raises(CapPersistError):
+            CallCap(tmp_path / "cap.json", cap=5).increment()
+        assert not issubclass(CapPersistError, CapExhausted)

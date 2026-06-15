@@ -19,6 +19,7 @@ import anyio
 from mcp.server.fastmcp import Context, FastMCP
 from starlette.applications import Starlette
 
+from .anthropic_client import AnthropicClient
 from .audit import AuditLogger
 from .audit_anchor import AnchorLog
 from .config import Settings, get_settings
@@ -84,6 +85,13 @@ class Nous:
         self.engine = Engine(
             settings=settings, transition_log=self.transition_log, audit=self.audit
         )
+        # One process-scoped Anthropic client (MED-1, ADR 0056): built once here,
+        # not per inference_cloud call, so a single httpx pool serves the process
+        # and the prompt-cache metric stays observable. Eager (a single
+        # assignment) so the one-per-process guarantee holds unconditionally,
+        # rather than via cached_property, whose first-access compute is not
+        # thread-safe on 3.12+ (the SDK construction needs no running loop).
+        self.anthropic_client = AnthropicClient(self.settings)
         # The active scenario session (ADR 0040). Process-scoped like the
         # engine itself (ADR 0024), so it survives stateless-HTTP requests.
         self.scenario_session: ScenarioSession | None = None

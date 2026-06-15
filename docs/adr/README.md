@@ -58,3 +58,4 @@
 | 0053 | [Propagation-aware comms link quality](0053-propagation-aware-comms-model.md) | Accepted | 2026-06-14 |
 | 0054 | [Higher-fidelity comms propagation (path loss, diffraction, noise, antenna, fading)](0054-higher-fidelity-propagation.md) | Accepted | 2026-06-14 |
 | 0055 | [Redact the runner's caught-exception body to the exception class](0055-runner-redacts-caught-exception-body.md) | Accepted | 2026-06-14 |
+| 0056 | [Distinguish a cap-persistence failure from exhaustion, and reuse the client](0056-cap-persist-error-and-client-reuse.md) | Accepted | 2026-06-15 |

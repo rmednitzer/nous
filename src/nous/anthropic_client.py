@@ -48,6 +48,7 @@ __all__ = [
     "AnthropicClient",
     "CallCap",
     "CapExhausted",
+    "CapPersistError",
     "CapReading",
     "build_client",
 ]
@@ -85,6 +86,18 @@ def _join_text(message: Message) -> str:
 
 class CapExhausted(RuntimeError):
     """Raised when the daily Anthropic call cap is exhausted."""
+
+
+class CapPersistError(RuntimeError):
+    """Raised when the daily counter was written but could not be made durable.
+
+    Distinct from :class:`CapExhausted` (audit 2026-06-14b LOW-3, ADR 0056): an
+    ``os.fsync`` failure is a durability fault, not a spent budget, so the
+    fallback ladder can report it honestly instead of as cap exhaustion. The
+    spend path still fails closed -- the call degrades to the local mock -- and
+    the count may already have advanced on disk, since the write precedes the
+    fsync (ADR 0050).
+    """
 
 
 class _CorruptCounter(Exception):
@@ -161,7 +174,9 @@ class CallCap:
 
         Raises :class:`CapExhausted` when today's count has reached the
         configured cap, or when the persisted counter is corrupt and
-        cannot be safely recovered.
+        cannot be safely recovered. Raises :class:`CapPersistError` when the
+        counter is written but the fsync confirming durability fails, a
+        distinct durability fault rather than a spent budget (ADR 0056).
         """
         self._path.parent.mkdir(parents=True, exist_ok=True)
         today = datetime.now(UTC).strftime("%Y-%m-%d")
@@ -199,7 +214,7 @@ class CallCap:
                 try:
                     os.fsync(fh.fileno())
                 except OSError as exc:
-                    raise CapExhausted(
+                    raise CapPersistError(
                         f"daily counter at {self._path} could not be fsynced: {exc}"
                     ) from exc
                 return new_count, self._cap

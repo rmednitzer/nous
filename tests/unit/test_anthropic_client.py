@@ -31,7 +31,12 @@ from typing import Any
 import pytest
 from anthropic import omit
 
-from nous.anthropic_client import AnthropicClient, CallCap, CapExhausted
+from nous.anthropic_client import (
+    AnthropicClient,
+    CallCap,
+    CapExhausted,
+    CapPersistError,
+)
 from nous.config import Settings
 
 
@@ -229,7 +234,9 @@ def test_fsync_failure_fails_closed(
         raise OSError("simulated fsync failure")
 
     monkeypatch.setattr("nous.anthropic_client.os.fsync", _fail_fsync)
-    with pytest.raises(CapExhausted, match="could not be fsynced"):
+    # A durability fault raises CapPersistError, distinct from CapExhausted, so
+    # the fallback reports it honestly rather than as a spent budget (ADR 0056).
+    with pytest.raises(CapPersistError, match="could not be fsynced"):
         cap.increment()
 
 
