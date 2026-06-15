@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 
-from nous.state.dtn_mesh import BundleState, DtnMesh, MeshBundle, _RecentIds
+from nous.state.dtn_mesh import _MAX_HOPS, BundleState, DtnMesh, MeshBundle, _RecentIds
 
 
 def _mesh(dtn: dict[str, Any], *, rng: np.random.Generator | None = None) -> DtnMesh:
@@ -503,3 +503,64 @@ def test_restore_lost_reflects_only_the_latest_restore() -> None:
     }
     mesh.restore(clean, now_s=0.0)
     assert mesh.restore_lost_total == 0  # reset per restore, not accumulated
+
+
+# -- BL-108 / ADR 0070: per-cause drop attribution ----------------------
+
+
+def test_drop_causes_split_forward_loss_and_retry_exhausted() -> None:
+    mesh = _mesh(
+        {
+            "self_eid": "dtn://dev/",
+            "contacts": [
+                {"a": "dtn://dev/", "b": "dtn://ground/", "loss_pct": 100.0}
+            ],
+            "custody_retries": 1,
+        },
+        rng=np.random.default_rng(0),
+    )
+    best_effort = mesh.originate("dtn://ground/", 100, now_s=0.0, custody=False)
+    custodial = mesh.originate("dtn://ground/", 100, now_s=0.0, custody=True)
+    assert best_effort is not None and custodial is not None
+    for tick in range(1, 5):
+        mesh.step(1.0, now_s=float(tick))
+    assert _state(best_effort) is BundleState.DROPPED
+    assert _state(custodial) is BundleState.DROPPED
+    assert mesh.drop_causes == {"forward_loss": 1, "retry_exhausted": 1}
+    assert mesh.dropped_total == 2  # the per-cause split sums to the aggregate
+
+
+def test_drop_causes_records_store_overflow() -> None:
+    mesh = _mesh({"self_eid": "dtn://dev/", "max_store": 3}, rng=np.random.default_rng(0))
+    for _ in range(5):
+        mesh.originate("dtn://unreachable/", 100, now_s=0.0, lifetime_s=0)
+    counters = mesh.status()["counters"]
+    assert counters["dropped"] == 2  # two over-cap bundles shed
+    assert counters["drop_causes"] == {"store_overflow": 2}
+
+
+def test_drop_causes_records_max_hops() -> None:
+    eids = [f"dtn://n{i}/" for i in range(_MAX_HOPS + 3)]
+    contacts = [{"a": eids[i], "b": eids[i + 1]} for i in range(len(eids) - 1)]
+    mesh = _mesh(
+        {"self_eid": eids[0], "contacts": contacts},
+        rng=np.random.default_rng(0),
+    )
+    bundle = mesh.originate(eids[-1], 100, now_s=0.0)
+    assert bundle is not None
+    for tick in range(1, _MAX_HOPS + 4):
+        mesh.step(1.0, now_s=float(tick))
+    assert _state(bundle) is BundleState.DROPPED
+    assert mesh.drop_causes == {"max_hops": 1}
+
+
+def test_drop_causes_absent_until_a_drop() -> None:
+    mesh = _mesh(
+        {
+            "self_eid": "dtn://dev/",
+            "contacts": [{"a": "dtn://dev/", "b": "dtn://ground/"}],
+        }
+    )
+    mesh.originate("dtn://ground/", 100, now_s=0.0)
+    mesh.step(1.0, now_s=1.0)  # clean delivery, nothing dropped
+    assert mesh.status()["counters"]["drop_causes"] == {}

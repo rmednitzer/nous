@@ -71,6 +71,7 @@ class Link:
     forced_state: bool | None = None
     age_out_count: int = 0
     last_aged_out_at_s: float | None = None
+    last_tx_reason: str = ""
     propagation: LinkPropagation | None = None
     range_m: float | None = None
     path_loss_db: float | None = None
@@ -195,18 +196,22 @@ class CommsSubsystem:
         if link is None:
             return 0
         if link.forced_state is False:
+            link.last_tx_reason = "forced_down"
             return 0
         if not self.emcon.permits(link_id, now_s=now_s):
+            link.last_tx_reason = "emcon"
             return 0
         if link.capacity_bps <= 0.0:
             # A propagation link driven below its SNR floor carries nothing:
             # reject the send and stamp the zero achieved rate rather than
             # reporting bytes accepted on a dead link (audit 2026-06-14b H-1,
             # consistent with the forced-down guard above).
+            link.last_tx_reason = "no_capacity"
             link.throughput_bps = 0.0
             return 0
         amount = max(0, int(n_bytes))
         if amount <= 0:
+            link.last_tx_reason = "empty"
             return 0
         bits = float(amount) * 8.0
         elapsed = link.age_s
@@ -221,6 +226,7 @@ class CommsSubsystem:
         link.throughput_bps = min(rate, ceiling)
         link.age_s = 0.0
         link.connected = True
+        link.last_tx_reason = "sent"
         return amount
 
     def step(self, dt: float) -> None:

@@ -469,6 +469,85 @@ def test_flush_tick_budget_tracks_capacity_not_bandwidth() -> None:
     assert result.delivered_bytes < bandwidth_budget
 
 
+# -- BL-108 / ADR 0070: per-cause defer attribution ---------------------
+
+
+def test_defer_causes_records_link_down() -> None:
+    comms = _comms()
+    comms.set_link_state("lte", connected=False)
+    ob = _outbox()
+    ob.enqueue("lte", 100, now_s=0.0, precedence=Precedence.FLASH)
+    ob.flush(comms, now_s=1.0)
+    assert ob.status()["counters"]["defer_causes"] == {"link_down": 1}
+
+
+def test_defer_causes_records_emcon() -> None:
+    from nous.state.emcon import SILENT
+
+    comms = _comms()
+    comms.emcon.set_profile(SILENT)  # operator silence; the link is still live
+    ob = _outbox()
+    ob.enqueue("lte", 100, now_s=0.0, precedence=Precedence.FLASH)
+    result = ob.flush(comms, now_s=1.0)
+    assert result.delivered == []
+    assert ob.status()["counters"]["defer_causes"] == {"emcon": 1}
+
+
+def test_defer_causes_records_no_capacity() -> None:
+    comms = _relay_comms_at(13.30)  # live but below the SNR floor: zero capacity
+    relay = comms.link("relay")
+    assert relay is not None and relay.is_live() and relay.capacity_bps == 0.0
+    profile: dict[str, Any] = {"comms": {"links": []}}
+    ob = CommsOutbox(profile)  # no rng: the reject is the zero capacity, not loss
+    for _ in range(5):
+        ob.enqueue("relay", 100, now_s=0.0)
+    ob.flush(comms, now_s=0.0)
+    # The first reject closes the link for the rest of the flush, so the cause is
+    # counted once even though every package behind it also defers.
+    assert ob.status()["counters"]["defer_causes"] == {"no_capacity": 1}
+
+
+def test_defer_causes_records_loss() -> None:
+    import numpy as np
+
+    comms = _relay_comms_at(13.02)  # degraded but alive: probabilistic loss
+    relay = comms.link("relay")
+    assert relay is not None and relay.loss_pct > 10.0 and relay.capacity_bps > 0.0
+    profile: dict[str, Any] = {"comms": {"links": []}}
+    ob = CommsOutbox(profile, rng=np.random.default_rng(0))
+    for _ in range(20):
+        ob.enqueue("relay", 100, now_s=0.0)
+    ob.flush(comms, now_s=0.0)
+    assert ob.status()["counters"]["defer_causes"] == {"loss": 1}
+
+
+def test_defer_causes_accumulate_across_flushes() -> None:
+    from nous.state.emcon import SILENT
+
+    comms = _comms()
+    comms.set_link_state("lte", connected=False)
+    ob = _outbox()
+    ob.enqueue("lte", 100, now_s=0.0, precedence=Precedence.FLASH)
+    ob.flush(comms, now_s=1.0)  # link_down
+
+    comms.clear_link_override("lte")
+    comms.emcon.set_profile(SILENT)
+    ob.flush(comms, now_s=2.0)  # emcon, same package
+    assert ob.status()["counters"]["defer_causes"] == {"link_down": 1, "emcon": 1}
+
+
+def test_budget_defer_records_no_cause() -> None:
+    # A package that does not fit the link budget is held, not failed: it is not
+    # a delivery attempt and carries no defer cause (ADR 0070).
+    comms = _comms()
+    ob = _outbox()
+    ob.enqueue("lte", 200, now_s=0.0, precedence=Precedence.FLASH)
+    result = ob.flush(comms, now_s=2.0, link_budget_bytes={"lte": 100.0})
+    assert result.delivered == []
+    assert ob.status()["counters"]["defer_causes"] == {}
+    assert ob.packages()[0].attempts == 0
+
+
 # -- DTN bundle identity and dedup (BL-056 / ADR 0061) -------------------
 
 

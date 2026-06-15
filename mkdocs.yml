@@ -155,6 +155,7 @@ nav:
       - "0067 EMCON metadata minimisation": adr/0067-emcon-metadata-minimisation.md
       - "0068 DTN custody-store bound and restore-loss accounting": adr/0068-dtn-custody-store-bound-and-restore-loss-accounting.md
       - "0069 Atomic profile reload": adr/0069-atomic-profile-reload.md
+      - "0070 Per-cause diagnostics for held and dropped traffic": adr/0070-per-cause-traffic-diagnostics.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md

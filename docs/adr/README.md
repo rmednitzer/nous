@@ -72,3 +72,4 @@
 | 0067 | [EMCON metadata minimisation](0067-emcon-metadata-minimisation.md) | Accepted | 2026-06-15 |
 | 0068 | [DTN custody-store bound and restore-loss accounting](0068-dtn-custody-store-bound-and-restore-loss-accounting.md) | Accepted | 2026-06-15 |
 | 0069 | [Atomic profile reload](0069-atomic-profile-reload.md) | Accepted | 2026-06-15 |
+| 0070 | [Per-cause diagnostics for held and dropped traffic](0070-per-cause-traffic-diagnostics.md) | Accepted | 2026-06-15 |
