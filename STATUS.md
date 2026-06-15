@@ -137,7 +137,11 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1067 tests pass at HEAD: BL-060 increment 3 added
+  feature branch before merge. 1070 tests pass at HEAD: the 2026-06-15 adversarial
+  audit added three (the EMCON remediations: built-in postures immutable, altitude
+  coarsened under minimisation, and an extreme window phase normalised, in
+  `tests/unit/test_emcon.py`; the pass is recorded in `docs/audit-2026-06-15.md`),
+  on top of the 1067 from BL-060 increment 3, which added
   five (the metadata-minimisation tests: position coarsening, field dropping,
   identity without a policy, and the minimise status read in
   `tests/unit/test_emcon.py`, and a publish under a minimising posture emitting a

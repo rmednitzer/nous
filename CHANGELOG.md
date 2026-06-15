@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (comms: EMCON OPSEC remediations from the 2026-06-15 audit, BL-060)
+
+- An adversarial audit pass (`docs/audit-2026-06-15.md`) found and fixed three
+  OPSEC-invariant gaps in the EMCON layer. A `comms.emcon` profile named `silent`
+  or `unrestricted` could overwrite the built-in posture, so `emcon_set("silent")`
+  might still emit; the built-ins are now immutable. Altitude (`hae` / `alt_m`)
+  leaked at full precision under a `minimize` posture that coarsened only latitude
+  and longitude; `_POSITION_KEYS` now covers the altitude variants. An extreme
+  `phase_s` could make a duty-cycle window read permanently closed; the phase is
+  now normalised modulo the period. The same pass recorded eleven further gaps as
+  BL-098 through BL-108 for their own increments.
+
 ### Added (comms: EMCON metadata minimisation, BL-060 / ADR 0067)
 
 - A `minimize` policy on an EMCON profile: `{ position_decimals, drop }`.
