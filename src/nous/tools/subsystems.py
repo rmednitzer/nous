@@ -302,6 +302,8 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         precedence: str = "routine",
         kind: str = "raw",
         ttl_s: float | None = None,
+        dest_eid: str | None = None,
+        bundle_id: str | None = None,
         ctx: Context | None = None,
     ) -> str:
         """Queue a package for store-and-forward when comms are degraded (T2, BL-077).
@@ -320,10 +322,19 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         a package is only ever evicted to make room for a strictly
         higher-precedence one. ``ttl_s`` overrides the profile's default
         time-to-live; an expired package is dropped rather than shipped stale.
+
+        Each package carries a BPv7-shaped bundle identity (ADR 0061): pass
+        ``dest_eid`` to set the destination endpoint (else the profile's peer) and
+        ``bundle_id`` to make the call idempotent, so a re-submission of a
+        still-queued or recently-delivered id is refused as a duplicate rather
+        than queued twice. The returned ``package.bundle`` block carries the
+        assigned id.
+
         Returns ``{"ok": bool, "reason": str, "package": {...}, "evicted":
         [ids], "depth": N}``; ``ok`` is false when the package is empty, larger
-        than the outbox budget, or refused because the queue is full of
-        equal-or-higher-precedence traffic. Tier T2 (stateful).
+        than the outbox budget, refused because the queue is full of
+        equal-or-higher-precedence traffic, or recognised as a duplicate bundle.
+        Tier T2 (stateful).
         """
 
         async def _work() -> str:
@@ -352,6 +363,8 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                 kind=kind,
                 ttl_s=ttl_s,
                 payload=payload,
+                dest_eid=dest_eid,
+                bundle_id=bundle_id,
             )
             body = result.to_dict()
             body["ok"] = result.accepted
@@ -367,6 +380,8 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                 "precedence": precedence,
                 "kind": kind,
                 "ttl_s": ttl_s,
+                "dest_eid": dest_eid,
+                "bundle_id": bundle_id,
             },
             ctx,
             _work,

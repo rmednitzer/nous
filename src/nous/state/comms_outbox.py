@@ -41,6 +41,7 @@ loop.
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -115,6 +116,13 @@ class OutboxPackage:
     expiry_ts_s: float | None = None
     payload: bytes | None = None
     attempts: int = 0
+    # BPv7-shaped bundle identity (ADR 0061): the queue handle ``package_id`` is
+    # local and reused per outbox, while ``bundle_id`` names the bundle for
+    # dedup, custody, and replay. ``enqueued_ts_s`` doubles as the creation time.
+    source_eid: str = ""
+    dest_eid: str = ""
+    sequence: int = 0
+    bundle_id: str = ""
 
     def is_expired(self, now_s: float) -> bool:
         return self.expiry_ts_s is not None and now_s >= self.expiry_ts_s
@@ -131,6 +139,12 @@ class OutboxPackage:
                 None if self.expiry_ts_s is None else round(self.expiry_ts_s, 3)
             ),
             "attempts": self.attempts,
+            "bundle": {
+                "id": self.bundle_id,
+                "source_eid": self.source_eid,
+                "dest_eid": self.dest_eid,
+                "sequence": self.sequence,
+            },
         }
 
 
@@ -181,6 +195,12 @@ _DEFAULT_MAX_PACKAGES = 256
 _DEFAULT_MAX_BYTES = 1_048_576
 _DEFAULT_TTL_S = 300.0
 
+# DTN bundle identity (ADR 0061). The node EID defaults to the profile name; the
+# destination defaults to a single notional controller endpoint. The delivered
+# ledger is a bounded recent-window dedup set, not an all-time one.
+_DEFAULT_PEER_EID = "dtn://controller/"
+_DELIVERED_LEDGER_SIZE = 1024
+
 
 class CommsOutbox:
     """Bounded, precedence-ordered store-and-forward queue for outbound packages.
@@ -208,6 +228,14 @@ class CommsOutbox:
         # a lossy propagation link. ``None`` (the default, and every bare-profile
         # test) keeps the flush all-or-nothing.
         self._rng = rng
+        # DTN bundle identity (ADR 0061): the device's node EID and the default
+        # destination, plus a monotonic creation sequence and a bounded ledger of
+        # recently delivered bundle ids for dedup.
+        self.node_eid: str = _node_eid(profile)
+        self.default_peer_eid: str = _peer_eid(profile)
+        self._next_seq = 1
+        self._delivered_ledger: deque[str] = deque(maxlen=_DELIVERED_LEDGER_SIZE)
+        self._delivered_ids: set[str] = set()
         self._packages: list[OutboxPackage] = []
         self._next_id = 1
         self._queued_bytes = 0
@@ -218,6 +246,7 @@ class CommsOutbox:
         self.dropped_overflow_total = 0
         self.expired_total = 0
         self.rejected_total = 0
+        self.deduped_total = 0
 
     # -- enqueue ---------------------------------------------------------
 
@@ -231,14 +260,26 @@ class CommsOutbox:
         kind: str = "raw",
         ttl_s: float | None = None,
         payload: bytes | None = None,
+        dest_eid: str | None = None,
+        bundle_id: str | None = None,
     ) -> EnqueueResult:
         """Queue a package for store-and-forward, applying the triage rules.
 
         Returns an :class:`EnqueueResult`: ``accepted`` is false when the
-        package is empty, larger than the whole queue budget, or refused because
-        the queue is full of equal-or-higher-precedence traffic. Expired
-        packages are purged first, then lower-precedence packages are evicted
-        (oldest first) only while the arrival strictly outranks them.
+        package is empty, larger than the whole queue budget, refused because
+        the queue is full of equal-or-higher-precedence traffic, or recognised as
+        a duplicate. Expired packages are purged first, then lower-precedence
+        packages are evicted (oldest first) only while the arrival strictly
+        outranks them.
+
+        Every package is stamped with a BPv7-shaped bundle identity (ADR 0061):
+        the device's ``source_eid``, a ``dest_eid`` (this argument, else the
+        configured peer), a creation sequence, and a ``bundle_id``. Pass an
+        explicit ``bundle_id`` to make the call idempotent: a re-submission whose
+        id is still queued or in the recently-delivered ledger is refused as a
+        duplicate (counted, not an error). Omit it and each call gets a unique
+        auto-id, so an unkeyed enqueue can never collide and behaves exactly as
+        before.
         """
         if not self.enabled:
             return EnqueueResult(False, "outbox disabled")
@@ -253,6 +294,15 @@ class CommsOutbox:
 
         self._purge_expired(now_s)
 
+        sequence = self._next_seq
+        if isinstance(bundle_id, str) and bundle_id.strip() != "":
+            bid = bundle_id.strip()
+        else:
+            bid = f"{self.node_eid.rstrip('/')}/{sequence}"
+        if self._is_duplicate(bid):
+            self.deduped_total += 1
+            return EnqueueResult(False, f"duplicate bundle {bid}")
+
         pkg = OutboxPackage(
             package_id=self._next_id,
             link_id=link_id,
@@ -262,6 +312,14 @@ class CommsOutbox:
             enqueued_ts_s=float(now_s),
             expiry_ts_s=self._resolve_expiry(now_s, ttl_s),
             payload=payload,
+            source_eid=self.node_eid,
+            dest_eid=(
+                dest_eid.strip()
+                if isinstance(dest_eid, str) and dest_eid.strip() != ""
+                else self.default_peer_eid
+            ),
+            sequence=sequence,
+            bundle_id=bid,
         )
 
         evicted: list[int] = []
@@ -279,6 +337,7 @@ class CommsOutbox:
             evicted.append(victim.package_id)
 
         self._next_id += 1
+        self._next_seq += 1
         self._packages.append(pkg)
         self._queued_bytes += pkg.size_bytes
         self.enqueued_total += 1
@@ -355,6 +414,7 @@ class CommsOutbox:
                 continue
             self._remove(pkg)
             self.delivered_total += 1
+            self._record_delivered(pkg.bundle_id)
             result.delivered.append(pkg.package_id)
             result.delivered_bytes += accepted
             if pkg.link_id in remaining:
@@ -447,6 +507,8 @@ class CommsOutbox:
                 )
         return {
             "enabled": self.enabled,
+            "node_eid": self.node_eid,
+            "peer_eid": self.default_peer_eid,
             "depth": self.depth(),
             "queued_bytes": self.queued_bytes(),
             "max_packages": self.max_packages,
@@ -460,6 +522,7 @@ class CommsOutbox:
                 "dropped_overflow": self.dropped_overflow_total,
                 "expired": self.expired_total,
                 "rejected": self.rejected_total,
+                "deduped": self.deduped_total,
             },
         }
 
@@ -519,6 +582,22 @@ class CommsOutbox:
         self._packages.remove(pkg)
         self._queued_bytes -= pkg.size_bytes
 
+    def _is_duplicate(self, bundle_id: str) -> bool:
+        """True when ``bundle_id`` is already queued or recently delivered."""
+        if bundle_id in self._delivered_ids:
+            return True
+        return any(pkg.bundle_id == bundle_id for pkg in self._packages)
+
+    def _record_delivered(self, bundle_id: str) -> None:
+        """Remember a delivered bundle id in the bounded dedup window (ADR 0061)."""
+        if bundle_id in self._delivered_ids:
+            return
+        ledger = self._delivered_ledger
+        if ledger.maxlen is not None and len(ledger) == ledger.maxlen:
+            self._delivered_ids.discard(ledger[0])
+        ledger.append(bundle_id)
+        self._delivered_ids.add(bundle_id)
+
 
 def _outbox_cfg(profile: Mapping[str, Any] | None) -> dict[str, Any]:
     """Coerce the optional ``comms.outbox`` profile section to safe values."""
@@ -537,6 +616,32 @@ def _outbox_cfg(profile: Mapping[str, Any] | None) -> dict[str, Any]:
         "max_bytes": _coerce_positive_int(section.get("max_bytes"), _DEFAULT_MAX_BYTES),
         "default_ttl_s": _coerce_ttl(section.get("default_ttl_s"), _DEFAULT_TTL_S),
     }
+
+
+def _node_eid(profile: Mapping[str, Any] | None) -> str:
+    """The device's DTN node EID: ``comms.node_eid``, else ``dtn://<name>/``."""
+    name = "nous-node"
+    if isinstance(profile, Mapping):
+        raw_name = profile.get("name")
+        if isinstance(raw_name, str) and raw_name.strip():
+            name = raw_name.strip()
+        comms = profile.get("comms")
+        if isinstance(comms, Mapping):
+            eid = comms.get("node_eid")
+            if isinstance(eid, str) and eid.strip():
+                return eid.strip()
+    return f"dtn://{name}/"
+
+
+def _peer_eid(profile: Mapping[str, Any] | None) -> str:
+    """The default destination EID: ``comms.peer_eid``, else the controller."""
+    if isinstance(profile, Mapping):
+        comms = profile.get("comms")
+        if isinstance(comms, Mapping):
+            eid = comms.get("peer_eid")
+            if isinstance(eid, str) and eid.strip():
+                return eid.strip()
+    return _DEFAULT_PEER_EID
 
 
 def _coerce_bool(value: Any, *, default: bool) -> bool:

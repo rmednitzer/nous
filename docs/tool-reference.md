@@ -140,6 +140,30 @@ tool registry.
 ```json
 {
   "properties": {
+    "bundle_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Bundle Id"
+    },
+    "dest_eid": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dest Eid"
+    },
     "kind": {
       "default": "raw",
       "title": "Kind",
