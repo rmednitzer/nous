@@ -28,9 +28,14 @@ class Adapter(Protocol):
     """An adapter encodes nous state to an external format and back.
 
     ``encode`` returns a serialised payload (bytes). ``decode`` parses an
-    inbound payload back to a structured mapping. Streaming adapters can
-    expose their own ``stream()`` coroutine; the base Protocol stays
-    minimal so adapters can be tested in isolation.
+    inbound payload back to a structured mapping. The decode tool serialises
+    that mapping with ``json.dumps``, which coerces scalar keys but rejects
+    exotic ones, so a decoded mapping should be keyed by strings; an adapter
+    over a wire format with non-string keys (MISB KLV tag numbers, or a future
+    CBOR / msgpack codec) may return them and the tool stringifies every key as
+    a backstop (audit 2026-06-14b LOW-4, ADR 0058). Streaming adapters can
+    expose their own ``stream()`` coroutine; the base Protocol stays minimal so
+    adapters can be tested in isolation.
     """
 
     name: str

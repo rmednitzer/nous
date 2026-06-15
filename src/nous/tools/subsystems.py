@@ -19,6 +19,20 @@ from mcp.server.fastmcp import Context, FastMCP
 
 if TYPE_CHECKING:
     from ..server import Nous, WrapFn
+    from ..types import Estimate
+
+
+def _rejected_from_health(estimate: Estimate) -> int:
+    """Rejection count from the estimate's health block, not a bare attribute.
+
+    Reading the diagnostic through the Protocol's ``state()`` return (where ADR
+    0045 placed it) rather than ``estimator.rejected_updates`` keeps a future
+    Protocol-conforming estimator that omits that attribute from breaking this
+    T0 read (audit 2026-06-14b MED-3, ADR 0058). ``health`` is optional on the
+    contract, so an estimator that reports none counts as zero rejections.
+    """
+    health = estimate.health
+    return health.rejected_updates if health is not None else 0
 
 
 def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
@@ -461,7 +475,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                     "alt_sigma_m": round(
                         estimate.covariance.get("alt_m", 0.0) ** 0.5, 4
                     ),
-                    "rejected_updates": app.engine.position_est.rejected_updates,
+                    "rejected_updates": _rejected_from_health(estimate),
                 },
             }
             return json.dumps(payload)
@@ -494,7 +508,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                     "baro_kpa_sigma": round(
                         estimate.covariance.get("baro_kpa", 0.0) ** 0.5, 4
                     ),
-                    "rejected_updates": app.engine.sensors_est.rejected_updates,
+                    "rejected_updates": _rejected_from_health(estimate),
                 },
             }
             return json.dumps(payload)
@@ -536,7 +550,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                     "cognitive_load_sigma": round(
                         estimate.covariance.get("cognitive_load", 0.0) ** 0.5, 4
                     ),
-                    "rejected_updates": app.engine.biometrics_est.rejected_updates,
+                    "rejected_updates": _rejected_from_health(estimate),
                 },
             }
             return json.dumps(payload)

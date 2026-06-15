@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (estimators/interop: read rejections through health, stringify decode keys, BL-094 / ADR 0058)
+
+- `position_status` / `sensors_status` / `biometrics_status` now read
+  `rejected_updates` from the estimate's health block (`estimate.health`) rather
+  than a bare `est.rejected_updates` attribute, so a future Protocol-conforming
+  estimator that omits the attribute no longer breaks the T0 read (the Estimator
+  Protocol stays at three methods, per ADR 0045). The biometrics and sensors
+  reads now include innovation-gate rejections in the count, not just
+  input-validation rejections, matching what the position read and the
+  self-model already reported (unchanged at zero when nothing is gated). And
+  `interop_decode` stringifies every mapping key recursively before
+  `json.dumps`, so a non-string-keyed payload (a future CBOR / msgpack adapter,
+  or any exotic key `json.dumps` would reject) decodes to valid JSON instead of
+  an exception body; MISB's integer tag keys serialise exactly as before. Pinned
+  as the `TestMed3` and `TestLow4` regression classes (ADR 0023).
+
 ### Changed (scenarios: tick_advance reports an honest, breaking tick count, BL-093 / ADR 0057)
 
 - **BREAKING CHANGE:** `tick_advance`'s result drops the `ticks_advanced` field

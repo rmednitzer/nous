@@ -1210,3 +1210,93 @@ class TestMed2TickAdvanceCountIsHonest:
         assert out["tick"] == before + 102
         # ts_s tracks the true elapsed advance, not the requested count.
         assert out["ts_s"] == pytest.approx(out["tick"] * app.engine.dt_s)
+
+
+class TestMed3StatusReadsRejectionsThroughHealth:
+    """MED-3: a status tool reads rejected_updates via the Estimate contract.
+
+    Original defect (``docs/audit-2026-06-14b.md`` MED-3): ``position_status`` /
+    ``sensors_status`` / ``biometrics_status`` read ``est.rejected_updates`` as a
+    bare attribute, but the ``Estimator`` Protocol declares only ``name`` /
+    ``predict`` / ``update`` / ``state``; only three of nine estimators expose the
+    attribute, so a Protocol-conforming replacement that omitted it would
+    ``AttributeError`` inside the T0 read.
+
+    Fix (ADR 0058 / ADR 0045): the tools read the count from
+    ``estimate.state().health``, a Protocol-method path, and an estimator that
+    reports no health block reads as zero rejections instead of raising.
+    """
+
+    async def test_status_survives_a_protocol_estimator_without_the_attribute(
+        self, config: Settings
+    ) -> None:
+        from nous.estimators.base import Estimator
+        from nous.server import build_app
+        from nous.types import Estimate
+
+        app = build_app(config)
+
+        class _BareEstimator:
+            name = "position"
+
+            def predict(self, dt: float) -> None: ...
+
+            def update(self, obs: object) -> None: ...
+
+            def state(self) -> Estimate:
+                return Estimate(source="position", ts_s=0.0)
+
+        replacement = _BareEstimator()
+        # Satisfies the runtime-checkable Protocol but exposes no counter.
+        assert isinstance(replacement, Estimator)
+        assert not hasattr(replacement, "rejected_updates")
+        app.engine.position_est = replacement  # type: ignore[assignment]
+
+        result: Any = await app.mcp.call_tool("position_status", {})
+        content, _ = result
+        out = json.loads(content[0].text)
+        assert out["estimate"]["rejected_updates"] == 0
+
+
+class TestLow4DecodeToolCoercesNonStringKeys:
+    """LOW-4: interop_decode must not raise on a non-string-keyed mapping.
+
+    Original defect (``docs/audit-2026-06-14b.md`` LOW-4): the tool passed the
+    decoded mapping straight to ``json.dumps``, which raises ``TypeError`` on a
+    key it cannot coerce (a tuple, or anything a future CBOR / msgpack adapter
+    might produce), turning a decode call into an exception body. ``decode`` was
+    typed ``Mapping[str, Any]`` but nothing enforced it.
+
+    Fix (ADR 0058): the tool stringifies every mapping key recursively before
+    ``json.dumps``, so an exotic-keyed payload decodes to valid JSON.
+    """
+
+    async def test_decode_coerces_keys_json_dumps_would_reject(
+        self, config: Settings, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from nous.server import build_app
+
+        app = build_app(config)
+
+        class _ExoticKeyAdapter:
+            name = "exotic"
+
+            def encode(self, data: Any) -> bytes:
+                return b""
+
+            def decode(self, payload: bytes) -> dict[Any, Any]:
+                # A tuple key is one json.dumps rejects outright (no coercion);
+                # the nested int key is the MISB-style case.
+                return {("a", "b"): 1, "nested": [{3: "three"}]}
+
+        monkeypatch.setattr(
+            "nous.interop.build_adapter", lambda _name: _ExoticKeyAdapter()
+        )
+        result: Any = await app.mcp.call_tool(
+            "interop_decode", {"adapter": "exotic", "payload_hex": ""}
+        )
+        content, _ = result
+        out = json.loads(content[0].text)
+        decoded = out["decoded"]
+        assert decoded["('a', 'b')"] == 1
+        assert decoded["nested"][0]["3"] == "three"

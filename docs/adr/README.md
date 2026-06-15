@@ -60,3 +60,4 @@
 | 0055 | [Redact the runner's caught-exception body to the exception class](0055-runner-redacts-caught-exception-body.md) | Accepted | 2026-06-14 |
 | 0056 | [Distinguish a cap-persistence failure from exhaustion, and reuse the client](0056-cap-persist-error-and-client-reuse.md) | Accepted | 2026-06-15 |
 | 0057 | [Authorize the breaking rename of tick_advance's count fields](0057-tick-advance-field-rename.md) | Accepted | 2026-06-15 |
+| 0058 | [Read estimator rejections through health, and stringify decode keys](0058-rejections-through-health-and-decode-key-coercion.md) | Accepted | 2026-06-15 |

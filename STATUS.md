@@ -87,7 +87,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0057` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0058` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -137,7 +137,12 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1006 tests pass at HEAD: BL-093 added one (the
+  feature branch before merge. 1008 tests pass at HEAD: BL-094 added two (the
+  `TestMed3` and `TestLow4` regression pins in
+  `tests/regression/test_audit_findings.py` per ADR 0023, closing the
+  2026-06-14b audit's MED-3 and LOW-4; ADR 0058 reads estimator rejections
+  through the `Estimate` health block per ADR 0045 and stringifies non-string
+  decode keys), on top of the 1006 from BL-093, which added one (the
   `TestMed2` tick_advance-count regression pin in
   `tests/regression/test_audit_findings.py` per ADR 0023, which monkeypatches the
   advance's checkpoint to fire an extra tick and proves the loop's interleaved
