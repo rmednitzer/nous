@@ -7,7 +7,11 @@ yet?" questions.
 
 The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`. Two deployment failure modes found on `nous-prod-01` are closed in code: `deploy/install.sh` no longer installs `auto-update.sh` onto itself (the self-install errored under `set -e` and aborted every deploy after the `git reset`, the root cause of the freeze; BL-063), and `deploy/auto-update.sh` now rolls `HEAD` back and reinstalls the previous good artifacts on any failed deploy. The VM was manually resynced on 2026-05-28 (restarted onto current `main`; verified 29 tools, calibrated self-model, `audit.degraded:false`, so AUDIT N2 is cleared). A separate fix (BL-064 / ADR 0024) makes the engine tick at process scope: under `stateless_http=True` the per-request server lifespan had been rebooting the engine on every tool call, so `tick` and the FSM never advanced.
 
-Last reviewed: 2026-06-14 ([`docs/audit-2026-06-14b.md`](docs/audit-2026-06-14b.md),
+Last reviewed: 2026-06-15 ([`docs/audit-2026-06-15b.md`](docs/audit-2026-06-15b.md),
+a documentation and hardware-profile cross-check: code-comment, markdown, and
+BOM-versus-datasheet verification against trusted sources, fixing the DTN and
+audit-anchor doc drift and three profile/BOM number errors). Prior: 2026-06-14
+([`docs/audit-2026-06-14b.md`](docs/audit-2026-06-14b.md),
 a full fresh adversarial pass at HEAD post BL-048 / BL-088: gate-battery
 validation, a live-twin probe, and a three-front code and documentation drift
 sweep). Prior: 2026-06-06 ([`docs/audit-2026-06-06.md`](docs/audit-2026-06-06.md),
@@ -32,7 +36,7 @@ for the prior baseline.
 
 Deployment-side status note: the L1 subsystem rollout has been on
 `origin/main` since PR #38, so the auto-update timer lands the
-current forty-eight-tool surface on the live VM on the next poll after
+current fifty-tool surface on the live VM on the next poll after
 `origin/main` advances (no-op when the remote HEAD is unchanged).
 Eight audit findings have closed since the 2026-05-23 baseline and
 the post-baseline §10 re-audit: **C3** (FastMCP lifespan ticks the
@@ -87,7 +91,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0065` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0069` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |

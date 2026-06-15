@@ -24,9 +24,9 @@ name is searchable and stable.
 
 | Part | Vendor | Reference | Profile usage | Notes |
 |------|--------|-----------|---------------|-------|
-| BB-2590/U | Bren-Tronics | MIL-PRF-32383/3 ; Bren-Tronics BB-2590/U datasheet | `power.battery_wh: 296` (jetson-orin-nx) ; 2x for `power.battery_wh: 588` (jetson-agx-orin) | 14.4 V nominal, ~2.2 kg, Li-ion. Internal resistance 50-80 mOhm typical for a 4S pack of this rating. |
-| Spot battery | Boston Dynamics | Boston Dynamics Spot product specification | `power.battery_wh: 605`, `voltage_v_nominal: 41.6` (spot-core) | ~4.2 kg Li-ion. Voltage range and capacity confirmed against Spot user guide. |
-| 3S 2P 18650 pack | Generic COTS | Samsung INR18650-25R datasheet (representative cell) | `power.battery_wh: 99`, `voltage_v_nominal: 11.1` (pi5-hailo) | 6x 18650 cells, ~16.5 Wh per cell at ~2500 mAh and 3.7 V. |
+| BB-2590/U | Bren-Tronics | MIL-PRF-32383/3 ; Bren-Tronics BB-2590/U datasheet | `power.battery_wh: 294` (jetson-orin-nx) ; 2x for `power.battery_wh: 588` (jetson-agx-orin) | 14.4 V nominal, ~1.4 kg, Li-ion. 294 Wh is the 9.9 Ah (BT-70791CG class) variant; 2x gives the 588 Wh AGX pack. Internal resistance 50-80 mOhm typical for a 4S pack of this rating. |
+| Spot battery | Boston Dynamics | Boston Dynamics Spot product specification | `power.battery_wh: 605`, `voltage_v_nominal: 41.6` (spot-core) | ~4.2 kg Li-ion. Published figures vary by revision: current vendor listings show ~564 Wh and a 35-58.8 V range (no nominal stated). The profile keeps the earlier 605 Wh / 41.6 V spec; Spot is a demonstration profile, so the figure stays pending a single authoritative source (AUDIT-2026-06-15b). |
+| 3S 2P 18650 pack | Generic COTS | Samsung INR18650-25R datasheet (representative cell) | `power.battery_wh: 55`, `voltage_v_nominal: 11.1` (pi5-hailo) | 6x 18650 cells, ~9.25 Wh per cell at 2500 mAh and 3.7 V nominal -> ~55 Wh pack. |
 
 ## Compute modules
 
@@ -35,7 +35,7 @@ name is searchable and stable.
 | Jetson AGX Orin 64GB | NVIDIA | Jetson AGX Orin Series Data Sheet | `compute.draw_w_idle: 8`, `compute.draw_w_load: 60` (jetson-agx-orin) | Power envelope 15-60 W selectable via `NV_POWER_MODE`. Idle figure assumes MAXN with light load. |
 | Jetson Orin NX 16GB | NVIDIA | Jetson Orin NX Series Data Sheet | `compute.draw_w_idle: 5`, `compute.draw_w_load: 25` (jetson-orin-nx) | Power envelope 10-25 W. |
 | Raspberry Pi 5 (8GB) | Raspberry Pi Ltd | Raspberry Pi 5 product brief | Part of `compute.draw_w_idle: 3`, `compute.draw_w_load: 12` (pi5-hailo) | 3-8 W typical CPU; package includes Hailo accelerator (next row). |
-| Hailo-8L M.2 | Hailo | Hailo-8L AI Acceleration Module datasheet | Part of pi5-hailo `compute.draw_w_load` envelope | 13 TOPS at 2-5 W. |
+| Hailo-8L M.2 | Hailo | Hailo-8L AI Acceleration Module datasheet | Part of pi5-hailo `compute.draw_w_load` envelope | 13 TOPS; ~1.5 W typical, up to ~6.6 W for the M.2 module. |
 | Spot CORE I/O payload | Boston Dynamics | Boston Dynamics Spot CORE I/O documentation | `compute.draw_w_idle: 30`, `compute.draw_w_load: 90` (spot-core) | x86-class payload computer; envelope from CORE I/O power budget. |
 
 ## Solar PV panels
@@ -57,7 +57,7 @@ name is searchable and stable.
 
 | Part | Vendor | Reference | Profile usage | Notes |
 |------|--------|-----------|---------------|-------|
-| EFOY Pro 800 class | SFC Energy | SFC EFOY Pro 800 datasheet | `apu.fuel_cell.continuous_w: 25`, `efficiency: 0.25`, `wh_per_g_fuel: 1.4` (jetson-agx-orin) | 40 W nameplate; profile uses 25 W as a typical sustained draw. Consumption 0.9 L/kWh. |
+| EFOY Pro 800 class | SFC Energy | SFC EFOY Pro 800 datasheet | `apu.fuel_cell.continuous_w: 25`, `efficiency: 0.25`, `wh_per_g_fuel: 1.4` (jetson-agx-orin) | ~45 W nameplate (25 W minimum output); profile uses 25 W as a typical sustained draw. Consumption 0.9 L/kWh. |
 | EFOY 80 class | SFC Energy | SFC EFOY 80 datasheet | `apu.fuel_cell.continuous_w: 15`, `efficiency: 0.25`, `wh_per_g_fuel: 1.4` (jetson-orin-nx) | Same consumption rate; smaller continuous output. |
 
 ## Methanol cartridges and energy properties
@@ -74,7 +74,7 @@ name is searchable and stable.
 
 | Spec | Standards body | Reference | Profile usage | Notes |
 |------|----------------|-----------|---------------|-------|
-| 28 V DC ground-vehicle bus | NATO | STANAG 4074 | `apu.vehicle.bus_voltage_v: 28.0`, `current_limit_a: 5.0` (jetson-agx-orin, jetson-orin-nx) | Standard NATO ground-vehicle electrical interface. 5 A current limit is a conservative accessory-port draw (140 W). |
+| 28 V DC ground-vehicle bus | US DoD | MIL-STD-1275 | `apu.vehicle.bus_voltage_v: 28.0`, `current_limit_a: 5.0` (jetson-agx-orin, jetson-orin-nx) | Standard 28 V DC military ground-vehicle electrical interface. (STANAG 4074 is the separate jump-start connector standard, not the bus voltage; corrected AUDIT-2026-06-15b.) 5 A current limit is a conservative accessory-port draw (140 W). |
 | 12 V automotive accessory | SAE | SAE J1113 (radiated and conducted EM compatibility); ISO 16750 (general 12 V envelope) | `apu.vehicle.bus_voltage_v: 12.0`, `current_limit_a: 2.0` (pi5-hailo) | Cigarette-lighter / accessory-port class draw (24 W). |
 | 48 V Spot dock | Boston Dynamics | Spot charger and dock specification | `apu.vehicle.bus_voltage_v: 48.0`, `current_limit_a: 8.0` (spot-core) | Spot's native charge bus. The "vehicle" abstraction is a stretch for a robot platform; treat as the dock-tether equivalent. |
 

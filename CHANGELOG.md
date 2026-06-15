@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (docs + hardware profiles: cross-check against trusted sources, AUDIT-2026-06-15b)
+
+- A documentation and hardware-profile audit (`docs/audit-2026-06-15b.md`) swept
+  every code comment, every markdown file, and the profile numbers against vendor
+  datasheets and reference data. Documentation drift: LIMITATIONS.md,
+  `docs/architecture.md`, and README.md still said "no mesh/DTN, point-to-point"
+  after the BL-056 DTN mesh shipped (ADR 0061-0064); SECURITY.md called the daily
+  audit anchor "optional" and unshipped when `audit_anchor_verify` is a live T0
+  tool (BL-031, ADR 0026); three live docs carried a stale "forty-six" or
+  "forty-eight" tool count (the surface is fifty); STATUS.md capped the ADR range
+  at 0065 (now 0069); CLAUDE.md's layout omitted `dtn_mesh.py` and `emcon.py`.
+  Profile numbers: the pi5-hailo battery was 99 Wh for a 6-cell 18650 pack that
+  holds ~55 Wh (the BOM's ~16.5 Wh/cell was arithmetically impossible); the
+  BB-2590/U was 296 Wh against a real 294 Wh (and the AGX pack already used
+  588 = 2 x 294); the 28 V vehicle bus was mis-cited as STANAG 4074 (it is
+  MIL-STD-1275). EFOY nameplate, Hailo-8L power, and BB-2590 weight were corrected
+  in the BOM. No schema or behaviour change.
+
 ### Fixed (engine: atomic profile reload, BL-103 / ADR 0069)
 
 - `Engine.reload_profile` was committing the new profile and rebuilding the

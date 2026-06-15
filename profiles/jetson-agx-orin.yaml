@@ -6,12 +6,12 @@ description: >
   panel, and a 25 W methanol fuel cell.
 
 # Hardware references (keep numbers traceable to a datasheet):
-#   battery:   2x Bren-Tronics BB-2590/U (296 Wh, 14.4 V nominal each).
+#   battery:   2x Bren-Tronics BB-2590/U (294 Wh, 14.4 V nominal each).
 #   compute:   NVIDIA Jetson AGX Orin 64GB datasheet (15 W -- 60 W envelope).
 #   solar:     PowerFilm SOL90 / Bren-Tronics MFC-90 class (60 W peak).
 #   fuel cell: SFC Energy EFOY-class methanol fuel cell
 #              (~25 W continuous, ~0.9 L/kWh -> ~1.4 Wh/g electrical).
-#   vehicle:   NATO STANAG 4074 vehicle bus (28 V DC).
+#   vehicle:   MIL-STD-1275 28 V DC vehicle bus.
 
 power:
   battery_wh: 588

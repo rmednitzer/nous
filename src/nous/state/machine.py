@@ -253,8 +253,8 @@ def build_fsm_enforcer() -> SafetyEnforcer:
 
 # Cap on the in-memory transition and refusal logs (ADR 0029). The durable
 # record is the SQLite ``state_transitions`` table; these deques only back the
-# ``state_history`` in-memory fallback (which reads the last 256 rows), so a
-# long-running server does not accumulate them without bound.
+# ``state_history`` in-memory fallback, so a long-running server does not
+# accumulate them without bound.
 _HISTORY_MAXLEN = 512
 
 

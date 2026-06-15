@@ -178,22 +178,28 @@ instance) is not supported.
 **Tracking.** Out of scope for v0.1. Multi-tenant is `[planned]` for L3 in
 [BL-045].
 
-## L12. Single-hop store-and-forward only, no mesh or DTN
+## L12. DTN mesh is simulated over abstract nodes, not a real radio network
 
-**State.** Comms are point-to-point. A single-hop store-and-forward outbox
-now holds outbound packages when a link is degraded or denied and drains
-them in precedence order as the link recovers (BL-077, ADR 0047), so C2
-traffic can survive a radio blackout on the link it was queued for. What is
-still absent is the full delay-tolerant-networking layer: no mesh routing,
-no multi-hop custody transfer, no BPv7 bundle format, and no replay.
+**State.** The full delay-tolerant-networking layer is now present (BL-056,
+ADR 0061-0064): a multi-node mesh originates BPv7-style bundles with
+`dtn_send`, routes them hop by hop with contact-graph routing over a
+time-windowed contact schedule, transfers custody with retransmission and a
+deduplicated custody acknowledgement, and checkpoints the whole store to
+SQLite so a custodial bundle survives a restart. The single-hop
+store-and-forward outbox (BL-077, ADR 0047) still backs the device's own
+link. What remains simulated rather than real is the substrate: the mesh
+peers are abstract hold-and-forward nodes, the contacts come from a
+configured `dtn` profile section rather than neighbour discovery, and
+inter-node loss is a Bernoulli draw rather than modelled RF propagation.
 
-**Implication.** A package queued for a denied link is held and delivered
-when that link returns, but there is no second path: a scenario that needs
-the message to reach the controller over a different node or a relayed hop,
-rather than over the original link recovering, is not modelled.
+**Implication.** A bundle can reach the controller over a relayed multi-hop
+path and survive both a link drop and a process restart, but the topology is
+authored, not discovered, and the mesh links do not carry the per-link RF
+physics (RSSI, range, fade) the device's own comms links do.
 
-**Tracking.** Single-hop outbox done under BL-077; the full DTN layer is
-BL-056 (planned, L3).
+**Tracking.** DTN layer done under BL-056 (ADR 0061-0064); single-hop outbox
+under BL-077. Neighbour discovery and RF-physics-backed mesh links are not
+tracked for v0.1.
 
 ## L13. Linear-Gaussian estimators only
 
