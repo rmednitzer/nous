@@ -10,7 +10,6 @@ Python.
 from __future__ import annotations
 
 import math
-import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -221,7 +220,6 @@ class Engine:
             self.transition_log.engine, init_error=self.transition_log.init_error
         )
         self._started = False
-        self._wall_start = 0.0
         self._failsafe = FailsafeArbiter(_FAILSAFE_CONDITIONS)
         self._tick_hooks: list[TickHook] = []
         self.tick_hook_errors = 0
@@ -366,7 +364,6 @@ class Engine:
             new_ready = self.fsm.transition("ready")
             self._record_transition(prev_ready, "ready", new_ready, reason="boot complete")
         self._started = True
-        self._wall_start = time.monotonic()
         self._set_mode(self.fsm.current)
         self.state.ts_s = 0.0
         self.state.tick = 0

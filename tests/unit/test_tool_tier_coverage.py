@@ -73,3 +73,39 @@ def test_tier_frozensets_are_pairwise_disjoint() -> None:
                 "classify() resolves overlaps by priority order and would "
                 "silently mistier the name."
             )
+
+
+# Names classified ahead of registration by design (ADR 0033): forward-classified
+# so a tool ships at its intended tier when its seam lands. They are allowed to be
+# classified-but-unregistered; a name that is neither registered nor listed here is
+# drift (a typo or a stale entry).
+_FORWARD_CLASSIFIED: frozenset[str] = frozenset(
+    {"inference_request", "db_reset", "audit_rotate"}
+)
+
+
+@pytest.mark.asyncio
+async def test_classified_names_are_registered_or_dispositioned(
+    tmp_nous_home: object,
+) -> None:
+    """Every classified name is registered or a dispositioned forward-classification.
+
+    The complement of the registered-to-classified check (AUDIT-2026-06-15 L-2 /
+    BL-107). ADR 0033 keeps a handful of names classified before they are
+    registered on purpose, so deletion is wrong (ADR 0033 rejects it); but a name
+    that is neither a live tool nor one of those dispositioned forward names is a
+    typo or a stale entry the additive-surface default would otherwise hide.
+    """
+    server = build_server()
+    registered = {t.name for t in await server.list_tools()}
+    classified = set().union(*_TIER_SETS.values())
+    orphans = sorted(
+        name
+        for name in classified
+        if name not in registered and name not in _FORWARD_CLASSIFIED
+    )
+    assert not orphans, (
+        "classified names that are neither registered nor a dispositioned "
+        f"forward-classification (ADR 0033): {orphans}. Register the tool, or if it "
+        "is a deliberate forward-classification add it to _FORWARD_CLASSIFIED."
+    )

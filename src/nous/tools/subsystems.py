@@ -368,6 +368,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
 
         async def _work() -> str:
             from ..state.comms_outbox import Precedence
+            from ._errors import error_class
 
             payload: bytes | None = None
             size: int
@@ -375,7 +376,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                 try:
                     payload = bytes.fromhex(payload_hex)
                 except ValueError as exc:
-                    return json.dumps({"ok": False, "reason": f"hex: {exc}"})
+                    return json.dumps({"ok": False, "reason": f"hex: {error_class(exc)}"})
                 size = len(payload)
             elif n_bytes is not None:
                 size = int(n_bytes)

@@ -73,11 +73,12 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
 
         async def _work() -> str:
             from ..interop import StaleEstimateError, build_adapter
+            from ._errors import error_class
 
             try:
                 impl = build_adapter(adapter)
             except KeyError as exc:
-                return json.dumps({"error": str(exc)})
+                return json.dumps({"error": error_class(exc)})
             try:
                 payload = impl.encode(dict(data or {}))
             except StaleEstimateError as exc:
@@ -90,7 +91,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                     }
                 )
             except (ValueError, TypeError) as exc:
-                return json.dumps({"adapter": adapter, "error": str(exc)})
+                return json.dumps({"adapter": adapter, "error": error_class(exc)})
             return json.dumps(
                 {
                     "adapter": adapter,
@@ -120,15 +121,16 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
 
         async def _work() -> str:
             from ..interop import build_adapter
+            from ._errors import error_class
 
             try:
                 impl = build_adapter(adapter)
             except KeyError as exc:
-                return json.dumps({"error": str(exc)})
+                return json.dumps({"error": error_class(exc)})
             try:
                 payload = bytes.fromhex(payload_hex)
             except ValueError as exc:
-                return json.dumps({"adapter": adapter, "error": f"hex: {exc}"})
+                return json.dumps({"adapter": adapter, "error": f"hex: {error_class(exc)}"})
             decoded = impl.decode(payload)
             return json.dumps(
                 {"adapter": adapter, "decoded": _jsonsafe_keys(dict(decoded))}

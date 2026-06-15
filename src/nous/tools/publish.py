@@ -43,11 +43,12 @@ def encode_and_tx(
     less detail.
     """
     from ..interop import StaleEstimateError, build_adapter
+    from ._errors import error_class
 
     try:
         impl = build_adapter(adapter)
     except KeyError as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": error_class(exc)}
     data = engine.comms.emcon.minimize(data)
     try:
         payload = impl.encode(dict(data))
@@ -60,7 +61,7 @@ def encode_and_tx(
             "max_age_s": exc.max_age_s,
         }
     except (ValueError, TypeError) as exc:
-        return {"ok": False, "adapter": adapter, "error": str(exc)}
+        return {"ok": False, "adapter": adapter, "error": error_class(exc)}
     now_s = engine.state.ts_s
     if engine.comms.link(link_id) is not None and not engine.comms.emcon.permits(
         link_id, now_s=now_s

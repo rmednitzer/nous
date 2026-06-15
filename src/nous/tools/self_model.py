@@ -266,10 +266,14 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                 body = situation(app.engine).model_dump()
             else:
                 body = _assess_payload(assess("publish", engine=app.engine))
+            from ._errors import error_class
+
             try:
                 data = _publish_shape(name, kind, body, engine=app.engine)
             except (ValueError, TypeError) as exc:
-                return json.dumps({"ok": False, "adapter": adapter, "error": str(exc)})
+                return json.dumps(
+                    {"ok": False, "adapter": adapter, "error": error_class(exc)}
+                )
             if data is None:
                 # Only an unregistered name reaches here (shaped and
                 # position-codec names were dispatched above); delegate to
