@@ -137,15 +137,16 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1033 tests pass at HEAD: BL-056 increment 3 added
-  four (the contact-graph-routing and custody-ack tests in
+  feature branch before merge. 1036 tests pass at HEAD: BL-056 increment 3 added
+  seven (the contact-graph-routing and custody-ack tests in
   `tests/unit/test_dtn_mesh.py`: a bundle held at a relay for a scheduled contact
   then delivered when its window opens, a bundle held when no route meets its
   deadline and expiring in place, a lost custody acknowledgement delivering once
-  while the duplicate is deduplicated, and seeded determinism under
-  acknowledgement loss; ADR 0063, contact-graph routing over the increment-2
-  shortest path plus the lossy custody ack), on top of the 1029 from BL-056
-  increment 2, which added
+  while the duplicate is deduplicated, seeded determinism under acknowledgement
+  loss, an arrival-tie route resolved by hop count, a zero-rate contact skipped
+  for a positive-rate path, and a bounded dedup ledger; ADR 0063, contact-graph
+  routing over the increment-2 shortest path plus the lossy custody ack), on top
+  of the 1029 from BL-056 increment 2, which added
   ten (the multi-node DTN mesh tests in `tests/unit/test_dtn_mesh.py`: shortest-path
   routing over up-contacts, one-hop-per-tick multi-hop delivery, store-and-forward
   across a dropped contact, custody retained and retransmitted on loss while

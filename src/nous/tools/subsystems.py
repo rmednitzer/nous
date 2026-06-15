@@ -467,7 +467,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         The delay-tolerant-networking overlay (ADR 0062, ADR 0063) routes bundles
         across a configured multi-node topology with store-and-forward and
         custody transfer, using contact-graph routing over the contacts'
-        schedules. Returns the self EID, the acknowledgement-loss fraction, the
+        schedules. Returns the self EID, the acknowledgement-loss percentage, the
         per-node held-bundle counts, the contact graph (up/down, rate, loss, and
         the optional ``start_s`` / ``end_s`` window), the in-transit total, the
         cumulative disposition counters (originated / delivered / forwarded /

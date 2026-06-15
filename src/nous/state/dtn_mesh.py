@@ -25,6 +25,7 @@ deduplicated per node on the bundle id (ADR 0061).
 from __future__ import annotations
 
 import heapq
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -40,6 +41,8 @@ _DEFAULT_RATE_BPS = 1_000_000.0
 _DEFAULT_CUSTODY_RETRIES = 8
 _DEFAULT_LIFETIME_S = 600.0
 _DEFAULT_ACK_LOSS_PCT = 0.0
+# Bounded dedup-ledger window, per node and mesh-wide (the ADR 0061 pattern).
+_DEDUP_LEDGER_SIZE = 1024
 # Routing-loop guard: a bundle that has been forwarded this many hops without
 # reaching its destination is dropped rather than circulating forever.
 _MAX_HOPS = 32
@@ -133,13 +136,32 @@ class MeshBundle:
         }
 
 
+class _RecentIds:
+    """A bounded recent-id membership set (the ADR 0061 dedup-ledger pattern)."""
+
+    def __init__(self, maxlen: int) -> None:
+        self._order: deque[str] = deque(maxlen=maxlen)
+        self._ids: set[str] = set()
+
+    def add(self, item: str) -> None:
+        if item in self._ids:
+            return
+        if len(self._order) == self._order.maxlen:
+            self._ids.discard(self._order[0])
+        self._order.append(item)
+        self._ids.add(item)
+
+    def __contains__(self, item: str) -> bool:
+        return item in self._ids
+
+
 @dataclass
 class DtnNode:
     """A mesh node: an EID, the bundles it holds, and the ids it has seen."""
 
     eid: str
     store: list[MeshBundle] = field(default_factory=list)
-    seen: set[str] = field(default_factory=set)
+    seen: _RecentIds = field(default_factory=lambda: _RecentIds(_DEDUP_LEDGER_SIZE))
 
 
 class DtnMesh:
@@ -163,7 +185,7 @@ class DtnMesh:
         }
         self.contacts: list[Contact] = cfg["contacts"]
         self._next_seq = 1
-        self.delivered_ids: set[str] = set()
+        self.delivered_ids = _RecentIds(_DEDUP_LEDGER_SIZE)
         self.originated_total = 0
         self.delivered_total = 0
         self.forwarded_total = 0
@@ -251,7 +273,7 @@ class DtnMesh:
             or dest_eid not in self.nodes
         ):
             return None
-        arrival: dict[str, float] = {src_eid: float(now_s)}
+        best: dict[str, tuple[float, int, str]] = {src_eid: (float(now_s), 0, src_eid)}
         prev: dict[str, tuple[str, Contact]] = {}
         visited: set[str] = set()
         heap: list[tuple[float, int, str, str]] = [(float(now_s), 0, src_eid, src_eid)]
@@ -270,8 +292,9 @@ class DtnMesh:
                     continue
                 if deadline_s is not None and arr > deadline_s:
                     continue
-                if nbr not in arrival or arr < arrival[nbr]:
-                    arrival[nbr] = arr
+                cand = (arr, hops + 1, node)
+                if nbr not in best or cand < best[nbr]:
+                    best[nbr] = cand
                     prev[nbr] = (node, contact)
                     heapq.heappush(heap, (arr, hops + 1, nbr, nbr))
         if dest_eid not in prev:
@@ -296,13 +319,19 @@ class DtnMesh:
     def _arrival_over(
         contact: Contact, ta: float, now_s: float, size_bytes: int
     ) -> float | None:
-        """Earliest arrival across ``contact`` for a bundle present at time ``ta``."""
+        """Earliest arrival across ``contact`` for a bundle present at time ``ta``.
+
+        ``None`` when the contact cannot carry the bundle: its window has already
+        closed, or it has no capacity (a non-positive rate, which the per-tick
+        budget would also refuse, so routing must not select it).
+        """
+        if contact.rate_bps <= 0.0:
+            return None
         start = contact.start_s if contact.start_s is not None else now_s
         eff_start = max(ta, start)
         if contact.end_s is not None and eff_start >= contact.end_s:
             return None
-        rate = contact.rate_bps if contact.rate_bps > 0.0 else _DEFAULT_RATE_BPS
-        tx = size_bytes / rate if size_bytes > 0 else 0.0
+        tx = size_bytes / contact.rate_bps if size_bytes > 0 else 0.0
         return eff_start + tx
 
     # -- step --------------------------------------------------------------

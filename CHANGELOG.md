@@ -16,7 +16,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   waits there rather than being held in place. Custody transfer now models a
   separately-lossy acknowledgement (`ack_loss_pct`, default zero): a lost ack
   makes the previous custodian retain and retransmit, and the duplicate that
-  creates is deduplicated per node on the bundle id (ADR 0061), so a guaranteed
+  creates is deduplicated per node on the bundle id (a bounded recent-id ledger,
+  the ADR 0061 pattern), so a guaranteed
   bundle survives a lost ack as a deduplicated duplicate rather than a silent
   second delivery. With `ack_loss_pct` at zero and no contact schedules the mesh
   behaves exactly as increment 2, so the change is additive and inert without a

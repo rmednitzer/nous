@@ -49,8 +49,8 @@ so the route stays deterministic.
 **An explicit custody acknowledgement.** Custody transfer is modelled as a
 separately-lossy acknowledgement instead of being folded into forward success.
 When a custodial bundle is forwarded successfully the receiving node accepts
-custody and returns a custody signal, delivered with probability one minus a
-configured acknowledgement-loss fraction (`ack_loss_pct`, default zero). When
+custody and returns a custody signal, lost with a configured acknowledgement-loss
+probability (`ack_loss_pct`, a percentage from 0 to 100, default zero). When
 the signal lands the previous custodian releases its copy, exactly as the folded
 model did, so `ack_loss_pct = 0` reproduces ADR 0062's custody behaviour byte
 for byte and consumes no RNG draw. When the signal is lost the previous

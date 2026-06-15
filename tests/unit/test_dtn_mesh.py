@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 
-from nous.state.dtn_mesh import BundleState, DtnMesh, MeshBundle
+from nous.state.dtn_mesh import BundleState, DtnMesh, MeshBundle, _RecentIds
 
 
 def _mesh(dtn: dict[str, Any], *, rng: np.random.Generator | None = None) -> DtnMesh:
@@ -311,3 +311,58 @@ def test_step_is_deterministic_with_ack_loss() -> None:
         return (mesh.delivered_total, mesh.deduped_total, mesh.retransmits_total)
 
     assert run() == run()
+
+
+def test_routing_breaks_arrival_ties_by_hop_count() -> None:
+    # Two routes to ground arrive at t=10: a 2-hop route via 'a' and a 3-hop route
+    # via 'b'/'c'. The 3-hop route's relays reach their hops earlier, so an
+    # arrival-only relaxation would lock it in; the hop-count tie-break must still
+    # prefer the 2-hop route.
+    mesh = _mesh(
+        {
+            "self_eid": "dtn://dev/",
+            "contacts": [
+                {"a": "dtn://dev/", "b": "dtn://a/", "start_s": 9.0},
+                {"a": "dtn://a/", "b": "dtn://ground/", "start_s": 10.0},
+                {"a": "dtn://dev/", "b": "dtn://b/", "start_s": 0.0},
+                {"a": "dtn://b/", "b": "dtn://c/", "start_s": 0.0},
+                {"a": "dtn://c/", "b": "dtn://ground/", "start_s": 10.0},
+            ],
+        }
+    )
+    hop = mesh.next_hop("dtn://dev/", "dtn://ground/", now_s=0.0, size_bytes=0)
+    assert hop is not None and hop[0] == "dtn://a/"
+
+
+def test_zero_rate_contact_is_not_selected_for_routing() -> None:
+    # The direct contact has zero capacity (rate_bps=0): routing must skip it and
+    # deliver via the positive-rate relay instead of stalling on the dead link.
+    mesh = _mesh(
+        {
+            "self_eid": "dtn://dev/",
+            "contacts": [
+                {"a": "dtn://dev/", "b": "dtn://ground/", "rate_bps": 0.0},
+                {"a": "dtn://dev/", "b": "dtn://relay/"},
+                {"a": "dtn://relay/", "b": "dtn://ground/"},
+            ],
+        }
+    )
+    hop = mesh.next_hop("dtn://dev/", "dtn://ground/", now_s=0.0, size_bytes=100)
+    assert hop is not None and hop[0] == "dtn://relay/"
+
+    bundle = mesh.originate("dtn://ground/", 100, now_s=0.0)
+    assert bundle is not None
+    mesh.step(1.0, now_s=1.0)
+    assert bundle.holder_eid == "dtn://relay/"
+    mesh.step(1.0, now_s=2.0)
+    assert _state(bundle) is BundleState.DELIVERED
+
+
+def test_recent_ids_evicts_oldest_beyond_maxlen() -> None:
+    recent = _RecentIds(2)
+    recent.add("a")
+    recent.add("b")
+    assert "a" in recent and "b" in recent
+    recent.add("c")
+    assert "a" not in recent
+    assert "b" in recent and "c" in recent
