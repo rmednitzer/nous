@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (comms: EMCON emission control with store-and-forward triage, BL-060 / ADR 0065)
+
+- An emission-control posture layer. EMCON is an orthogonal, operator-imposed
+  posture (like the operator and comms states): a set of named emission profiles,
+  each listing the comms links permitted to emit, with one active at a time.
+  `unrestricted` (all links) and `silent` (none) are always present; further
+  profiles come from an optional `comms.emcon` profile section. `emcon_status`
+  (T0) reads the posture and `emcon_set` (T2) changes it. The gate sits at the
+  single `CommsSubsystem.tx` seam, so when a profile forbids a link every path
+  (direct send, interop publish, the BL-077 outbox flush) declines to emit. A
+  silenced `comms_send` / `comms_publish` / `self_model_publish` is held in the
+  store-and-forward outbox (tagged `emcon_deferred`) rather than dropped, and the
+  tick-driven drain ships the backlog once the posture is lifted, closing the
+  loop with the BL-056 triage layer. Inert without a `comms.emcon` section and
+  under the default `unrestricted` profile, so every existing profile is
+  unchanged; the spot-core profile ships a demonstrative `low_pi` profile. This
+  is increment 1 of BL-060; metadata minimisation and burst windows follow.
+
 ### Added (comms: DTN store persistence across a restart, BL-056 / ADR 0064)
 
 - Increment 4 of the DTN layer, the replay increment, completing BL-056. The

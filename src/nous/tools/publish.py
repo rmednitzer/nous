@@ -34,7 +34,10 @@ def encode_and_tx(
     link accepts none), and ``payload_hex`` carries the wire form either
     way so the controller sees both the encoding and its effect on the
     link. ``extra`` keys (e.g. the self-model ``kind``) are merged into the
-    success body.
+    success body. When the active EMCON profile forbids emitting on the link
+    (BL-060 / ADR 0065), nothing is transmitted: the encoded payload is held in
+    the store-and-forward outbox (``reason`` ``emcon``, ``enqueued`` true) so it
+    ships when emissions resume.
     """
     from ..interop import StaleEstimateError, build_adapter
 
@@ -54,6 +57,26 @@ def encode_and_tx(
         }
     except (ValueError, TypeError) as exc:
         return {"ok": False, "adapter": adapter, "error": str(exc)}
+    if engine.comms.link(link_id) is not None and not engine.comms.emcon.permits(link_id):
+        held = engine.outbox.enqueue(
+            link_id,
+            len(payload),
+            now_s=engine.state.ts_s,
+            kind="emcon_deferred",
+            payload=payload,
+        )
+        return {
+            "ok": False,
+            "link_id": link_id,
+            "adapter": adapter,
+            **dict(extra or {}),
+            "reason": "emcon",
+            "emcon_profile": engine.comms.emcon.active,
+            "payload_hex": payload.hex(),
+            "len": len(payload),
+            "bytes_accepted": 0,
+            "enqueued": held.accepted,
+        }
     accepted = engine.comms.tx(link_id, len(payload))
     return {
         "ok": accepted > 0,
