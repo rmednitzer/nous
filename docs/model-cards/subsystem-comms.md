@@ -20,7 +20,7 @@ triage, and the operator emission posture all attach.
 
 | Seam | Notes |
 |------|-------|
-| `tx(link_id, n_bytes, *, now_s=)` | Account an emission; returns the bytes sent, `0` when capacity is zero, the link is down, or an EMCON posture denies or windows it |
+| `tx(link_id, n_bytes, *, now_s=)` | Account an emission; returns the bytes accepted, `0` only when the link is unknown, the controller has forced it down, an EMCON profile excludes it or its duty-cycle window is closed, `capacity_bps` is zero, or `n_bytes` is non-positive (an aged-out link still accepts) |
 | `set_link_state` / `inject_comms_loss` | Scenario overrides that hard-force a link state above the physics |
 | `position_fn` | Lazy device position for the propagation slant range (ADR 0019 injection seam) |
 
