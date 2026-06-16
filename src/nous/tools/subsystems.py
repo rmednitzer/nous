@@ -424,9 +424,9 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         Reports the queue depth and bytes pending, the per-precedence and
         per-link breakdown, the head package a flush would deliver first (with
         its remaining time-to-live), the cumulative disposition counters
-        (enqueued / delivered / dropped_overflow / expired / rejected) and the
-        per-cause defer breakdown (``defer_causes``: why a flush held a package,
-        keyed link_down / loss / emcon / no_capacity; BL-108), and the
+        (enqueued / delivered / dropped_overflow / expired / rejected / deduped)
+        and the per-cause defer breakdown (``defer_causes``: why a flush held a
+        package, keyed link_down / loss / emcon / no_capacity; BL-108), and the
         packages in triage (flush) order. The package list is capped so the read
         stays bounded; ``packages_truncated`` flags when the queue is deeper than
         the listing.
