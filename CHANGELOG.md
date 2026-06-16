@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation (adversarial audit 2026-06-16: comms diagnostics and legibility)
+
+- A focused adversarial pass over the surfaces changed in PRs #160 through #167
+  (`docs/audit-2026-06-16.md`). It confirmed the BL-108 per-cause diagnostics, the
+  BL-102 outbox dedup, and the BL-101 DtnStore split are correct, and recorded
+  three gaps: the send and publish tools do not yet surface the BL-108
+  `last_tx_reason` on a non-EMCON transmit failure (BL-109), the `comms_outbox`
+  and `dtn_mesh` read-tool docstrings omitted the new `defer_causes` /
+  `drop_causes` maps (BL-110, fixed here), and the self-model inference status
+  reads the central point estimate where endurance and thermal read the
+  conservative p5 (BL-111). Only the docstring fix changes code.
+
 ### Added (EMCON rejected-default legibility and MCP-path coverage, BL-104 / BL-105)
 
 - A configured `comms.emcon.default` that named an unknown profile silently fell

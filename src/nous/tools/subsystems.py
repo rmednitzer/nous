@@ -424,7 +424,9 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         Reports the queue depth and bytes pending, the per-precedence and
         per-link breakdown, the head package a flush would deliver first (with
         its remaining time-to-live), the cumulative disposition counters
-        (enqueued / delivered / dropped_overflow / expired / rejected), and the
+        (enqueued / delivered / dropped_overflow / expired / rejected) and the
+        per-cause defer breakdown (``defer_causes``: why a flush held a package,
+        keyed link_down / loss / emcon / no_capacity; BL-108), and the
         packages in triage (flush) order. The package list is capped so the read
         stays bounded; ``packages_truncated`` flags when the queue is deeper than
         the listing.
@@ -552,7 +554,11 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         ADR 0068), the contact graph (up/down, rate, loss, and the optional
         ``start_s`` / ``end_s`` window), the in-transit total, the cumulative
         disposition counters (originated / delivered / forwarded / retransmits /
-        dropped / expired / deduped / restore_lost), and the in-transit bundles
+        dropped / expired / deduped / restore_lost) and the per-cause drop
+        breakdown (``drop_causes``: max_hops / forward_loss / retry_exhausted /
+        store_overflow; a within-process attribution, so it restarts from a fresh
+        process while ``dropped`` carries forward; BL-108), and the in-transit
+        bundles
         grouped by holding node, each node's bundles in triage (forward) order
         (capped so the read stays bounded; ``bundles_truncated`` flags a deeper
         backlog), and a ``persistence`` block reporting whether the store is
