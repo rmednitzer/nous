@@ -54,6 +54,8 @@ _Z_90 = 1.645
 _ENDURANCE_NET_CHARGE_CAP_MIN = 24 * 60.0
 _MONTE_CARLO_SAMPLES = 512
 _DEFAULT_SEED = 0
+_PERCEPTION_RANGE_MAX_M = 60000.0
+_PERCEPTION_CONFIDENCE_SCALE_M = 4000.0
 
 QuantileMode = Literal["monte_carlo", "gaussian"]
 
@@ -65,6 +67,7 @@ class Assessment(BaseModel):
     endurance: Capability | None = None
     thermal_headroom: Capability | None = None
     inference_capacity: Capability | None = None
+    perception_range: Capability | None = None
     extra: list[Capability] = Field(default_factory=list)
 
 
@@ -94,12 +97,14 @@ def assess(
     endurance = _endurance_capability(engine, mode=mode, rng=rng)
     thermal_headroom = _thermal_headroom_capability(engine, mode=mode, rng=rng)
     inference_capacity = _inference_capacity_capability(engine, mode=mode, rng=rng)
+    perception_range = _perception_range_capability(engine, mode=mode, rng=rng)
 
     return Assessment(
         question=question or "default",
         endurance=endurance,
         thermal_headroom=thermal_headroom,
         inference_capacity=inference_capacity,
+        perception_range=perception_range,
     )
 
 
@@ -119,6 +124,9 @@ def _empty_assessment(question: str) -> Assessment:
             p50=0.0,
             p95=0.0,
             units="tok/s",
+        ),
+        perception_range=Capability(
+            name="perception_range_m", point=0.0, p5=0.0, p50=0.0, p95=0.0, units="m"
         ),
     )
 
@@ -295,6 +303,60 @@ def _inference_capacity_capability(
         confidence=confidence,
         drivers=["compute", "thermal"],
         units="tok/s",
+    )
+
+
+def _perception_range_capability(
+    engine: Engine, *, mode: QuantileMode, rng: np.random.Generator
+) -> Capability:
+    """Best-band EO/IR detection range -- the device's perception reach.
+
+    The headline is ``max(eo_range, ir_range)``: the electro-optical band wins by
+    day, the infrared band by night or through smoke, so the better of the two is
+    the honest answer to "how far can I perceive right now". The Monte Carlo branch
+    samples both bands from the EO/IR Kalman posterior and takes the per-sample
+    maximum, so the band reflects the nonlinear best-of-two rather than one channel.
+    """
+    estimate = engine.eoir_est.state()
+
+    eo_point = float(estimate.point.get("eo_range_m", engine.eoir.eo_range_m))
+    eo_sigma = math.sqrt(max(0.0, float(estimate.covariance.get("eo_range_m", 0.0))))
+    ir_point = float(estimate.point.get("ir_range_m", engine.eoir.ir_range_m))
+    ir_sigma = math.sqrt(max(0.0, float(estimate.covariance.get("ir_range_m", 0.0))))
+
+    # Clamp the headline to the same [0, MAX] domain the samples and p95 cap use,
+    # so the whole band stays consistent if a profile's R0 or the posterior drifts.
+    point = min(max(0.0, eo_point, ir_point), _PERCEPTION_RANGE_MAX_M)
+    dom_sigma = eo_sigma if eo_point >= ir_point else ir_sigma
+
+    if mode == "monte_carlo" and (eo_sigma > 0.0 or ir_sigma > 0.0):
+        eo_s = np.clip(
+            rng.normal(eo_point, eo_sigma, size=_MONTE_CARLO_SAMPLES),
+            0.0,
+            _PERCEPTION_RANGE_MAX_M,
+        )
+        ir_s = np.clip(
+            rng.normal(ir_point, ir_sigma, size=_MONTE_CARLO_SAMPLES),
+            0.0,
+            _PERCEPTION_RANGE_MAX_M,
+        )
+        p5, p50, p95 = _quantiles(np.maximum(eo_s, ir_s))
+    else:
+        p5 = max(0.0, point - _Z_90 * dom_sigma)
+        p95 = min(_PERCEPTION_RANGE_MAX_M, point + _Z_90 * dom_sigma)
+        p50 = point
+
+    confidence = max(0.0, 1.0 - dom_sigma / _PERCEPTION_CONFIDENCE_SCALE_M)
+
+    return Capability(
+        name="perception_range_m",
+        point=point,
+        p5=min(p5, point),
+        p50=p50,
+        p95=max(p95, point),
+        confidence=confidence,
+        drivers=["eoir", "sensors"],
+        units="m",
     )
 
 

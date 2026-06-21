@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (perception_range self-model capability, BL-055)
+
+- The self-model gains a fourth capability, `perception_range_m` (ADR 0079),
+  folding the EO/IR estimate into `assess` / `situation`: the best-band detection
+  range `max(eo, ir)` (the Monte Carlo branch takes the per-sample maximum), with
+  calibrated `p5 / p50 / p95` quantiles, `eoir` + `sensors` provenance, a status
+  keyed on the conservative `p5`, and a degraded-mode recommendation that names the
+  limiting factor for the band that actually sets the range. `explain` lists it,
+  the engine caches its point in `last_capabilities`, and `viability` gains a
+  `perception_range_m` requirement (a `self_model_viability` parameter) so a
+  controller can gate a task on "detect at range X". No new MCP tool and no
+  `policy.py` change; the existing T0 `self_model_*` reads surface it. Closes
+  BL-055.
+
 ### Added (EO/IR terrain line-of-sight masking, BL-055)
 
 - The EO/IR payload (`subsystems/eoir.py`) gains optional `terrain` + `position_fn`

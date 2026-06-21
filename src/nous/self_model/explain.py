@@ -31,6 +31,7 @@ def explain(assessment: Assessment) -> str:
             assessment.endurance,
             assessment.thermal_headroom,
             assessment.inference_capacity,
+            assessment.perception_range,
             *assessment.extra,
         )
         if cap is not None

@@ -17,6 +17,7 @@ _CAP_NAMES = {
     "endurance_min",
     "thermal_headroom_c",
     "inference_capacity_tok_per_s",
+    "perception_range_m",
 }
 _STATUSES = {"nominal", "watch", "degraded", "critical"}
 
@@ -106,6 +107,20 @@ def test_thermal_throttling_drives_status_and_recommendation(engine: Engine) -> 
     assert thermal.status == "critical"
     assert any(r.startswith("thermal:") for r in s.recommendations)
     assert s.posture.summary in {"degraded", "safed"}
+
+
+def test_fog_and_night_drive_perception_status_and_recommendation(engine: Engine) -> None:
+    engine.eoir.set_obscurant(1.0)
+    engine.eoir.set_illumination(0.05)
+    for _ in range(20):
+        engine.tick()
+    s = situation(engine)
+    perception = next(c for c in s.capabilities if c.name == "perception_range_m")
+    assert perception.status in {"degraded", "critical"}
+    assert {p.source for p in perception.provenance} >= {"eoir", "sensors"}
+    rec = next(r for r in s.recommendations if r.startswith("perception:"))
+    # Best band under heavy fog is the infrared one, limited by obscuration.
+    assert "atmospheric obscuration" in rec
 
 
 def test_full_load_drives_inference_status_critical(engine: Engine) -> None:

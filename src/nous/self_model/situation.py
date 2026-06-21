@@ -60,6 +60,8 @@ _LOW_CONFIDENCE = 0.5
 _ENDURANCE_CRITICAL_MIN = 15.0
 _ENDURANCE_DEGRADED_MIN = 60.0
 _INFERENCE_FLOOR_TOK_S = 1.0
+_PERCEPTION_CRITICAL_M = 500.0
+_PERCEPTION_DEGRADED_M = 3000.0
 
 _LINK_MODES = frozenset({Mode.RELAY, Mode.C2})
 _DEGRADED_STATUSES = frozenset({"degraded", "critical"})
@@ -78,6 +80,7 @@ _ESTIMATOR_ATTRS: dict[str, str] = {
     "position": "position_est",
     "sensors": "sensors_est",
     "biometrics": "biometrics_est",
+    "eoir": "eoir_est",
 }
 
 
@@ -140,7 +143,7 @@ def situation(engine: Engine, *, seed: int = 0) -> Situation:
     now = max((s.ts_s for s in states.values()), default=float(engine.state.ts_s))
     caps: list[CapabilitySituation] = []
     by_name: dict[str, CapabilitySituation] = {}
-    for cap in (a.endurance, a.thermal_headroom, a.inference_capacity):
+    for cap in (a.endurance, a.thermal_headroom, a.inference_capacity, a.perception_range):
         if cap is None:
             continue
         cs = _capability_situation(cap, engine, states, now)
@@ -200,6 +203,8 @@ def _status(cap: Capability, engine: Engine) -> str:
         return _endurance_status(cap)
     if cap.name == "inference_capacity_tok_per_s":
         return _inference_status(cap, engine)
+    if cap.name == "perception_range_m":
+        return _perception_range_status(cap)
     return "nominal"
 
 
@@ -236,6 +241,47 @@ def _inference_status(cap: Capability, engine: Engine) -> str:
     if cap.point <= _INFERENCE_FLOOR_TOK_S:
         return "critical"
     if engine.compute.throttled:
+        return "degraded"
+    if cap.confidence < _LOW_CONFIDENCE:
+        return "watch"
+    return "nominal"
+
+
+def _perception_limiter(engine: Engine) -> str:
+    """Name the factor limiting the best band's detection range.
+
+    The best band sets ``perception_range_m``, so the advisory names the most
+    degraded factor *for that band* (the electro-optical band's illumination or
+    the infrared band's thermal contrast, not the other), which is what a
+    controller would act on. The band is chosen from the estimator points (the
+    same basis as the headline) so the limiter names the band that actually set
+    the reported range; the factor breakdown comes from subsystem truth.
+    """
+    estimate = engine.eoir_est.state()
+    truth = engine.eoir.truth()
+    eo_point = float(estimate.point.get("eo_range_m", truth["eo_range_m"]))
+    ir_point = float(estimate.point.get("ir_range_m", truth["ir_range_m"]))
+    if eo_point >= ir_point:
+        candidates = (
+            ("atmospheric obscuration", truth["atm_factor_eo"]),
+            ("low illumination", truth["eo_illum_factor"]),
+            ("calibration drift", truth["cal_factor"]),
+        )
+    else:
+        candidates = (
+            ("atmospheric obscuration", truth["atm_factor_ir"]),
+            ("thermal crossover", truth["ir_contrast_factor"]),
+            ("calibration drift", truth["cal_factor"]),
+        )
+    return min(candidates, key=lambda c: c[1])[0]
+
+
+def _perception_range_status(cap: Capability) -> str:
+    # A margin question like endurance and thermal headroom: read the conservative
+    # p5 (worst-case reach) rather than the central point.
+    if cap.p5 <= _PERCEPTION_CRITICAL_M:
+        return "critical"
+    if cap.p5 < _PERCEPTION_DEGRADED_M:
         return "degraded"
     if cap.confidence < _LOW_CONFIDENCE:
         return "watch"
@@ -351,6 +397,14 @@ def _recommendations(
             f"inference: compute is throttled and local capacity is "
             f"~{inference.point:.0f} tok/s; expect reduced throughput, prefer the "
             "cloud path or downsize local inference until the throttle clears."
+        )
+
+    perception = by_name.get("perception_range_m")
+    if perception is not None and perception.status in _DEGRADED_STATUSES:
+        recs.append(
+            f"perception: best-band detection range p5 is {perception.p5:.0f} m; the "
+            f"most degraded factor is {_perception_limiter(engine)}. Close range or "
+            "improve conditions before relying on EO/IR detection."
         )
 
     if not recs:
