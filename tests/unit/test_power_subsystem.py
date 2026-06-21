@@ -66,12 +66,15 @@ def test_charge_recovers_soc() -> None:
     assert p.soc_pct > 50.0
 
 
-def test_charge_clamped_by_bus_regulator() -> None:
-    p = PowerSubsystem(_profile(charge_limit_w=20.0))
-    p.set_charge_w(500.0)
+def test_battery_records_the_regulated_charge_it_is_handed() -> None:
+    # The bus-regulator clamp moved to the PMU (BL-005b / ADR 0075): the battery
+    # records whatever charge it is delivered as both offered and accepted. The
+    # charge_limit clamp is now exercised in tests/unit/test_pmu.py.
+    p = PowerSubsystem(_profile())
+    p.set_charge_w(35.0)
     truth = p.truth()
-    assert truth["charge_offered_w"] == pytest.approx(500.0)
-    assert truth["charge_accepted_w"] == pytest.approx(20.0)
+    assert truth["charge_offered_w"] == pytest.approx(35.0)
+    assert truth["charge_accepted_w"] == pytest.approx(35.0)
 
 
 def test_soc_clamps_at_zero() -> None:

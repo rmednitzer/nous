@@ -58,8 +58,8 @@ from .subsystems.comms import CommsSubsystem
 from .subsystems.compute import ComputeSubsystem
 from .subsystems.imu import ImuSubsystem
 from .subsystems.inference import InferenceSubsystem
+from .subsystems.pmu import PmuSubsystem
 from .subsystems.position import PositionSubsystem
-from .subsystems.power import PowerSubsystem
 from .subsystems.sensors import SensorsSubsystem
 from .subsystems.storage import StorageSubsystem
 from .subsystems.terrain import TerrainModel
@@ -238,7 +238,8 @@ class Engine:
         # ADR 0019 follow-up: thread the engine RNG into every
         # subsystem at construction so future noise sampling can draw
         # from a deterministic seam.
-        self.power = PowerSubsystem(self.profile, rng=self.rng)
+        self.pmu = PmuSubsystem.from_profile(self.profile, rng=self.rng)
+        self.power = self.pmu.active_battery
         self.apu = ApuSubsystem(self.profile, rng=self.rng)
         self.thermal = ThermalSubsystem(self.profile, rng=self.rng)
         self.compute = ComputeSubsystem(self.profile, rng=self.rng)
@@ -404,7 +405,7 @@ class Engine:
         # constructor the error propagates with nothing committed, so the engine
         # keeps the previous profile and subsystems rather than tearing into a
         # mixed-generation state (BL-103 / ADR 0069).
-        new_power = PowerSubsystem(new_profile, rng=self.rng)
+        new_pmu = PmuSubsystem.from_profile(new_profile, rng=self.rng)
         new_apu = ApuSubsystem(new_profile, rng=self.rng)
         new_thermal = ThermalSubsystem(new_profile, rng=self.rng)
         new_compute = ComputeSubsystem(new_profile, rng=self.rng)
@@ -433,7 +434,8 @@ class Engine:
         if new_name != self.settings.profile:
             self.settings = self.settings.model_copy(update={"profile": new_name})
         self.profile = new_profile
-        self.power = new_power
+        self.pmu = new_pmu
+        self.power = new_pmu.active_battery
         self.apu = new_apu
         self.thermal = new_thermal
         self.compute = new_compute
@@ -803,10 +805,18 @@ class Engine:
         self.thermal.set_load_w(load_w)
         self.thermal.set_ambient_c(ambient_c)
         self.thermal.step(dt)
+        # BL-005b: the PMU regulates the APU's offered power into the accepted
+        # charge (charge_limit clamp + CC/CV taper) and routes it to the active
+        # pack; after the pack steps it arbitrates the dual slots, handing the bus
+        # to a charged standby when the active pack is exhausted (no bus collapse).
+        accepted_charge_w = self.pmu.regulate_charge(self.apu.total_w)
         self.power.set_load_w(load_w)
-        self.power.set_charge_w(self.apu.total_w)
+        self.power.set_charge_w(accepted_charge_w)
         self.power.set_cell_c(self.thermal.enclosure_c)
         self.power.step(dt)
+        self.pmu.step(dt)
+        if self.pmu.arbitrate():
+            self.power = self.pmu.active_battery
 
         self.power_est.predict(dt)
         self.power_est.update(self.power.sensor_obs())

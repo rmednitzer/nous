@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (PMU/PDU bus regulation and dual-slot battery hot-swap, BL-005b)
+
+- A new `subsystems/pmu.py` (`PmuSubsystem`) owns the bus regulation lifted off the
+  battery (ADR 0075, superseding ADR-0015): the `charge_limit_w` clamp (defaulting to
+  the legacy `power.charge_limit_w`) plus a CC/CV taper that backs the accepted charge
+  off past the `cv_soc_pct` knee toward full. `PowerSubsystem.set_charge_w` no longer
+  clamps; it records the PMU-regulated charge. The PMU holds a primary slot and an
+  optional `pmu.secondary` slot, arbitrates the active pack, and hands the bus to a
+  charged standby when the active pack is exhausted (no bus collapse); the inactive
+  slot can be removed and a fresh pack inserted while the bus runs, and removing the
+  active slot is refused. The engine routes the regulated charge to the active pack
+  each tick and points `self.power` at it, so `power_status` and the power estimator
+  follow the bus. New `pmu_status` read tool (T0). Single-slot profiles are unchanged.
+
 ### Added (injectable physics-source seam, ADR 0074)
 
 - The procedural world is now a `WorldSource` Protocol (`subsystems/terrain.py`):

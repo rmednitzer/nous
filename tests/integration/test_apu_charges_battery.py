@@ -2,10 +2,10 @@
 
 These tests run the real :class:`Engine` (subsystem step + estimator
 update + tick advance) and verify the auxiliary power loop closes
-correctly. APU output flows into ``PowerSubsystem.set_charge_w`` and
-restores SoC when load is light; the bus regulator clips an
-over-generous source to ``charge_limit_w`` so the controller can
-distinguish "offered" from "accepted" charge.
+correctly. APU output flows through the PMU bus regulator (BL-005b /
+ADR 0075) into the active battery and restores SoC when load is light;
+the PMU clips an over-generous source to its charge limit so the
+controller can distinguish "offered" from "accepted" charge.
 """
 
 from __future__ import annotations
@@ -51,11 +51,13 @@ def test_load_exceeding_apu_discharges_battery(engine: Engine) -> None:
     assert engine.power.soc_pct < start - 1.0
 
 
-def test_apu_total_clamped_by_charge_limit_in_truth(engine: Engine) -> None:
+def test_pmu_regulates_the_apu_charge(engine: Engine) -> None:
     engine.apu.set_solar_w(500.0)
     engine.tick()
-    truth = engine.power.truth()
+    truth = engine.pmu.truth()
     assert truth["charge_offered_w"] >= truth["charge_accepted_w"]
+    assert truth["charge_accepted_w"] <= truth["charge_limit_w"] + 1e-6
+    assert truth["charge_mode"] in {"cc", "cv", "idle"}
 
 
 def test_power_estimator_tracks_soc(engine: Engine) -> None:

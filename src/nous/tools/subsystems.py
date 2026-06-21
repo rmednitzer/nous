@@ -101,6 +101,30 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         return await wrap("apu_status", {}, ctx, _work)
 
     @mcp.tool()
+    async def pmu_status(ctx: Context | None = None) -> str:
+        """PMU bus regulation: charge limit, CC/CV mode, dual-slot state (BL-005b)."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.pmu.truth())
+            secondary_soc = truth["secondary_soc_pct"]
+            payload = {
+                "charge_limit_w": round(truth["charge_limit_w"], 3),
+                "charge_offered_w": round(truth["charge_offered_w"], 3),
+                "charge_accepted_w": round(truth["charge_accepted_w"], 3),
+                "charge_mode": truth["charge_mode"],
+                "active_slot": truth["active_slot"],
+                "primary_present": truth["primary_present"],
+                "secondary_present": truth["secondary_present"],
+                "secondary_soc_pct": (
+                    round(secondary_soc, 3) if secondary_soc is not None else None
+                ),
+                "swaps": truth["swaps"],
+            }
+            return json.dumps(payload)
+
+        return await wrap("pmu_status", {}, ctx, _work)
+
+    @mcp.tool()
     async def thermal_status(ctx: Context | None = None) -> str:
         """Two-state thermal model (junction + enclosure + ambient)."""
 

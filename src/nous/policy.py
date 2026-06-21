@@ -71,6 +71,7 @@ _READ_ONLY_TOOLS = frozenset(
         "state_history",
         "power_status",
         "apu_status",
+        "pmu_status",
         "thermal_status",
         "comms_state",
         "comms_status",

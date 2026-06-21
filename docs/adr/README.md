@@ -17,7 +17,7 @@
 | 0012 | [Versioned schemas for profiles, scenarios, and tool I/O](0012-versioned-schemas.md) | Accepted | 2026-05-20 |
 | 0013 | [Tier-classified subsystem read/write tools](0013-tier-classified-subsystems.md) | Accepted | 2026-05-20 |
 | 0014 | [Docs site on MkDocs with GitHub Pages](0014-docs-site-mkdocs-pages.md) | Accepted | 2026-05-20 |
-| 0015 | [APU is strictly auxiliary; the primary battery is the sole bus](0015-apu-strictly-auxiliary.md) | Accepted | 2026-05-20 |
+| 0015 | [APU is strictly auxiliary; the primary battery is the sole bus](0015-apu-strictly-auxiliary.md) | Superseded by ADR 0075 | 2026-05-20 |
 | 0016 | [Deployment baseline upgrades to Ubuntu 26.04 LTS](0016-deployment-baseline-ubuntu-2604.md) | Accepted | 2026-05-20 |
 | 0017 | [Public showcase site on the existing docs Pages target](0017-public-showcase-site.md) | Accepted | 2026-05-21 |
 | 0018 | [FSM transition guards for STPA safety constraints](0018-fsm-guards-for-stpa-constraints.md) | Accepted | 2026-05-21 |
@@ -77,3 +77,4 @@
 | 0072 | [Multi-edge terrain diffraction over a procedural world](0072-multi-edge-terrain-diffraction.md) | Accepted | 2026-06-21 |
 | 0073 | [Nonlinear position EKF with GNSS/INS fusion](0073-nonlinear-position-ekf.md) | Accepted | 2026-06-21 |
 | 0074 | [Injectable physics sources, the standalone-to-external seam](0074-injectable-physics-sources.md) | Accepted | 2026-06-21 |
+| 0075 | [PMU/PDU bus regulation and dual-slot battery hot-swap](0075-pmu-dual-slot-hot-swap.md) | Accepted | 2026-06-21 |

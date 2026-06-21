@@ -160,6 +160,7 @@ nav:
       - "0072 Multi-edge terrain diffraction over a procedural world": adr/0072-multi-edge-terrain-diffraction.md
       - "0073 Nonlinear position EKF with GNSS/INS fusion": adr/0073-nonlinear-position-ekf.md
       - "0074 Injectable physics sources, the standalone-to-external seam": adr/0074-injectable-physics-sources.md
+      - "0075 PMU/PDU bus regulation and dual-slot battery hot-swap": adr/0075-pmu-dual-slot-hot-swap.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md
