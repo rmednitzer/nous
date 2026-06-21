@@ -1,10 +1,11 @@
-"""Engine integration: position subsystem feeds the Kalman filter and snapshot.
+"""Engine integration: position subsystem feeds the EKF and snapshot.
 
 These tests run the real :class:`Engine` and confirm that the BL-010
 position subsystem advances ground truth via dead-reckoning, that the
-v0.1 :class:`PositionKalman` tracks the truth when a GNSS fix is held,
-and that the FSM's safety context can see the fix-lost condition
-through `engine.position.has_fix` and the snapshot block.
+:class:`~nous.estimators.position_ekf.PositionEkf` tracks the truth when a
+GNSS fix is held and coasts on the IMU when it is lost (BL-026 / ADR 0073),
+and that the FSM's safety context can see the fix-lost condition through
+`engine.position.has_fix` and the snapshot block.
 """
 
 from __future__ import annotations
@@ -87,3 +88,20 @@ def test_engine_starts_position_estimate_at_ground_truth(
     estimate = eng.position_est.state()
     truth = eng.position.truth()
     assert estimate.point["lat"] == pytest.approx(truth["lat"], abs=1e-3)
+
+
+def test_imu_coast_through_engine_under_gnss_loss(engine: Engine) -> None:
+    # Drive north, then lose GNSS: the EKF coasts on the IMU-inferred velocity, so
+    # the estimate keeps up with the moving truth far better than a frozen position
+    # would (BL-026, the GNSS/INS fusion the whole flagship is about).
+    engine.position.set_position(47.0, 13.0, alt_m=500.0)
+    engine.position.set_velocity(10.0, 0.0)  # 10 m/s north
+    for _ in range(80):
+        engine.tick()
+    lat_at_loss = engine.position.lat
+    engine.position.set_fix(False)
+    for _ in range(20):
+        engine.tick()
+    est_lat = engine.position_est.state().point["lat"]
+    truth_lat = engine.position.lat
+    assert abs(est_lat - truth_lat) < abs(lat_at_loss - truth_lat)

@@ -27,7 +27,7 @@ from .estimators.apu import ApuEstimator
 from .estimators.biometrics import BiometricsKalman
 from .estimators.comms import CommsParticleFilter
 from .estimators.compute import ComputeKalman
-from .estimators.position import PositionKalman
+from .estimators.position_ekf import PositionEkf
 from .estimators.power import PowerEstimator
 from .estimators.sensors import EnvironmentalKalman
 from .estimators.storage import StorageKalman
@@ -56,6 +56,7 @@ from .subsystems.apu import ApuSubsystem
 from .subsystems.biometrics import BiometricsSubsystem
 from .subsystems.comms import CommsSubsystem
 from .subsystems.compute import ComputeSubsystem
+from .subsystems.imu import ImuSubsystem
 from .subsystems.inference import InferenceSubsystem
 from .subsystems.position import PositionSubsystem
 from .subsystems.power import PowerSubsystem
@@ -263,6 +264,7 @@ class Engine:
         self.position = PositionSubsystem(self.profile, rng=self.rng)
         self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
         self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
+        self.imu = ImuSubsystem(self.profile, rng=self.rng)
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
@@ -285,7 +287,7 @@ class Engine:
         self.state.comms_state, self.state.comms_state_reason = (
             self.comms.derive_state()
         )
-        self.position_est = PositionKalman()
+        self.position_est = PositionEkf()
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est = EnvironmentalKalman()
         self.sensors_est.update(self.sensors.sensor_obs())
@@ -425,6 +427,7 @@ class Engine:
         new_position = PositionSubsystem(new_profile, rng=self.rng)
         new_sensors = SensorsSubsystem(new_profile, rng=self.rng)
         new_biometrics = BiometricsSubsystem(new_profile, rng=self.rng)
+        new_imu = ImuSubsystem(new_profile, rng=self.rng)
 
         # Every subsystem constructed: commit the new generation atomically.
         if new_name != self.settings.profile:
@@ -442,6 +445,7 @@ class Engine:
         self.position = new_position
         self.sensors = new_sensors
         self.biometrics = new_biometrics
+        self.imu = new_imu
         self._build_dtn_mesh()
 
         self.power_est = PowerEstimator(
@@ -463,7 +467,7 @@ class Engine:
         )
         self.comms_est = CommsParticleFilter(rng=self.rng)
         self.comms_est.update(self.comms.sensor_obs())
-        self.position_est = PositionKalman()
+        self.position_est = PositionEkf()
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est = EnvironmentalKalman()
         self.sensors_est.update(self.sensors.sensor_obs())
@@ -786,6 +790,10 @@ class Engine:
         self.storage.step(dt)
         self.comms.step(dt)
         self.position.step(dt)
+        # BL-026: the IMU senses the platform's motion (the position subsystem's
+        # commanded speed and heading), differentiated into accel and yaw rate.
+        self.imu.set_motion(self.position.speed_mps, self.position.heading_deg)
+        self.imu.step(dt)
         self.sensors.step(dt)
         self.biometrics.step(dt)
         load_w = self.compute.draw_w
@@ -824,6 +832,9 @@ class Engine:
         self.dtn_mesh.step(dt, self.state.ts_s)
         if self.dtn_mesh.enabled and self.dtn_mesh.consume_dirty():
             self.dtn_store.save(self.dtn_mesh.snapshot(self.state.ts_s))
+        # BL-026: the IMU drives the EKF prediction (stored as the control), then
+        # predict propagates the nonlinear model, then GNSS corrects the position.
+        self.position_est.update(self.imu.sensor_obs())
         self.position_est.predict(dt)
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est.predict(dt)

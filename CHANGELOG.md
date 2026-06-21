@@ -6,6 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (nonlinear position EKF with GNSS/INS fusion, BL-026)
+
+- The position estimator is now a nonlinear Extended Kalman Filter that fuses GNSS
+  with an IMU in a local east-north-up frame (ADR 0073), the GNSS/INS architecture
+  real autopilots run, replacing the degrees-space linear Kalman filter in the
+  engine. A new `subsystems/imu.py` (`ImuSubsystem`) models a body-frame
+  longitudinal accelerometer and a yaw-rate gyro derived from the platform motion
+  (bias random walk + white noise on the ADR 0019 RNG seam); a new
+  `estimators/position_ekf.py` (`PositionEkf`) holds `[e, n, v, psi]` anchored on the
+  first fix, drives the unicycle prediction from the IMU control and propagates the
+  covariance through its analytic Jacobian, corrects east/north from GNSS, and
+  recovers speed and heading through the cross-covariance. A chi-square gate rejects
+  an outlier fix; a sustained jump re-anchors (the ADR 0045 persist-then-reset).
+  Under a GNSS outage the EKF coasts on the inferred velocity and tracks a moving
+  platform rather than freezing. The estimate flows through the existing
+  `position_status` (no new tool, no `policy.py` touch); the legacy
+  degrees-per-second velocity keys had no consumer and are dropped. `PositionKalman`
+  is retained for reference. Breaks the position half of LIMITATIONS L13.
+
 ### Added (multi-edge terrain diffraction over a procedural world, BL-089)
 
 - Comms links opt into terrain (`propagation.use_terrain`): the link budget now

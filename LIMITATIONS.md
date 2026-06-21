@@ -206,18 +206,26 @@ physics (RSSI, range, fade) the device's own comms links do.
 under BL-077. Neighbour discovery and RF-physics-backed mesh links are not
 tracked for v0.1.
 
-## L13. Linear-Gaussian estimators only
+## L13. Linear-Gaussian estimators (the position EKF excepted)
 
-**State.** All estimators are linear Kalman filters (scalar, multi-channel,
-or constant-velocity) or a particle filter (comms link state). There
-is no neural estimator, no learned residual model, and no online
-parameter estimation.
+**State.** The position estimator is a nonlinear Extended Kalman Filter that
+fuses GNSS with an IMU in a local east-north-up frame (BL-026, ADR 0073): the
+unicycle process couples the axes through `sin`/`cos` of the heading, so
+`predict` propagates the covariance through the analytic Jacobian. The
+remaining estimators are linear Kalman filters (scalar or multi-channel) or a
+particle filter (comms link state). There is no neural estimator, no learned
+residual model, and no online IMU-bias estimation.
 
-**Implication.** Estimator covariance bounds are valid only inside the
-Gaussian assumption. Heavy-tailed disturbances will inflate the actual
-error beyond what the filter reports.
+**Implication.** The linear estimators' covariance bounds are valid only inside
+the Gaussian assumption; heavy-tailed disturbances inflate the actual error
+beyond what the filter reports. The position EKF is nonlinear but still
+Gaussian: its bound holds while the linearisation is good (it degrades far from
+the anchor or during long IMU-only coasts, where an unestimated bias drifts the
+solution).
 
-**Tracking.** Out of scope for v0.1.
+**Tracking.** The position EKF + IMU fusion shipped under [BL-026] (ADR 0073);
+error-state IMU-bias estimation and nonlinear filters for the other channels are
+out of scope for v0.1.
 
 ## L14. Parametric self-model
 

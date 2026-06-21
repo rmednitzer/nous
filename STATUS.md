@@ -91,7 +91,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0072` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0073` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -126,7 +126,9 @@ re-audit).
 | `src/nous/estimators/compute.py` | in-progress | 1-D Kalman per channel over (load_pct, draw_w); covariance shrinks under observation. Full multi-state EKF is BL-031a. |
 | `src/nous/estimators/storage.py` | in-progress | 1-D Kalman per channel over (used_gib, wear_pct); slow process variance matches the physical reality of NAND wear. |
 | `src/nous/estimators/comms.py` | in-progress | Per-link SIR particle filter (BL-030): N binary-state particles per link, sticky Markov transition conditioned on RSSI + loss, log-throughput observation model, systematic resampling. Deterministic under the engine seed. |
-| `src/nous/estimators/position.py` | in-progress | Constant-velocity (linear) Kalman filter over `(lat, lon, alt, v_*)` (BL-026): the state is in degrees so process and measurement are both linear (no Jacobian); the nonlinear EKF with m/s IMU fusion remains tracked under BL-026. Velocity tracked as predict-only. |
+| `src/nous/estimators/position_ekf.py` | in-progress | Nonlinear GNSS/INS Extended Kalman Filter over `[e, n, v, psi]` in a local ENU frame (BL-026 / ADR 0073), the engine's active position estimator: the IMU drives the unicycle prediction (propagated through its Jacobian), GNSS corrects east/north, speed and heading are recovered through the cross-covariance, with a chi-square gate and a re-anchor reset. Breaks the position half of L13. |
+| `src/nous/estimators/position.py` | in-progress | Constant-velocity (linear) Kalman filter over `(lat, lon, alt, v_*)` in degrees (BL-026); retained with its own tests but superseded in the engine by `PositionEkf` (ADR 0073). |
+| `src/nous/subsystems/imu.py` | in-progress | Strapdown IMU (BL-026 / ADR 0073): a body-frame longitudinal accelerometer + yaw-rate gyro derived from the platform motion, with a bias random walk and white noise; drives the position EKF prediction. |
 | `src/nous/estimators/sensors.py` | in-progress | Multi-channel Kalman over (temp_c, humidity_pct, baro_kpa); validates against physical bounds, rejects without poisoning the central estimate. |
 | `src/nous/estimators/biometrics.py` | in-progress | Multi-channel Kalman over biometric channels with physiological-bounds validation; `hydration_pct` added as a fourth tracked channel in BL-011. |
 | `src/nous/self_model/*` | in-progress | `assess` / `explain` / `viability` (BL-018) read live estimator state and emit capability claims. BL-035 lands the Monte Carlo-based calibrated quantile mapping (default `mode="monte_carlo"`; legacy `"gaussian"` opt-out retained). `situation` (the `self_model_situation` tool, BL-061 / ADR 0038) fuses those claims with provenance, staleness, the FSM posture, the safety posture, and ranked degraded-mode recommendations in one read. |

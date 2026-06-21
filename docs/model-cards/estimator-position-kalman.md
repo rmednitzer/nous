@@ -1,40 +1,53 @@
-# Model card: Position (constant-velocity Kalman filter)
+# Model card: Position (nonlinear EKF, GNSS/INS fusion)
 
-**Module:** `src/nous/estimators/position.py`
+**Module:** `src/nous/estimators/position_ekf.py` (`PositionEkf`, the engine's
+active position estimator since BL-026 / ADR 0073). The degrees-space linear filter
+`src/nous/estimators/position.py` (`PositionKalman`) is retained for reference and
+its own unit tests but is no longer wired into the engine.
 
 **Backlog:** BL-026
 
 ## Inputs
 
-- GNSS fix observations from `PositionSubsystem.sensor_obs()` (lat,
-  lon, alt_m, with per-axis sigma).
-- IMU integrals (accel + gyro) once the L2 IMU model lands.
+- GNSS fix observations from `PositionSubsystem.sensor_obs()` (lat, lon, alt_m, with
+  per-axis sigma), folded as the measurement update.
+- IMU observations from `ImuSubsystem.sensor_obs()` (`accel_mps2` longitudinal
+  specific force, `yaw_rate_rps`), consumed as the control that drives the
+  prediction (`obs.source == "imu"`).
 
 ## Outputs
 
-`Estimate` with `point = {lat, lon, alt_m, v_lat, v_lon, v_alt_m}` (the
-three velocity channels are degrees-per-second per axis) and a six-entry
-diagonal covariance keyed by the same names. The filter stays diagonal (no
-cross-covariance); a full 6x6 filter with cross terms is deferred to BL-026.
+`Estimate` with `point = {lat, lon, alt_m, speed_mps, heading_deg, v_e_mps,
+v_n_mps}` and `covariance` keyed by `{lat, lon, alt_m, e_m, n_m, speed_mps,
+heading_rad}` (lat / lon variances are the metre variances mapped back to degrees).
+The legacy degrees-per-second velocity keys (`v_lat` / `v_lon` / `v_alt_m`) had no
+consumer and are dropped (ADR 0073).
 
-Because the state is carried in degrees (not metres), the constant-velocity
-process model and the direct GNSS measurement model are both linear, so this
-is a plain linear Kalman filter rather than an EKF: no Jacobian, no
-linearisation. A genuine nonlinear EKF (body-frame velocity in m/s, or a
-range/bearing measurement, coupling the axes through `cos(lat)`) lands with
-the IMU-fusion track, BL-026.
+The state `[e, n, v, psi]` lives in a local east-north-up tangent frame anchored on
+the first fix: east / north metres, ground speed (m/s), heading (rad, clockwise from
+north). The process is the unicycle model `de = v sin(psi) dt`, `dn = v cos(psi) dt`,
+nonlinear in psi, so `predict` propagates the covariance through the analytic
+Jacobian: a genuine EKF, not the degrees-space linear filter it supersedes. GNSS
+observes only position; speed and heading are recovered through the cross-covariance
+the motion builds up. Altitude is a decoupled scalar channel.
 
 ## SLA
 
-- Update latency: under 5 ms per call on the reference profile.
-- Covariance bound at the 95th percentile under nominal fix quality:
-  horizontal sigma <= 5 m, vertical sigma <= 8 m.
+- Update latency: under 5 ms per call on the reference profile (a 4x4 EKF plus a
+  2x2 matrix inverse).
+- Covariance bound at the 95th percentile under nominal fix quality: horizontal
+  sigma <= 5 m, vertical sigma <= 8 m, with a 1 m horizontal variance floor so a
+  converged filter stays honest about GNSS noise.
 
 ## Known failure modes
 
-- GNSS multipath in urban canyons inflates the actual horizontal error
-  beyond the filter's reported covariance; treat indoor or near-wall
-  fixes as `confidence_low`.
-- IMU-only periods (lost fix) accumulate error linearly with time;
-  past 30 s of dead reckoning the covariance bound is no longer
-  defensible.
+- GNSS multipath in urban canyons inflates the actual horizontal error beyond the
+  filter's reported covariance; the chi-square gate rejects an outlier fix, but a
+  sustained biased fix is adopted through the re-anchor reset.
+- IMU-only periods (lost fix): the EKF coasts on the inferred velocity and heading,
+  but the IMU bias is not estimated this increment, so a fixed bias drifts the
+  solution and the covariance grows; past tens of seconds of dead reckoning the
+  bound is no longer defensible. Error-state bias estimation is the follow-on.
+- Over ranges where the single-anchor local-tangent approximation degrades (hundreds
+  of km from the anchor) the ENU mapping loses accuracy; periodic re-anchoring or an
+  ECEF formulation is the revisit trigger (ADR 0073).
