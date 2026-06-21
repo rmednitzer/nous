@@ -253,10 +253,15 @@ def _perception_limiter(engine: Engine) -> str:
     The best band sets ``perception_range_m``, so the advisory names the most
     degraded factor *for that band* (the electro-optical band's illumination or
     the infrared band's thermal contrast, not the other), which is what a
-    controller would act on.
+    controller would act on. The band is chosen from the estimator points (the
+    same basis as the headline) so the limiter names the band that actually set
+    the reported range; the factor breakdown comes from subsystem truth.
     """
+    estimate = engine.eoir_est.state()
     truth = engine.eoir.truth()
-    if truth["eo_range_m"] >= truth["ir_range_m"]:
+    eo_point = float(estimate.point.get("eo_range_m", truth["eo_range_m"]))
+    ir_point = float(estimate.point.get("ir_range_m", truth["ir_range_m"]))
+    if eo_point >= ir_point:
         candidates = (
             ("atmospheric obscuration", truth["atm_factor_eo"]),
             ("low illumination", truth["eo_illum_factor"]),

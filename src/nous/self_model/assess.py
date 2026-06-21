@@ -324,7 +324,9 @@ def _perception_range_capability(
     ir_point = float(estimate.point.get("ir_range_m", engine.eoir.ir_range_m))
     ir_sigma = math.sqrt(max(0.0, float(estimate.covariance.get("ir_range_m", 0.0))))
 
-    point = max(eo_point, ir_point)
+    # Clamp the headline to the same [0, MAX] domain the samples and p95 cap use,
+    # so the whole band stays consistent if a profile's R0 or the posterior drifts.
+    point = min(max(0.0, eo_point, ir_point), _PERCEPTION_RANGE_MAX_M)
     dom_sigma = eo_sigma if eo_point >= ir_point else ir_sigma
 
     if mode == "monte_carlo" and (eo_sigma > 0.0 or ir_sigma > 0.0):
