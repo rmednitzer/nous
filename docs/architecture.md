@@ -19,8 +19,9 @@ target is a single VM.
    simplest filter that meets the model card's covariance bound is the
    right choice.
 4. **Self-model** (`src/nous/self_model/`). Aggregates estimator state
-   into capability claims (`endurance`, `thermal_headroom`,
-   `inference_capacity`) with calibrated quantiles.
+   into capability claims (`endurance_min`, `thermal_headroom_c`,
+   `inference_capacity_tok_per_s`, `perception_range_m`) with calibrated
+   quantiles.
 5. **State machine** (`src/nous/state/`). Explicit-table FSM over the
    mission posture; vocabularies for `OperatorState` and `CommsState`.
 6. **Server** (`src/nous/server.py`). FastMCP server. Every tool call
@@ -54,7 +55,7 @@ return body
 
 ## External surfaces
 
-- **MCP tools** -- the fifty-tool surface is documented in
+- **MCP tools** -- the fifty-plus-tool surface is documented in
   [tool-reference.md](tool-reference.md). It carries the full L1 read
   surface (a read tool for each subsystem, with comms exposing
   `comms_state`, `comms_status`, and the store-and-forward `comms_outbox`,
