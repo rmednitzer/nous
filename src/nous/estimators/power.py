@@ -1,4 +1,4 @@
-"""Power state-of-charge estimator: gated Kalman over SoC and voltage.
+"""Power state-of-charge estimator: gated Kalman over SoC, voltage, and load.
 
 The estimator runs a scalar Kalman filter over each of SoC, terminal voltage,
 and total electrical load (``load_w``, ADR 0083). Process noise grows their
@@ -46,7 +46,7 @@ _LOAD_FALLBACK_SIGMA = 0.25
 
 
 class PowerEstimator:
-    """Gated scalar Kalman filter over SoC and terminal voltage (BL-027)."""
+    """Gated scalar Kalman filter over SoC, terminal voltage, and load (BL-027, ADR 0083)."""
 
     name: str = "power"
 

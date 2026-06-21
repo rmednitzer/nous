@@ -213,8 +213,9 @@ def _endurance_capability(
     Net load is ``load_w - charge_accepted_w``. The Monte Carlo branch
     propagates the SoC posterior, a small ``battery_wh`` capacity-tolerance
     prior, and (by default, ADR 0082) the net load: the charge side from the
-    APU total-output posterior, the variable load from the compute-draw
-    posterior. Where net load is comfortably positive this simply widens the
+    APU total-output posterior, the variable load from the power estimator's
+    ``load_w`` posterior (ADR 0083). Where net load is comfortably positive
+    this simply widens the
     band; near energy balance the ``1/net_w`` term is heavy-tailed, so the
     band stays wide and the upper tail is capped conservatively at the point
     estimate (a safe understatement of the net-charging upside) rather than
@@ -234,8 +235,10 @@ def _endurance_capability(
     # Load is read from the power estimator's belief (ADR 0083), not ground
     # truth: a well-known input the filter tracks tightly, so endurance reasons
     # from the same belief surface as SoC and the band stays SoC-responsive near
-    # energy balance. Charge stays on the APU posterior.
-    load_w = float(estimate.point.get("load_w", power.truth().get("load_w", 0.0)))
+    # energy balance. ``state()`` always carries ``load_w``, so there is no
+    # truth fallback; a defensive default keeps the read total without peeking.
+    # Charge stays on the APU posterior.
+    load_w = float(estimate.point.get("load_w", 0.0))
     charge_w = float(power.truth().get("charge_accepted_w", 0.0))
     net_w = load_w - charge_w
     battery_wh = float(power.profile.get("power", {}).get("battery_wh", 0.0))
