@@ -64,7 +64,7 @@ from .subsystems.pmu import PmuSubsystem
 from .subsystems.position import PositionSubsystem
 from .subsystems.sensors import SensorsSubsystem
 from .subsystems.storage import StorageSubsystem
-from .subsystems.terrain import TerrainModel
+from .subsystems.terrain import TerrainModel, WorldSource
 from .subsystems.thermal import ThermalSubsystem
 from .types import TickContext
 
@@ -211,6 +211,7 @@ class Engine:
         seed: int | None = None,
         clock: Clock | None = None,
         audit: AuditLogger | None = None,
+        terrain: WorldSource | None = None,
     ) -> None:
         self.settings: Settings = settings or get_settings()
         self.profile: Mapping[str, Any] = profile or _load_profile(self.settings.profile)
@@ -251,7 +252,12 @@ class Engine:
         self.storage = StorageSubsystem(self.profile, rng=self.rng)
         # BL-089: the shared procedural world (None unless the profile carries a
         # `world` section); the comms link budget samples it for terrain diffraction.
-        self.terrain = TerrainModel.from_profile(self.profile)
+        # ADR 0074/0081: an injected `WorldSource` (e.g. a GenesisWorldSource)
+        # overrides the procedural default and persists across profile reloads.
+        self._injected_terrain = terrain
+        self.terrain: WorldSource | None = terrain or TerrainModel.from_profile(
+            self.profile
+        )
         self.comms = CommsSubsystem(
             self.profile,
             rng=self.rng,
@@ -428,7 +434,7 @@ class Engine:
             new_profile, compute=new_compute, rng=self.rng
         )
         new_storage = StorageSubsystem(new_profile, rng=self.rng)
-        new_terrain = TerrainModel.from_profile(new_profile)
+        new_terrain = self._injected_terrain or TerrainModel.from_profile(new_profile)
         new_comms = CommsSubsystem(
             new_profile,
             rng=self.rng,

@@ -262,21 +262,22 @@ def test_inference_capacity_band_includes_token_rate_prior(engine: Engine) -> No
     assert (with_prior.p95 - with_prior.p5) > (without_prior.p95 - without_prior.p5)
 
 
-def test_endurance_net_load_propagation_widens_band_when_enabled(engine: Engine) -> None:
-    """ADR 0080: the opt-in net-load propagation samples the APU-charge and
-    compute-draw posteriors, so the endurance band reflects net-load uncertainty
-    instead of treating net load as exact. Off by default; widens when enabled."""
+def test_endurance_net_load_propagation_is_default_and_disablable(engine: Engine) -> None:
+    """ADR 0082: net-load propagation (the APU-charge and compute-draw posteriors
+    through net load) is on by default, so the endurance band reflects net-load
+    uncertainty and names the extra drivers. Disabling it narrows the band to the
+    SoC and battery posteriors alone."""
     default = assess("status", engine=engine, seed=5).endurance
     engine.profile = {
         **engine.profile,
-        "self_model": {"priors": {"propagate_net_load": True}},
+        "self_model": {"priors": {"propagate_net_load": False}},
     }
-    propagated = assess("status", engine=engine, seed=5).endurance
-    assert default is not None and propagated is not None
-    assert default.drivers == ["power"]
-    assert propagated.drivers == ["power", "compute", "apu"]
-    assert (propagated.p95 - propagated.p5) > (default.p95 - default.p5)
-    assert propagated.p5 >= 0.0
+    disabled = assess("status", engine=engine, seed=5).endurance
+    assert default is not None and disabled is not None
+    assert default.drivers == ["power", "compute", "apu"]
+    assert disabled.drivers == ["power"]
+    assert (default.p95 - default.p5) > (disabled.p95 - disabled.p5)
+    assert default.p5 >= 0.0
 
 
 def test_priors_coerce_junk_profile_values_to_defaults(engine: Engine) -> None:
@@ -294,20 +295,34 @@ def test_priors_coerce_junk_profile_values_to_defaults(engine: Engine) -> None:
     assert junk.p95 == pytest.approx(clean.p95)
 
 
-def test_priors_reject_bool_values_and_nonbool_flag(engine: Engine) -> None:
-    """Defensive coercion: a bool is not a valid prior spread (`float(True)` is
-    `1.0`), and a non-bool `propagate_net_load` value (e.g. the truthy string
-    "false") must not enable propagation. Both fall back to the safe default."""
+def test_priors_reject_bool_cv_and_coerce_flag(engine: Engine) -> None:
+    """Defensive coercion (ADR 0082): a bool is not a valid prior spread
+    (`float(True)` is `1.0`), so it falls back to the default spread. The
+    propagate_net_load flag honours a real boolean (`False` disables) and falls
+    back to the default (on) for a non-bool, so a typo widens the band rather
+    than silently disabling it."""
     clean = assess("status", engine=engine, seed=3).inference_capacity
+    # A bool tok_per_s_cv is not a valid spread (float(True) == 1.0); it falls
+    # back to the default, leaving the inference band unchanged. propagate_net_load
+    # is left at its default so endurance draws the rng stream identically.
+    engine.profile = {**engine.profile, "self_model": {"priors": {"tok_per_s_cv": True}}}
+    a = assess("status", engine=engine, seed=3).inference_capacity
+    assert a is not None and clean is not None
+    assert a.p95 == pytest.approx(clean.p95)
+
+    # A real bool False disables propagation; a non-bool (e.g. a quoted "false")
+    # is junk and falls back to the default (on), so a typo widens the band
+    # rather than silently disabling it.
+    engine.profile = {**engine.profile, "self_model": {"priors": {"propagate_net_load": False}}}
+    disabled = assess("status", engine=engine, seed=3).endurance
+    assert disabled is not None and disabled.drivers == ["power"]
+
     engine.profile = {
         **engine.profile,
-        "self_model": {"priors": {"tok_per_s_cv": True, "propagate_net_load": "false"}},
+        "self_model": {"priors": {"propagate_net_load": "false"}},
     }
-    a = assess("status", engine=engine, seed=3)
-    assert a.inference_capacity is not None and clean is not None
-    assert a.inference_capacity.p95 == pytest.approx(clean.p95)
-    assert a.endurance is not None
-    assert a.endurance.drivers == ["power"]
+    junk = assess("status", engine=engine, seed=3).endurance
+    assert junk is not None and junk.drivers == ["power", "compute", "apu"]
 
 
 def test_endurance_negative_battery_wh_does_not_raise(engine: Engine) -> None:

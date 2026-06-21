@@ -1,6 +1,6 @@
 # ADR 0080: honest multi-source capability quantiles
 
-- **Status:** Accepted
+- **Status:** Accepted (the net-load-propagation opt-in default amended by ADR 0082)
 - **Date:** 2026-06-21
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0010, ADR 0038, ADR 0079 (BL-035)

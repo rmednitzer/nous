@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
+from nous.engine import Engine
 from nous.subsystems.terrain import TerrainModel
 
 
@@ -114,3 +117,30 @@ def test_custom_world_source_drives_comms_terrain() -> None:
     assert blocked.path_loss_db is not None and clear.path_loss_db is not None
     # The injected ridge added multi-edge diffraction loss over the path.
     assert blocked.path_loss_db > clear.path_loss_db
+
+
+class _FakeWorld:
+    """A minimal WorldSource (no genesis), to test the Engine injection seam."""
+
+    def elevation(self, lat: float, lon: float) -> float:
+        return 1234.0
+
+    def path_profile(
+        self, lat1: float, lon1: float, lat2: float, lon2: float, n: int
+    ) -> list[tuple[float, float]]:
+        return [(0.0, 1234.0), (1.0, 1234.0)]
+
+
+def test_engine_uses_injected_world_source(tmp_nous_home: Path) -> None:
+    """ADR 0074/0081: an Engine `terrain=` WorldSource overrides the procedural
+    default and persists across a profile reload, so an external world (such as a
+    GenesisWorldSource) drives the twin without `nous` importing it. Injection is
+    opt-in: a default Engine does not pick it up."""
+    fake = _FakeWorld()
+    eng = Engine(terrain=fake)
+    assert eng.terrain is fake
+    eng.reload_profile()
+    assert eng.terrain is fake
+
+    default = Engine()
+    assert default.terrain is not fake

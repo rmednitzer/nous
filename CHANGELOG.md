@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (net-load propagation is the endurance default, ADR 0082)
+
+- Endurance net-load propagation (the APU-charge and compute-draw posteriors
+  through `net_w`) is now on by default rather than opt-in (ADR 0082, amending
+  ADR 0080). The opt-in caution in ADR 0080 was calibrated against a buggy
+  intermediate clip; with the shipped sentinel (`max(point, cap)`), flipping the
+  default preserves SC-1 (band-width and confidence monotonicity), the `p5 >= 0`
+  floor, point mode-invariance, and seeded determinism. The endurance band now
+  reflects net-load uncertainty by default and its drivers read
+  `["power", "compute", "apu"]`; near energy balance the band stays wide and its
+  upper tail is capped conservatively at the point estimate (understating the
+  net-charging upside in the safe direction). Disable with
+  `self_model.priors.propagate_net_load: false`; a non-bool flag value falls back
+  to the default (on), the safe direction. Read-side only.
+
 ### Added (Genesis-backed WorldSource adapter, ADR 0081)
 
 - `nous.subsystems.genesis_world.GenesisWorldSource` is an opt-in, in-tree
