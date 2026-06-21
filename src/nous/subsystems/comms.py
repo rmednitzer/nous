@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -38,6 +38,9 @@ from ..state.comms_state import CommsState, derive
 from ..state.emcon import Emcon
 from ..types import LinkEstimate, Observation
 from .propagation import LinkPropagation, rician_fade_db, solve_link_budget
+
+if TYPE_CHECKING:
+    from .terrain import TerrainModel
 
 __all__ = ["CommsSubsystem", "Link"]
 
@@ -112,6 +115,7 @@ class CommsSubsystem:
         *,
         rng: np.random.Generator | None = None,
         position_fn: PositionFn | None = None,
+        terrain: TerrainModel | None = None,
     ) -> None:
         self.profile = profile
         self._rng = rng  # ADR 0019 follow-up: engine RNG seam
@@ -119,6 +123,9 @@ class CommsSubsystem:
         # Resolved at step() time, so it tolerates being constructed before the
         # position subsystem it reads.
         self._position_fn = position_fn
+        # BL-089: the shared world terrain model (None unless a profile configures
+        # a `world` section); sampled per propagation link that opts into terrain.
+        self._terrain = terrain
         comms_cfg = profile.get("comms") or {}
         raw_links = comms_cfg.get("links") or []
         self._links: dict[str, Link] = {}
@@ -288,6 +295,17 @@ class CommsSubsystem:
                 # BL-088 / ADR 0054: a multipath fast-fade draw on top of the
                 # log-normal shadowing, both from the engine RNG seam.
                 fade = rician_fade_db(self._rng, prop.rician_k_db)
+        terrain_profile: list[tuple[float, float]] | None = None
+        if self._terrain is not None and prop.use_terrain:
+            # BL-089: sample the terrain elevation along the great circle to the
+            # peer so the budget can run multi-edge diffraction over the path.
+            terrain_profile = self._terrain.path_profile(
+                device_pos[0],
+                device_pos[1],
+                prop.peer_lat,
+                prop.peer_lon,
+                prop.terrain_samples,
+            )
         budget = solve_link_budget(
             prop,
             device_lat=device_pos[0],
@@ -296,6 +314,7 @@ class CommsSubsystem:
             bandwidth_bps=link.bandwidth_bps,
             shadowing_db=shadow,
             fast_fade_db=fade,
+            terrain_profile=terrain_profile,
         )
         link.rssi_dbm = budget.rssi_dbm
         link.loss_pct = budget.loss_pct

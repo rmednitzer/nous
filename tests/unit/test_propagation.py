@@ -13,6 +13,7 @@ from nous.subsystems.propagation import (
     LinkPropagation,
     antenna_gain_offset_db,
     bearing_deg,
+    bullington_diffraction_db,
     capacity_bps,
     free_space_path_loss_db,
     knife_edge_diffraction_db,
@@ -324,6 +325,64 @@ def test_solve_link_budget_fast_fade_only_shifts_rssi() -> None:
         bandwidth_bps=2_000_000.0, fast_fade_db=10.0,
     )
     assert faded.rssi_dbm == pytest_approx(quiet.rssi_dbm - 10.0)
+
+
+def test_bullington_reduces_to_single_knife_edge() -> None:
+    # BL-089: one interior obstacle. The Bullington equivalent edge lands on it,
+    # so the loss equals the single knife-edge formula exactly (2 d / (d1 d2) ==
+    # 2 (1/d1 + 1/d2) when d1 + d2 = d).
+    profile = [(0.0, 500.0), (2_000.0, 600.0), (5_000.0, 500.0)]
+    single = knife_edge_diffraction_db(600.0, 500.0, 2_000.0, 3_000.0, 2.4e9)
+    multi = bullington_diffraction_db(profile, 500.0, 500.0, 2.4e9)
+    assert multi == pytest_approx(single)
+
+
+def test_bullington_zero_below_line_of_sight() -> None:
+    profile = [(0.0, 500.0), (2_500.0, 480.0), (5_000.0, 500.0)]
+    assert bullington_diffraction_db(profile, 500.0, 500.0, 2.4e9) == 0.0
+
+
+def test_bullington_grows_with_obstacle_height() -> None:
+    short = bullington_diffraction_db(
+        [(0.0, 500.0), (2_500.0, 560.0), (5_000.0, 500.0)], 500.0, 500.0, 2.4e9
+    )
+    tall = bullington_diffraction_db(
+        [(0.0, 500.0), (2_500.0, 660.0), (5_000.0, 500.0)], 500.0, 500.0, 2.4e9
+    )
+    assert tall > short > 0.0
+
+
+def test_bullington_handles_multiple_edges() -> None:
+    # Two ridges between the endpoints: the path is obstructed, so the multi-edge
+    # method returns a positive loss (the single knife-edge model sees one edge).
+    two = bullington_diffraction_db(
+        [(0.0, 500.0), (1_500.0, 640.0), (3_500.0, 620.0), (5_000.0, 500.0)],
+        500.0,
+        500.0,
+        2.4e9,
+    )
+    assert two > 0.0
+
+
+def test_solve_link_budget_terrain_replaces_single_knife_edge() -> None:
+    # use_terrain routes diffraction through the sampled terrain profile; a clear
+    # profile (terrain below the LoS) yields no diffraction, a ridge yields loss.
+    prop = LinkPropagation(
+        peer_lat=47.0, peer_lon=13.10, peer_alt_m=500.0, use_terrain=True
+    )
+    clear_profile = [(0.0, 500.0), (4_000.0, 470.0), (8_000.0, 500.0)]
+    ridge_profile = [(0.0, 500.0), (4_000.0, 700.0), (8_000.0, 500.0)]
+    clear = solve_link_budget(
+        prop, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0, terrain_profile=clear_profile,
+    )
+    blocked = solve_link_budget(
+        prop, device_lat=47.0, device_lon=13.0, device_alt_m=500.0,
+        bandwidth_bps=2_000_000.0, terrain_profile=ridge_profile,
+    )
+    assert clear.diffraction_loss_db == 0.0
+    assert blocked.diffraction_loss_db > 0.0
+    assert blocked.path_loss_db > clear.path_loss_db
 
 
 def test_from_profile_parses_higher_fidelity_fields() -> None:

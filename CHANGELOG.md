@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (multi-edge terrain diffraction over a procedural world, BL-089)
+
+- Comms links opt into terrain (`propagation.use_terrain`): the link budget now
+  samples a deterministic procedural elevation field along the path to the peer
+  and runs multi-edge Bullington diffraction over it (ADR 0072), lifting the
+  BL-088 single knife edge to the controlling ridges of a real path. A new
+  `subsystems/terrain.py` `TerrainModel` (a seeded sum of sinusoidal ridge
+  components, ADR 0019) supplies the field, exposing `elevation` and a
+  `path_profile` sampler; `subsystems/propagation.py` gains
+  `bullington_diffraction_db`, which shares the Fresnel `J(v)` kernel with the
+  single knife edge and reduces to it exactly for one obstacle. The engine builds
+  the terrain from an optional top-level `world` profile section and threads it
+  into the comms subsystem beside `rng` / `position_fn`; a link with no `world`
+  section or `use_terrain: false` is byte-for-byte unchanged. Standalone (no
+  fetched DEM dataset; the interface is the seam for an out-of-tree elevation
+  loader) and under the tick budget. Demonstrated by `profiles/terrain-demo.yaml`
+  and `tests/integration/test_terrain_propagation.py`.
+
 ### Added (transmit-failure reason on the send/publish path, BL-109)
 
 - `comms_send`, and the shared `encode_and_tx` behind `comms_publish` /

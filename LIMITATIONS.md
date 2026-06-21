@@ -111,19 +111,24 @@ higher-fidelity terms layered on: a log-distance path-loss exponent for the
 environment, a single knife-edge diffraction loss for a discrete
 obstruction, a kTB thermal-noise floor, a directional antenna pattern keyed
 on the bearing to the peer, and a Rician multipath fast-fade. A particle
-filter still tracks connection state. What is not modelled: multi-obstacle
-or DEM-driven terrain raytracing, frequency-selective fading, and mesh or
-multi-hop routing. A link with no propagation block stays at its static
-nominal.
+filter still tracks connection state. A link that opts into terrain
+(`use_terrain`) samples a procedural elevation field along the path and runs
+multi-edge Bullington diffraction over it (BL-089, ADR 0072). What is not
+modelled: a real surveyed DEM (the field is procedural, not a fetched dataset),
+frequency-selective fading, and mesh or multi-hop routing. A link with no
+propagation block stays at its static nominal.
 
 **Implication.** Comms scenarios reproduce graded, geometry- and
 environment-driven degradation (range, clutter, a ridge, antenna pointing,
 and fading all move the link), not just scripted link states. The terrain
-model is a single knife edge, so it captures one dominant obstruction
-rather than a DEM-accurate path profile.
+model is multi-edge over a procedural elevation field, so it captures the
+controlling ridges along the path; it is not a surveyed DEM, so it
+demonstrates the physics rather than a specific real location.
 
-**Tracking.** DEM-driven terrain is `[planned]` under [BL-089]; mesh routing
-is part of the [BL-056] delay-tolerant-networking layer.
+**Tracking.** Multi-edge terrain diffraction over a procedural world shipped
+under [BL-089] (ADR 0072); a real surveyed-DEM loader and frequency-selective
+fading remain out of scope for v0.1. Mesh routing is part of the [BL-056]
+delay-tolerant-networking layer.
 
 ## L8. Li-ion only
 

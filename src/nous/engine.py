@@ -61,6 +61,7 @@ from .subsystems.position import PositionSubsystem
 from .subsystems.power import PowerSubsystem
 from .subsystems.sensors import SensorsSubsystem
 from .subsystems.storage import StorageSubsystem
+from .subsystems.terrain import TerrainModel
 from .subsystems.thermal import ThermalSubsystem
 from .types import TickContext
 
@@ -244,6 +245,9 @@ class Engine:
             self.profile, compute=self.compute, rng=self.rng
         )
         self.storage = StorageSubsystem(self.profile, rng=self.rng)
+        # BL-089: the shared procedural world (None unless the profile carries a
+        # `world` section); the comms link budget samples it for terrain diffraction.
+        self.terrain = TerrainModel.from_profile(self.profile)
         self.comms = CommsSubsystem(
             self.profile,
             rng=self.rng,
@@ -252,6 +256,7 @@ class Engine:
                 self.position.lon,
                 self.position.alt_m,
             ),
+            terrain=self.terrain,
         )
         self.outbox = CommsOutbox(self.profile, rng=self.rng)
         self._build_dtn_mesh()
@@ -405,6 +410,7 @@ class Engine:
             new_profile, compute=new_compute, rng=self.rng
         )
         new_storage = StorageSubsystem(new_profile, rng=self.rng)
+        new_terrain = TerrainModel.from_profile(new_profile)
         new_comms = CommsSubsystem(
             new_profile,
             rng=self.rng,
@@ -413,6 +419,7 @@ class Engine:
                 self.position.lon,
                 self.position.alt_m,
             ),
+            terrain=new_terrain,
         )
         new_outbox = CommsOutbox(new_profile, rng=self.rng)
         new_position = PositionSubsystem(new_profile, rng=self.rng)
@@ -429,6 +436,7 @@ class Engine:
         self.compute = new_compute
         self.inference = new_inference
         self.storage = new_storage
+        self.terrain = new_terrain
         self.comms = new_comms
         self.outbox = new_outbox
         self.position = new_position
