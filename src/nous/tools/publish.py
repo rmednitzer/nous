@@ -33,7 +33,11 @@ def encode_and_tx(
     reflects whether the link accepted the bytes (an unknown or forced-down
     link accepts none), and ``payload_hex`` carries the wire form either
     way so the controller sees both the encoding and its effect on the
-    link. ``extra`` keys (e.g. the self-model ``kind``) are merged into the
+    link. On a non-EMCON transmit failure the body carries a ``reason`` naming
+    the cause (the link's ``last_tx_reason``: ``forced_down`` / ``no_capacity``
+    / ``empty``, or ``unknown_link``), so a dropped fire-and-forget publish is
+    legible the way the EMCON defer path already is (BL-109). ``extra`` keys
+    (e.g. the self-model ``kind``) are merged into the
     success body. When the active EMCON profile forbids emitting on the link
     (BL-060 / ADR 0065), nothing is transmitted: the encoded payload is held in
     the store-and-forward outbox (``reason`` ``emcon``, ``enqueued`` true) so it
@@ -86,7 +90,7 @@ def encode_and_tx(
             "enqueued": held.accepted,
         }
     accepted = engine.comms.tx(link_id, len(payload), now_s=now_s)
-    return {
+    result: dict[str, Any] = {
         "ok": accepted > 0,
         "link_id": link_id,
         "adapter": adapter,
@@ -95,3 +99,21 @@ def encode_and_tx(
         "len": len(payload),
         "bytes_accepted": accepted,
     }
+    if accepted <= 0:
+        result["reason"] = tx_failure_reason(engine, link_id)
+    return result
+
+
+def tx_failure_reason(engine: Engine, link_id: str) -> str:
+    """Name why a ``tx`` returned zero, from the link's recorded ``last_tx_reason``.
+
+    BL-108 stamps ``forced_down`` / ``no_capacity`` / ``empty`` on the link as a
+    transmit fails; an unknown link has no record, so it is named explicitly. The
+    send and publish failure bodies surface this (BL-109) so a dropped
+    fire-and-forget transmission says why it dropped, the way the EMCON defer
+    path already carries a ``reason``.
+    """
+    link = engine.comms.link(link_id)
+    if link is None:
+        return "unknown_link"
+    return link.last_tx_reason or "rejected"

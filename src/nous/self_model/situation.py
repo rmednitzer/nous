@@ -228,6 +228,11 @@ def _endurance_status(cap: Capability) -> str:
 
 
 def _inference_status(cap: Capability, engine: Engine) -> str:
+    # The floor is a breach test, not a margin test (ADR 0071): it asks whether
+    # local inference has effectively collapsed, so it reads the central point,
+    # not the conservative p5 endurance and thermal use for their margin
+    # questions. Reading p5 would escalate a healthy-but-uncertain estimate to
+    # critical; that uncertainty is routed to the watch branch below instead.
     if cap.point <= _INFERENCE_FLOOR_TOK_S:
         return "critical"
     if engine.compute.throttled:
@@ -337,6 +342,15 @@ def _recommendations(
             f"inference: local capacity is ~{inference.point:.0f} tok/s; defer "
             "or downsize local inference, or use the cloud path within the daily "
             "cap."
+        )
+    elif inference is not None and inference.status == "degraded":
+        # A degraded inference is a throttle (thermal ceiling or an FSM mode-load
+        # ceiling); name it generically since a mode-ceiling throttle is not
+        # covered by the thermal advisory (ADR 0071).
+        recs.append(
+            f"inference: compute is throttled and local capacity is "
+            f"~{inference.point:.0f} tok/s; expect reduced throughput, prefer the "
+            "cloud path or downsize local inference until the throttle clears."
         )
 
     if not recs:

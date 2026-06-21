@@ -91,7 +91,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0069` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0071` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |

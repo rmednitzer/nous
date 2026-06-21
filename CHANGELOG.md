@@ -6,6 +6,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (transmit-failure reason on the send/publish path, BL-109)
+
+- `comms_send`, and the shared `encode_and_tx` behind `comms_publish` /
+  `self_model_publish`, returned `{ok: false, bytes_accepted: 0}` on a non-EMCON
+  transmit failure with no field naming the cause, even though BL-108 records it
+  on `Link.last_tx_reason` (AUDIT-2026-06-16, MED). A zero-capacity below-SNR
+  link reads `connected: true` yet rejects, indistinguishable from a healthy
+  reject. Both failure bodies now carry `reason` (the link's `last_tx_reason`:
+  `forced_down` / `no_capacity` / `empty`, or `unknown_link`), via a shared
+  `tools/publish.py::tx_failure_reason`, matching the `reason` the EMCON defer
+  path already carries. Additive and reporting-only; no ADR.
+
+### Changed (self-model inference status basis and degraded advisory, BL-111)
+
+- The self-model situational read coloured the inference capability on the
+  central `cap.point` while endurance and thermal use the conservative `cap.p5`,
+  and a `degraded` inference (compute throttled, point above the floor) produced
+  no advisory line where every other degraded capability does (AUDIT-2026-06-16,
+  LOW). Decided (ADR 0071) to keep the `point` basis: the inference floor is a
+  breach test (has local inference collapsed), not a margin test, and uncertainty
+  is already routed to the `watch` branch, so reading `p5` would raise a spurious
+  `critical` on a healthy-but-uncertain estimate. Added a degraded-inference
+  advisory that names the throttle generically, since the degraded trigger
+  (`compute.throttled`) is also set by an FSM mode-load ceiling with no thermal
+  throttling, so a mode-ceiling throttle is not covered by the thermal advisory.
+  Reporting-only; no estimator, FSM, or safety path moves.
+
 ### Documentation (adversarial audit 2026-06-16: comms diagnostics and legibility)
 
 - A focused adversarial pass over the surfaces changed in PRs #160 through #167

@@ -241,7 +241,10 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         held in the store-and-forward outbox (``reason`` ``emcon``) instead of
         dropped, so they ship when emissions resume. Returns ``{"ok": bool,
         "link_id": str, "bytes_accepted": int, "connected": bool}``; ``ok`` is
-        ``false`` when no bytes were accepted. An EMCON defer adds ``reason``
+        ``false`` when no bytes were accepted. A non-EMCON failure adds
+        ``reason`` naming the cause (the link's ``last_tx_reason``:
+        ``forced_down`` / ``no_capacity`` / ``empty``, or ``unknown_link``;
+        BL-109). An EMCON defer adds ``reason``
         (``emcon``), ``emcon_profile``, and ``enqueued`` (whether the outbox
         took the held bytes); ``connected`` still reflects the link's real
         ``is_live`` health, since EMCON is orthogonal to connectivity. Tier T2
@@ -273,14 +276,17 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                 )
             accepted = engine.comms.tx(link_id, n_bytes, now_s=now_s)
             link = engine.comms.link(link_id)
-            return json.dumps(
-                {
-                    "ok": accepted > 0,
-                    "link_id": link_id,
-                    "bytes_accepted": accepted,
-                    "connected": bool(link.is_live()) if link is not None else False,
-                }
-            )
+            body: dict[str, Any] = {
+                "ok": accepted > 0,
+                "link_id": link_id,
+                "bytes_accepted": accepted,
+                "connected": bool(link.is_live()) if link is not None else False,
+            }
+            if accepted <= 0:
+                from .publish import tx_failure_reason
+
+                body["reason"] = tx_failure_reason(engine, link_id)
+            return json.dumps(body)
 
         return await wrap(
             "comms_send", {"link_id": link_id, "n_bytes": n_bytes}, ctx, _work

@@ -1372,3 +1372,146 @@ class TestLow2InferenceLocalStaysReversibleT1:
         # allowlist match.
         assert classify("inference_cloud")[0] is Tier.STATEFUL
         assert decide(Tier.STATEFUL, PolicyMode.GUARDED).allowed is False
+
+
+class TestBL109SurfacesTxFailureReason:
+    """BL-109: a non-EMCON transmit failure names its cause on the result body.
+
+    Original defect (``docs/audit-2026-06-16.md`` BL-109, MED): ``comms_send`` and
+    the shared ``encode_and_tx`` behind ``comms_publish`` / ``self_model_publish``
+    returned ``{ok: false, bytes_accepted: 0}`` on a non-EMCON transmit failure
+    with no field naming the cause, even though BL-108 records it on
+    ``Link.last_tx_reason``. A zero-capacity below-SNR link reads
+    ``connected: true`` yet rejects, indistinguishable from a healthy reject.
+
+    Fix (BL-109): both failure bodies carry ``reason`` (the link's
+    ``last_tx_reason``, or ``unknown_link`` when the link is unknown).
+    """
+
+    def test_helper_reads_last_tx_reason(self) -> None:
+        from types import SimpleNamespace
+
+        from nous.subsystems.comms import CommsSubsystem
+        from nous.tools.publish import tx_failure_reason
+
+        comms = CommsSubsystem(
+            {"comms": {"links": [{"id": "radio", "bandwidth_bps": 1_000_000, "max_age_s": 600.0}]}}
+        )
+        comms.set_link_state("radio", connected=False)
+        assert comms.tx("radio", 100) == 0
+        engine: Any = SimpleNamespace(comms=comms)
+        assert tx_failure_reason(engine, "radio") == "forced_down"
+        assert tx_failure_reason(engine, "no-such-link") == "unknown_link"
+
+    async def test_comms_send_body_carries_reason(self, config: Settings) -> None:
+        from nous.server import build_app
+
+        app = build_app(config)
+        link_id = app.engine.comms.link_ids[0]
+        app.engine.comms.set_link_state(link_id, connected=False)
+        result: Any = await app.mcp.call_tool(
+            "comms_send", {"link_id": link_id, "n_bytes": 256}
+        )
+        content, _ = result
+        out = json.loads(content[0].text)
+        assert out["ok"] is False
+        assert out["reason"] == "forced_down"
+
+    async def test_comms_publish_body_carries_reason(self, config: Settings) -> None:
+        import time
+
+        from nous.server import build_app
+
+        app = build_app(config)
+        link_id = app.engine.comms.link_ids[0]
+        app.engine.comms.set_link_state(link_id, connected=False)
+        result: Any = await app.mcp.call_tool(
+            "comms_publish",
+            {
+                "link_id": link_id,
+                "adapter": "cot",
+                "data": {"uid": "u", "ts_s": time.time(), "lat": 47.0, "lon": 13.0},
+            },
+        )
+        content, _ = result
+        out = json.loads(content[0].text)
+        assert out["ok"] is False
+        assert out["reason"] == "forced_down"
+
+
+class TestBL111InferenceStatusBasisIsDeliberate:
+    """BL-111: the inference status floor reads the central point, by design.
+
+    Original observation (``docs/audit-2026-06-16.md`` BL-111, LOW):
+    ``_inference_status`` thresholds the critical floor on ``cap.point`` while
+    ``_endurance_status`` / ``_thermal_status`` use the conservative ``cap.p5``,
+    and a ``degraded`` inference (compute throttled, point above floor) produced
+    no recommendation where the other degraded capabilities do.
+
+    Decision (ADR 0071): keep the ``point`` basis (the floor is a breach test,
+    not a margin test; uncertainty is routed to the ``watch`` branch, so ``p5``
+    would raise a spurious ``critical`` on a healthy-but-uncertain estimate), and
+    add a degraded-inference advisory that names the throttle generically (a
+    mode-load-ceiling throttle is not covered by the thermal advisory). This pins
+    both so a future change is deliberate and visible.
+    """
+
+    def test_floor_reads_point_not_p5(self) -> None:
+        from types import SimpleNamespace
+
+        from nous.self_model.situation import _inference_status
+        from nous.types import Capability
+
+        engine: Any = SimpleNamespace(compute=SimpleNamespace(throttled=False))
+        # Point healthy, lower tail grazing the floor: p5 <= floor would call this
+        # critical, but the deliberate point basis keeps it out of critical.
+        uncertain = Capability(
+            name="inference_capacity_tok_per_s",
+            point=12.0,
+            p5=0.5,
+            p50=10.0,
+            p95=40.0,
+            confidence=0.9,
+        )
+        assert _inference_status(uncertain, engine) != "critical"
+        # A genuine collapse (point at the floor) is critical.
+        collapsed = Capability(
+            name="inference_capacity_tok_per_s",
+            point=0.5,
+            p5=0.1,
+            p50=0.5,
+            p95=2.0,
+            confidence=0.9,
+        )
+        assert _inference_status(collapsed, engine) == "critical"
+
+    def test_degraded_inference_emits_advisory(self) -> None:
+        from types import SimpleNamespace
+
+        from nous.self_model.situation import CapabilitySituation, _recommendations
+        from nous.state.comms_state import CommsState
+        from nous.state.machine import Mode
+        from nous.state.operator_state import OperatorState
+
+        engine: Any = SimpleNamespace(
+            state=SimpleNamespace(
+                operator_state=OperatorState.NOMINAL,
+                operator_state_reason="",
+                comms_state=CommsState.CONNECTED,
+                comms_state_reason="",
+                mode=Mode.MISSION,
+            ),
+            position=SimpleNamespace(has_fix=True),
+        )
+        degraded = CapabilitySituation(
+            name="inference_capacity_tok_per_s",
+            point=8.0,
+            p5=5.0,
+            p50=8.0,
+            p95=12.0,
+            confidence=0.9,
+            units="tok/s",
+            status="degraded",
+        )
+        recs = _recommendations(engine, {"inference_capacity_tok_per_s": degraded})
+        assert any(r.startswith("inference:") for r in recs)
