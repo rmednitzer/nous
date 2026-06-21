@@ -16,7 +16,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reject. Both failure bodies now carry `reason` (the link's `last_tx_reason`:
   `forced_down` / `no_capacity` / `empty`, or `unknown_link`), via a shared
   `tools/publish.py::tx_failure_reason`, matching the `reason` the EMCON defer
-  path already carries. Additive and reporting-only; no ADR.
+  path already carries. A non-positive `comms_send` reports `empty` rather than
+  the EMCON attribution `tx` records when its gate is checked first, so a bare
+  `reason: emcon` only appears on the defer shape (PR #170 review). Additive and
+  reporting-only; no ADR.
 
 ### Changed (self-model inference status basis and degraded advisory, BL-111)
 

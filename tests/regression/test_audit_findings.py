@@ -1438,6 +1438,26 @@ class TestBL109SurfacesTxFailureReason:
         assert out["ok"] is False
         assert out["reason"] == "forced_down"
 
+    async def test_nonpositive_send_under_silence_reports_empty(
+        self, config: Settings
+    ) -> None:
+        # A bare reason:"emcon" must only appear on the defer shape: a non-positive
+        # send under a silent posture reports the honest "empty", not the EMCON
+        # attribution tx() stamps when its gate is checked first (PR #170 review).
+        from nous.server import build_app
+
+        app = build_app(config)
+        link_id = app.engine.comms.link_ids[0]
+        await app.mcp.call_tool("emcon_set", {"profile": "silent"})
+        result: Any = await app.mcp.call_tool(
+            "comms_send", {"link_id": link_id, "n_bytes": 0}
+        )
+        content, _ = result
+        out = json.loads(content[0].text)
+        assert out["ok"] is False
+        assert out["reason"] == "empty"
+        assert "emcon_profile" not in out
+
 
 class TestBL111InferenceStatusBasisIsDeliberate:
     """BL-111: the inference status floor reads the central point, by design.

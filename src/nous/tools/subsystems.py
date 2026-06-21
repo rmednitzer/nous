@@ -285,7 +285,14 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
             if accepted <= 0:
                 from .publish import tx_failure_reason
 
-                body["reason"] = tx_failure_reason(engine, link_id)
+                # A non-positive send is empty by definition. tx() checks the EMCON
+                # gate before the empty guard, so under a silent posture it would
+                # stamp last_tx_reason="emcon"; report "empty" here so a bare
+                # reason:"emcon" only ever appears on the defer shape above (which
+                # carries emcon_profile/enqueued). (PR #170 review.)
+                body["reason"] = (
+                    "empty" if n_bytes <= 0 else tx_failure_reason(engine, link_id)
+                )
             return json.dumps(body)
 
         return await wrap(
