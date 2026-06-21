@@ -19,12 +19,13 @@ authored and reviewed when the code they describe changes.
 | [Scenario gallery](scenarios/README.md) | Per-scenario telemetry, sparklines, timelines. | Regenerated in CI from scenario YAML. |
 
 The showcase is deliberately not a marketing page. The simulator is
-pre-1.0 and runs entirely in software. The L1 subsystem rollout is on
-`main` (ten subsystems, nine estimators), the self-model layer emits
-calibrated capability claims (BL-018, BL-035), the comms stack carries a
-store-and-forward outbox, a multi-node DTN mesh, and operator EMCON
-posture (BL-077, BL-056, BL-060), and the scenario loader and injectors
-drive the engine end to end (BL-014). What it is not: no number has been
+pre-1.0 and runs entirely in software. The subsystem rollout is on
+`main` (twelve subsystems, ten estimators, including the BL-005b PMU
+power management and the BL-055 EO/IR perception payload), the self-model
+layer emits calibrated capability claims (BL-018, BL-035), the comms stack
+carries a store-and-forward outbox, a multi-node DTN mesh, and operator
+EMCON posture (BL-077, BL-056, BL-060), and the scenario loader and
+injectors drive the engine end to end (BL-014). What it is not: no number has been
 compared against measured traces from real hardware, and the interop
 conformance is self-declared, not certified. See the
 [2026-06-15b audit](../audit-2026-06-15b.md) and `AUDIT.md` for the
