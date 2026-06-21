@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import traceback
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -142,6 +144,24 @@ def test_constructor_rejects_bad_height_field() -> None:
 
 # --- Genesis scene path: opt-in, needs genesis-world + a GL backend ---
 
+_GL_MARKERS = ("egl", "osmesa", "opengl", "glx", "rasterizer", "visualizer", "no display")
+
+
+def _build_or_skip(make: Callable[[], GenesisWorldSource]) -> GenesisWorldSource:
+    """Build a scene, or skip if it fails for lack of a GL backend.
+
+    Genesis builds a rasterizer at `scene.build()` even headless, so on a host
+    with the dependency but no EGL/OSMesa the build raises. The pre-build logic
+    is covered by the pure-math tests, so a GL failure here is environmental and
+    skips; any non-GL error still propagates so a real regression is not masked.
+    """
+    try:
+        return make()
+    except Exception as exc:
+        if any(marker in traceback.format_exc().lower() for marker in _GL_MARKERS):
+            pytest.skip(f"Genesis scene build needs a GL backend: {exc!r}")
+        raise
+
 
 @pytest.mark.skipif(
     not _RUN_SCENE,
@@ -154,12 +174,14 @@ def test_genesis_scene_tracks_terrain_and_platform_motion() -> None:
     field = np.zeros((32, 32), dtype=np.float32)
     field[16:, :] = 100.0  # a step in the row (east) direction, 100 m high
 
-    src = GenesisWorldSource(
-        field,
-        horizontal_scale_m=1.0,
-        vertical_scale_m=1.0,
-        platform_lla=(0.0, 0.0, 50.0),
-        platform_velocity_mps=(8.0, 0.0, 0.0),
+    src = _build_or_skip(
+        lambda: GenesisWorldSource(
+            field,
+            horizontal_scale_m=1.0,
+            vertical_scale_m=1.0,
+            platform_lla=(0.0, 0.0, 50.0),
+            platform_velocity_mps=(8.0, 0.0, 0.0),
+        )
     )
     assert isinstance(src, WorldSource)
 
@@ -186,6 +208,6 @@ def test_genesis_scene_tracks_terrain_and_platform_motion() -> None:
     reason="needs genesis-world + a GL backend + NOUS_GENESIS_SCENE_TESTS=1",
 )
 def test_genesis_scene_no_platform_position_raises() -> None:
-    src = GenesisWorldSource(np.zeros((8, 8), dtype=np.float32))
+    src = _build_or_skip(lambda: GenesisWorldSource(np.zeros((8, 8), dtype=np.float32)))
     with pytest.raises(RuntimeError, match="no platform"):
         src.platform_position()
