@@ -6,16 +6,26 @@ reads the engine's live estimator state -- power, thermal, compute,
 comms, biometrics -- and produces calibrated capability claims with
 explicit ``p5 / p50 / p95`` quantiles.
 
-The quantile mapping is calibrated via Monte Carlo (BL-035): draw
-samples from each estimator's posterior, push them through the
-capability function (which is non-linear in places -- endurance
-divides by net load, headroom subtracts from the throttle threshold),
-then take empirical quantiles. The number of samples
-(``_MONTE_CARLO_SAMPLES``) is small enough to stay well under the
-per-tick budget but large enough to be stable around 5 / 95 percentiles
-for the shapes the simulator produces. The legacy Gaussian
-approximation is retained as a fallback when ``mode="gaussian"`` so a
-test that needs the v0.1 contract can still opt out.
+The quantile mapping is calibrated via Monte Carlo (BL-035, ADR 0080):
+draw samples from every uncertain input the capability depends on, not
+just one, push them through the capability function (which is non-linear
+in places -- endurance divides by net load, headroom subtracts from the
+throttle threshold), then take empirical quantiles. Each capability draws
+from the estimator posteriors that feed it (SoC for endurance, the
+junction posterior for headroom, the load posterior for capacity) and,
+for the spec constants that have no estimator (``battery_wh``, the
+throttle threshold, the benchmark token rate), a small
+profile-configurable design prior. Endurance can additionally propagate
+the APU-charge and compute-draw posteriors through net load behind the
+opt-in ``self_model.priors.propagate_net_load`` (off by default because
+the ``1/net_w`` term saturates near energy balance). So the bands reflect
+total uncertainty rather than understating it behind a single source. The
+number of samples (``_MONTE_CARLO_SAMPLES``) is small
+enough to stay well under the per-tick budget but large enough to be
+stable around 5 / 95 percentiles for the shapes the simulator produces.
+The legacy Gaussian approximation is retained as a fallback when
+``mode="gaussian"`` so a test that needs the v0.1 contract can still opt
+out; it stays a single-source linear approximation.
 
 Capabilities surfaced:
 
@@ -37,6 +47,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -57,7 +68,62 @@ _DEFAULT_SEED = 0
 _PERCEPTION_RANGE_MAX_M = 60000.0
 _PERCEPTION_CONFIDENCE_SCALE_M = 4000.0
 
+# Design priors for the spec constants that have no estimator posterior. They
+# stand for datasheet / benchmark / manufacturing tolerance, not a filtered
+# belief, so the Monte Carlo bands stop treating these terms as exact (the
+# model-card "single source of uncertainty" limitation). Overridable per
+# profile under `self_model.priors`; a CV/sigma of 0 recovers the v0.1 band.
+_DEFAULT_BATTERY_WH_CV = 0.03
+_DEFAULT_TOK_PER_S_CV = 0.10
+_DEFAULT_JUNCTION_THROTTLE_SIGMA_C = 1.5
+
 QuantileMode = Literal["monte_carlo", "gaussian"]
+
+
+@dataclass(frozen=True)
+class _Priors:
+    """Design-prior spreads for the capability inputs that lack a posterior."""
+
+    battery_wh_cv: float
+    tok_per_s_cv: float
+    junction_throttle_sigma_c: float
+    propagate_net_load: bool
+
+
+def _priors(engine: Engine) -> _Priors:
+    """Read the ``self_model.priors`` profile block, falling back to defaults.
+
+    Profile content is attacker-influenceable configuration, so each field is
+    coerced and a non-finite or negative value falls back to its default rather
+    than poisoning a band.
+    """
+    section = engine.profile.get("self_model")
+    block = section.get("priors") if isinstance(section, dict) else None
+    cfg = block if isinstance(block, dict) else {}
+
+    def _nonneg(key: str, default: float) -> float:
+        raw = cfg.get(key, default)
+        # A bool is not a meaningful prior spread; `float(True)` is `1.0`, which
+        # would silently distort it, so reject it like any other non-numeric.
+        if isinstance(raw, bool):
+            return default
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return default
+        return value if math.isfinite(value) and value >= 0.0 else default
+
+    # Only a real boolean enables propagation; a string like "false" (truthy) or
+    # any other junk value falls back to the safe default (off).
+    flag = cfg.get("propagate_net_load", False)
+    return _Priors(
+        battery_wh_cv=_nonneg("battery_wh_cv", _DEFAULT_BATTERY_WH_CV),
+        tok_per_s_cv=_nonneg("tok_per_s_cv", _DEFAULT_TOK_PER_S_CV),
+        junction_throttle_sigma_c=_nonneg(
+            "junction_throttle_sigma_c", _DEFAULT_JUNCTION_THROTTLE_SIGMA_C
+        ),
+        propagate_net_load=flag if isinstance(flag, bool) else False,
+    )
 
 
 class Assessment(BaseModel):
@@ -94,9 +160,14 @@ def assess(
         return _empty_assessment(question)
 
     rng = np.random.default_rng(int(seed))
-    endurance = _endurance_capability(engine, mode=mode, rng=rng)
-    thermal_headroom = _thermal_headroom_capability(engine, mode=mode, rng=rng)
-    inference_capacity = _inference_capacity_capability(engine, mode=mode, rng=rng)
+    priors = _priors(engine)
+    endurance = _endurance_capability(engine, mode=mode, rng=rng, priors=priors)
+    thermal_headroom = _thermal_headroom_capability(
+        engine, mode=mode, rng=rng, priors=priors
+    )
+    inference_capacity = _inference_capacity_capability(
+        engine, mode=mode, rng=rng, priors=priors
+    )
     perception_range = _perception_range_capability(engine, mode=mode, rng=rng)
 
     return Assessment(
@@ -132,15 +203,21 @@ def _empty_assessment(question: str) -> Assessment:
 
 
 def _endurance_capability(
-    engine: Engine, *, mode: QuantileMode, rng: np.random.Generator
+    engine: Engine, *, mode: QuantileMode, rng: np.random.Generator, priors: _Priors
 ) -> Capability:
-    """Endurance minutes from SoC, net load, and the SoC posterior.
+    """Endurance minutes from SoC, net load, and the inputs' posteriors.
 
-    Net load is ``load_w - charge_accepted_w``. When the battery is
-    being net-charged the endurance is unbounded; we return the
-    profile's nominal capacity-derived headroom as ``p50`` and report
-    ``confidence=0`` so the controller does not treat it as a hard
-    bound.
+    Net load is ``load_w - charge_accepted_w``. By default the Monte Carlo
+    branch propagates the SoC posterior and a small ``battery_wh``
+    capacity-tolerance prior. With ``self_model.priors.propagate_net_load``
+    enabled it also samples the net load: the charge side from the APU
+    total-output posterior, the variable load from the compute-draw
+    posterior. That is honest where net load is comfortably positive, but
+    near energy balance the ``1/net_w`` term is heavy-tailed and the upper
+    quantile saturates at the net-charge sentinel, so it is opt-in rather
+    than the default (ADR 0080). When the battery is net-charged the
+    endurance is unbounded; we return the 24 h sentinel with ``confidence=0``
+    so the controller treats it as a hint, not a hard bound.
     """
     power = engine.power
     estimate = engine.power_est.state()
@@ -149,20 +226,48 @@ def _endurance_capability(
     soc_var = float(estimate.covariance.get("soc_pct", 0.0))
     soc_sigma = math.sqrt(max(0.0, soc_var))
 
-    net_w = float(power.truth().get("load_w", 0.0)) - float(
-        power.truth().get("charge_accepted_w", 0.0)
-    )
+    load_w = float(power.truth().get("load_w", 0.0))
+    charge_w = float(power.truth().get("charge_accepted_w", 0.0))
+    net_w = load_w - charge_w
     battery_wh = float(power.profile.get("power", {}).get("battery_wh", 0.0))
+
+    load_sigma = math.sqrt(
+        max(0.0, float(engine.compute_est.state().covariance.get("draw_w", 0.0)))
+    )
+    charge_sigma = math.sqrt(
+        max(0.0, float(engine.apu_est.state().covariance.get("total_w", 0.0)))
+    )
 
     point_min = _endurance_min(battery_wh, point_soc, net_w)
 
     if mode == "monte_carlo" and soc_sigma > 0.0 and net_w > 0.0:
-        soc_samples = np.clip(
-            rng.normal(point_soc, soc_sigma, size=_MONTE_CARLO_SAMPLES),
-            0.0,
-            100.0,
+        n = _MONTE_CARLO_SAMPLES
+        soc_samples = np.clip(rng.normal(point_soc, soc_sigma, size=n), 0.0, 100.0)
+        battery_scale = max(0.0, priors.battery_wh_cv * battery_wh)
+        battery_samples = (
+            rng.normal(battery_wh, battery_scale, size=n)
+            if battery_scale > 0.0
+            else np.full(n, battery_wh)
         )
-        endurance_samples = (battery_wh * soc_samples / 100.0) / net_w * 60.0
+        remaining_wh = np.clip(battery_samples, 0.0, None) * soc_samples / 100.0
+        if priors.propagate_net_load:
+            # The charge side carries the APU total-output posterior, the
+            # variable load the compute-draw posterior. Near energy balance the
+            # 1/net_w term is heavy-tailed, so a net-charging draw reads as the
+            # net-charge sentinel and the explosive tail is bounded there. This
+            # is honest but saturates the upper quantile, so it is opt-in
+            # (`self_model.priors.propagate_net_load`); see ADR 0080.
+            sentinel = max(point_min, _ENDURANCE_NET_CHARGE_CAP_MIN)
+            net_samples = rng.normal(load_w, load_sigma, size=n) - rng.normal(
+                charge_w, charge_sigma, size=n
+            )
+            with np.errstate(divide="ignore", invalid="ignore"):
+                endurance_samples = np.where(
+                    net_samples > 0.0, remaining_wh / net_samples * 60.0, sentinel
+                )
+            endurance_samples = np.clip(endurance_samples, 0.0, sentinel)
+        else:
+            endurance_samples = remaining_wh / net_w * 60.0
         p5, p50, p95 = _quantiles(endurance_samples)
     else:
         soc_p5 = max(0.0, point_soc - _Z_90 * soc_sigma)
@@ -176,7 +281,7 @@ def _endurance_capability(
         drivers = ["power", "apu"]
     else:
         confidence = max(0.0, 1.0 - soc_sigma / 50.0)
-        drivers = ["power"]
+        drivers = ["power", "compute", "apu"] if priors.propagate_net_load else ["power"]
 
     return Capability(
         name="endurance_min",
@@ -207,9 +312,15 @@ def _endurance_min(battery_wh: float, soc_pct: float, net_w: float) -> float:
 
 
 def _thermal_headroom_capability(
-    engine: Engine, *, mode: QuantileMode, rng: np.random.Generator
+    engine: Engine, *, mode: QuantileMode, rng: np.random.Generator, priors: _Priors
 ) -> Capability:
-    """Degrees Celsius headroom to the junction throttle threshold."""
+    """Degrees Celsius headroom to the junction throttle threshold.
+
+    The Monte Carlo branch samples the junction-temperature posterior and a
+    small design prior on the throttle threshold itself (a datasheet constant
+    with tolerance, not a filtered belief), so the band no longer treats the
+    threshold as exact.
+    """
     thermal = engine.thermal
     estimate = engine.thermal_est.state()
 
@@ -218,13 +329,18 @@ def _thermal_headroom_capability(
     junction_sigma = math.sqrt(max(0.0, junction_var))
 
     throttle_c = thermal.junction_temp_throttle
+    throttle_sigma = priors.junction_throttle_sigma_c
     point_c = throttle_c - junction_point
 
-    if mode == "monte_carlo" and junction_sigma > 0.0:
-        junction_samples = rng.normal(
-            junction_point, junction_sigma, size=_MONTE_CARLO_SAMPLES
+    if mode == "monte_carlo" and (junction_sigma > 0.0 or throttle_sigma > 0.0):
+        n = _MONTE_CARLO_SAMPLES
+        junction_samples = rng.normal(junction_point, junction_sigma, size=n)
+        throttle_samples = (
+            rng.normal(throttle_c, throttle_sigma, size=n)
+            if throttle_sigma > 0.0
+            else np.full(n, throttle_c)
         )
-        headroom_samples = throttle_c - junction_samples
+        headroom_samples = throttle_samples - junction_samples
         p5, p50, p95 = _quantiles(headroom_samples)
     else:
         p5 = throttle_c - (junction_point + _Z_90 * junction_sigma)
@@ -246,14 +362,16 @@ def _thermal_headroom_capability(
 
 
 def _inference_capacity_capability(
-    engine: Engine, *, mode: QuantileMode, rng: np.random.Generator
+    engine: Engine, *, mode: QuantileMode, rng: np.random.Generator, priors: _Priors
 ) -> Capability:
     """Tokens-per-second the compute subsystem can sustain right now.
 
     The headline figure is the profile's
-    ``compute.inference_local.tok_per_s_p50`` derated by the fraction
-    of compute headroom still available after thermal throttling.
-    Quantiles come from the compute Kalman's load-pct posterior.
+    ``compute.inference_local.tok_per_s_p50`` derated by the fraction of
+    compute headroom still available after thermal throttling. The Monte Carlo
+    branch samples the compute load-pct posterior and a design prior on the
+    benchmark token rate (a published-benchmark estimate, not a measured rate
+    on this device), so the band reflects both the load and the rate tolerance.
     """
     compute = engine.compute
     estimate = engine.compute_est.state()
@@ -274,17 +392,22 @@ def _inference_capacity_capability(
     load_point = float(estimate.point.get("load_pct", compute.load_pct))
     load_var = float(estimate.covariance.get("load_pct", 0.0))
     load_sigma = math.sqrt(max(0.0, load_var))
+    capacity_sigma = priors.tok_per_s_cv * capacity
 
     headroom = max(0.0, 100.0 - load_point) / 100.0
     point = capacity * headroom
 
-    if mode == "monte_carlo" and load_sigma > 0.0:
-        load_samples = np.clip(
-            rng.normal(load_point, load_sigma, size=_MONTE_CARLO_SAMPLES), 0.0, 100.0
-        )
+    if mode == "monte_carlo" and (load_sigma > 0.0 or capacity_sigma > 0.0):
+        n = _MONTE_CARLO_SAMPLES
+        load_samples = np.clip(rng.normal(load_point, load_sigma, size=n), 0.0, 100.0)
         headroom_samples = (100.0 - load_samples) / 100.0
-        capacity_samples = capacity * headroom_samples
-        p5, p50, p95 = _quantiles(capacity_samples)
+        capacity_samples = (
+            np.clip(rng.normal(capacity, capacity_sigma, size=n), 0.0, None)
+            if capacity_sigma > 0.0
+            else np.full(n, capacity)
+        )
+        sustained_samples = capacity_samples * headroom_samples
+        p5, p50, p95 = _quantiles(sustained_samples)
     else:
         headroom_p5 = max(0.0, 100.0 - (load_point + _Z_90 * load_sigma)) / 100.0
         headroom_p95 = max(0.0, 100.0 - (load_point - _Z_90 * load_sigma)) / 100.0

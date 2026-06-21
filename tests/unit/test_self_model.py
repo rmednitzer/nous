@@ -233,3 +233,86 @@ def test_monte_carlo_p50_is_the_sample_median_not_the_point(engine: Engine) -> N
     gauss = assess("status", engine=engine, mode="gaussian", seed=7)
     assert gauss.thermal_headroom is not None
     assert gauss.thermal_headroom.p50 == pytest.approx(gauss.thermal_headroom.point)
+
+
+def test_thermal_headroom_band_includes_throttle_prior(engine: Engine) -> None:
+    """ADR 0080: the throttle-threshold design prior widens the headroom band
+    past the junction posterior alone, so the band stops treating the datasheet
+    threshold as exact. Same seed isolates the prior as the only difference."""
+    with_prior = assess("status", engine=engine, seed=11).thermal_headroom
+    engine.profile = {
+        **engine.profile,
+        "self_model": {"priors": {"junction_throttle_sigma_c": 0.0}},
+    }
+    without_prior = assess("status", engine=engine, seed=11).thermal_headroom
+    assert with_prior is not None and without_prior is not None
+    assert (with_prior.p95 - with_prior.p5) > (without_prior.p95 - without_prior.p5)
+
+
+def test_inference_capacity_band_includes_token_rate_prior(engine: Engine) -> None:
+    """ADR 0080: the benchmark token-rate design prior widens the capacity band
+    past the load posterior alone."""
+    with_prior = assess("status", engine=engine, seed=11).inference_capacity
+    engine.profile = {
+        **engine.profile,
+        "self_model": {"priors": {"tok_per_s_cv": 0.0}},
+    }
+    without_prior = assess("status", engine=engine, seed=11).inference_capacity
+    assert with_prior is not None and without_prior is not None
+    assert (with_prior.p95 - with_prior.p5) > (without_prior.p95 - without_prior.p5)
+
+
+def test_endurance_net_load_propagation_widens_band_when_enabled(engine: Engine) -> None:
+    """ADR 0080: the opt-in net-load propagation samples the APU-charge and
+    compute-draw posteriors, so the endurance band reflects net-load uncertainty
+    instead of treating net load as exact. Off by default; widens when enabled."""
+    default = assess("status", engine=engine, seed=5).endurance
+    engine.profile = {
+        **engine.profile,
+        "self_model": {"priors": {"propagate_net_load": True}},
+    }
+    propagated = assess("status", engine=engine, seed=5).endurance
+    assert default is not None and propagated is not None
+    assert default.drivers == ["power"]
+    assert propagated.drivers == ["power", "compute", "apu"]
+    assert (propagated.p95 - propagated.p5) > (default.p95 - default.p5)
+    assert propagated.p5 >= 0.0
+
+
+def test_priors_coerce_junk_profile_values_to_defaults(engine: Engine) -> None:
+    """Profile content is attacker-influenceable; a non-numeric prior falls back
+    to its default rather than poisoning a band, so the junk band equals the
+    default-prior band under the same seed."""
+    clean = assess("status", engine=engine, seed=3).thermal_headroom
+    engine.profile = {
+        **engine.profile,
+        "self_model": {"priors": {"junction_throttle_sigma_c": "boom"}},
+    }
+    junk = assess("status", engine=engine, seed=3).thermal_headroom
+    assert clean is not None and junk is not None
+    assert junk.p5 == pytest.approx(clean.p5)
+    assert junk.p95 == pytest.approx(clean.p95)
+
+
+def test_priors_reject_bool_values_and_nonbool_flag(engine: Engine) -> None:
+    """Defensive coercion: a bool is not a valid prior spread (`float(True)` is
+    `1.0`), and a non-bool `propagate_net_load` value (e.g. the truthy string
+    "false") must not enable propagation. Both fall back to the safe default."""
+    clean = assess("status", engine=engine, seed=3).inference_capacity
+    engine.profile = {
+        **engine.profile,
+        "self_model": {"priors": {"tok_per_s_cv": True, "propagate_net_load": "false"}},
+    }
+    a = assess("status", engine=engine, seed=3)
+    assert a.inference_capacity is not None and clean is not None
+    assert a.inference_capacity.p95 == pytest.approx(clean.p95)
+    assert a.endurance is not None
+    assert a.endurance.drivers == ["power"]
+
+
+def test_endurance_negative_battery_wh_does_not_raise(engine: Engine) -> None:
+    """A negative injected `battery_wh` must not raise from numpy's scale
+    argument; the sampling sigma is clamped non-negative (ADR 0080)."""
+    engine.power.profile["power"]["battery_wh"] = -10.0
+    a = assess("status", engine=engine)
+    assert a.endurance is not None

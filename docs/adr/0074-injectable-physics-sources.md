@@ -1,6 +1,6 @@
 # ADR 0074: Injectable physics sources, the standalone-to-external seam
 
-- **Status:** Accepted
+- **Status:** Accepted (the out-of-tree-only stance amended by ADR 0081)
 - **Date:** 2026-06-21
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0019, ADR 0053, ADR 0072, ADR 0073

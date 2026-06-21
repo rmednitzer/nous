@@ -7,11 +7,13 @@
 ## Inputs
 
 - Live estimator state from the engine: the power SoC Kalman, the thermal
-  Kalman, the compute Kalman, and the EO/IR detection-range Kalman (each point
-  estimate plus its per-channel variance), with the relevant profile constants
-  (`battery_wh`, the junction throttle threshold, the profile token rate). Each
-  capability draws on one estimator's posterior. Passing `engine=None` returns a
-  zero-filled assessment (the v0.1 stub contract).
+  Kalman, the compute Kalman, the APU output estimator, and the EO/IR
+  detection-range Kalman (each point estimate plus its per-channel variance),
+  with the relevant profile constants (`battery_wh`, the junction throttle
+  threshold, the profile token rate) carried as small design priors. A
+  capability propagates every uncertain input that feeds it, not a single
+  source (ADR 0080). Passing `engine=None` returns a zero-filled assessment
+  (the v0.1 stub contract).
 
 ## Outputs
 
@@ -29,10 +31,13 @@ Four `Capability` claims, each with a point value, a calibrated
   The Monte Carlo branch takes the per-sample maximum so the band reflects the
   nonlinear best-of-two.
 
-The bands come from a Monte Carlo over the estimator posterior (512 samples,
-seeded, the default `mode="monte_carlo"`), which is honest under the non-linear
-capability functions (endurance divides by net load, headroom subtracts from a
-threshold); a `mode="gaussian"` linear approximation is retained as an opt-out.
+The bands come from a Monte Carlo over every uncertain input a capability
+depends on (512 samples, seeded, the default `mode="monte_carlo"`): the
+estimator posteriors that feed it plus a small profile-configurable design
+prior for each spec constant that has no estimator (ADR 0080). It is honest
+under the non-linear capability functions (endurance divides by net load,
+headroom subtracts from a threshold); a `mode="gaussian"` single-source linear
+approximation is retained as an opt-out.
 `viability` answers a feasibility question by checking a requirement against
 the conservative `p5` edge of the relevant band; `explain` renders the claims
 with a limiting-driver line.
@@ -41,8 +46,9 @@ with a limiting-driver line.
 
 - Latency: the Monte Carlo (512 samples over three capabilities) stays well
   under the per-tick budget; sub-millisecond per capability.
-- The `p50` is the deterministic point estimate; `p5` and `p95` are clamped to
-  bracket it, so the band always contains the point.
+- The `p50` is the empirical sample median in Monte Carlo mode and the
+  deterministic point in Gaussian mode; `p5` and `p95` are clamped to bracket
+  the point, so the band always contains it.
 
 ## Known failure modes
 
@@ -50,10 +56,13 @@ with a limiting-driver line.
   power SoC, thermal, and compute estimator cards). A diverged estimator
   yields a confident-looking but wrong claim; `confidence` reflects only the
   reported variance, not estimator bias.
-- Each band propagates a single source of uncertainty (SoC for endurance,
-  junction temperature for headroom, load for capacity) and treats the other
-  terms (net load, the throttle threshold, the profile token rate) as
-  deterministic, so the bands understate total uncertainty.
+- The spec constants (`battery_wh`, the throttle threshold, the benchmark token
+  rate) carry design priors, not estimator posteriors: the prior spreads are
+  datasheet/benchmark tolerances configured under `self_model.priors`, so a band
+  is only as honest as those priors. Endurance can also propagate the net-load
+  posteriors (APU charge, compute draw) behind the opt-in
+  `self_model.priors.propagate_net_load`, off by default because the `1/net_w`
+  term saturates the upper quantile near energy balance.
 - `endurance_min` under net charging is unbounded; it returns a 24 h sentinel
   with `confidence=0`, a hint rather than a bound.
 - `inference_capacity_tok_per_s` is a derate of the profile's
