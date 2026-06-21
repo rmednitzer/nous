@@ -79,3 +79,28 @@ def test_eoir_seeds_reference_range_from_profile(tmp_nous_home: Path) -> None:
     eng = Engine(profile=profile)
     # Clear air at the nominal ambient: the EO band sits at its reference range.
     assert eng.eoir.eo_range_m == pytest.approx(5000.0, rel=0.01)
+
+
+def test_eoir_target_los_wired_through_engine(tmp_nous_home: Path) -> None:
+    # With a world enabled, the engine wires terrain + position into the EO/IR
+    # payload, so a configured target produces a real line-of-sight verdict.
+    profile = {
+        "world": {
+            "enabled": True,
+            "base_elevation_m": 0.0,
+            "relief_m": 600.0,
+            "feature_m": 3000.0,
+            "seed": 3,
+        },
+        "power": {"capacity_wh": 100.0, "voltage_nominal_v": 14.4},
+    }
+    eng = Engine(profile=profile)
+    eng.start()
+    assert eng.terrain is not None
+    eng.eoir.set_target(bearing_deg=90.0, range_m=4000.0, height_m=2.0)
+    eng.tick()
+    t = eng.eoir.truth()
+    assert t["target_set"] is True
+    assert isinstance(t["target_visible"], bool)  # terrain + position flowed through
+    assert t["target_slant_m"] is not None
+    assert t["target_slant_m"] == pytest.approx(4000.0, rel=0.05)

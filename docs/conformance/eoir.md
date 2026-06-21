@@ -42,13 +42,16 @@ Koschmieder atmospheric extinction driven by humidity and an obscurant level;
 infrared thermal-contrast collapse at crossover; electro-optical illumination
 fall-off at night; calibration drift on the RNG seam with a `recalibrate` seam;
 `set_obscurant` / `set_illumination` scenario seams; the two-band Kalman with
-calibration-scaled sigma; the `eoir_status` T0 read.
+calibration-scaled sigma; the `eoir_status` T0 read; and terrain line-of-sight
+masking of a single configured target (ADR 0078), reusing the comms `WorldSource`
+`path_profile` and the shared `los_clear` clearance predicate to report
+`target_visible` and a per-band `detection_confidence`.
 
 **What is not supported:** Imagery or pixel-level output; a learned detector or
-probability of identification; per-object tracks; terrain line-of-sight occlusion
-of a specific target (the named follow-on, reusing the `WorldSource`
-`path_profile`); spectral transmittance within the LWIR window; a background
-temperature distribution (a single target temperature drives the contrast).
+probability of identification; per-object tracks or multiple simultaneous targets;
+earth-curvature or atmospheric-refraction terms in the LOS clearance test;
+spectral transmittance within the LWIR window; a background temperature
+distribution (a single target temperature drives the contrast).
 
 **Conformance claim:** None. The model is a legible, physically motivated
 capability envelope for exercising the perception code path and the controller's

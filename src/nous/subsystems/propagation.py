@@ -45,6 +45,7 @@ __all__ = [
     "free_space_path_loss_db",
     "knife_edge_diffraction_db",
     "log_distance_path_loss_db",
+    "los_clear",
     "received_power_dbm",
     "rician_fade_db",
     "rssi_to_loss_pct",
@@ -358,6 +359,35 @@ def _fresnel_diffraction_loss_db(v: float) -> float:
     return 6.9 + 20.0 * math.log10(math.sqrt((v - 0.1) ** 2 + 1.0) + v - 0.1)
 
 
+def los_clear(
+    profile: Sequence[tuple[float, float]],
+    tx_height_m: float,
+    rx_height_m: float,
+) -> bool:
+    """True if the terrain path stays at or below the straight line of sight.
+
+    ``profile`` is the sampled path ``[(distance_from_tx_m, terrain_elevation_m), ...]``
+    including both endpoints; ``tx_height_m`` / ``rx_height_m`` are heights on the
+    same elevation datum. The test is the geometric clearance underneath
+    :func:`bullington_diffraction_db`: no interior terrain point rises above the
+    line joining the two endpoints. A degenerate (empty or zero-length) profile is
+    treated as clear. This is the optical line-of-sight predicate for the EO/IR
+    payload (BL-055), where the Fresnel zone is negligible and occlusion is purely
+    geometric.
+    """
+    if len(profile) < 2:
+        return True
+    total_d = profile[-1][0]
+    if total_d <= 0.0:
+        return True
+    interior = [(di, hi) for di, hi in profile if 0.0 < di < total_d]
+    if not interior:
+        return True
+    los_slope = (rx_height_m - tx_height_m) / total_d
+    s_tx = max((hi - tx_height_m) / di for di, hi in interior)
+    return s_tx <= los_slope
+
+
 def bullington_diffraction_db(
     profile: Sequence[tuple[float, float]],
     tx_height_m: float,
@@ -376,18 +406,12 @@ def bullington_diffraction_db(
     on that obstacle and ``2 d / (d1 d2) == 2 (1/d1 + 1/d2)`` when ``d1 + d2 = d``.
     Returns 0 for a path whose terrain stays at or below the line of sight.
     """
-    if len(profile) < 2:
+    if los_clear(profile, tx_height_m, rx_height_m):
         return 0.0
     total_d = profile[-1][0]
-    if total_d <= 0.0:
-        return 0.0
     interior = [(di, hi) for di, hi in profile if 0.0 < di < total_d]
-    if not interior:
-        return 0.0
     los_slope = (rx_height_m - tx_height_m) / total_d
     s_tx = max((hi - tx_height_m) / di for di, hi in interior)
-    if s_tx <= los_slope:
-        return 0.0
     s_rx = max((hi - rx_height_m) / (total_d - di) for di, hi in interior)
     denom = s_tx + s_rx
     if denom <= 0.0:

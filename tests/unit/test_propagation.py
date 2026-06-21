@@ -18,6 +18,7 @@ from nous.subsystems.propagation import (
     free_space_path_loss_db,
     knife_edge_diffraction_db,
     log_distance_path_loss_db,
+    los_clear,
     received_power_dbm,
     rician_fade_db,
     rssi_to_loss_pct,
@@ -340,6 +341,32 @@ def test_bullington_reduces_to_single_knife_edge() -> None:
 def test_bullington_zero_below_line_of_sight() -> None:
     profile = [(0.0, 500.0), (2_500.0, 480.0), (5_000.0, 500.0)]
     assert bullington_diffraction_db(profile, 500.0, 500.0, 2.4e9) == 0.0
+
+
+def test_los_clear_true_below_line_of_sight() -> None:
+    # Terrain dips below the straight line between the endpoints: clear.
+    profile = [(0.0, 500.0), (2_500.0, 480.0), (5_000.0, 500.0)]
+    assert los_clear(profile, 500.0, 500.0) is True
+
+
+def test_los_clear_false_when_ridge_rises_above_sightline() -> None:
+    # A ridge above the endpoint heights occludes the path.
+    profile = [(0.0, 500.0), (2_500.0, 700.0), (5_000.0, 500.0)]
+    assert los_clear(profile, 500.0, 500.0) is False
+
+
+def test_los_clear_degenerate_profile_is_clear() -> None:
+    assert los_clear([], 0.0, 0.0) is True
+    assert los_clear([(0.0, 100.0)], 10.0, 10.0) is True
+
+
+def test_los_clear_matches_bullington_zero_loss() -> None:
+    # los_clear is exactly bullington's clearance predicate: clear iff zero loss.
+    for ridge_h in (480.0, 560.0, 700.0):
+        profile = [(0.0, 500.0), (2_500.0, ridge_h), (5_000.0, 500.0)]
+        clear = los_clear(profile, 500.0, 500.0)
+        loss = bullington_diffraction_db(profile, 500.0, 500.0, 2.4e9)
+        assert clear == (loss == 0.0)
 
 
 def test_bullington_grows_with_obstacle_height() -> None:

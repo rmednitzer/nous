@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (EO/IR terrain line-of-sight masking, BL-055)
+
+- The EO/IR payload (`subsystems/eoir.py`) gains optional `terrain` + `position_fn`
+  seams and a `set_target(bearing_deg, range_m, height_m)` seam (ADR 0078). With a
+  target set and terrain wired, the subsystem projects the target position, samples
+  `TerrainModel.path_profile`, and masks detection when a ridge occludes the
+  sightline, reporting `target_visible`, `target_slant_m`, and a per-band
+  `detection_confidence` (`visible ? clamp(1 - slant / R_eff, 0, 1) : 0`), surfaced
+  in `truth()` and the `eoir_status` tool. The clearance predicate is the new public
+  `propagation.los_clear`, extracted from the comms `bullington_diffraction_db`
+  early-return so there is one source of truth (behaviour-preserving, guarded by the
+  `test_bullington_*` suite). Inert and zero-cost without a target; the engine wires
+  the seams in construction and `reload_profile`.
+
 ### Added (EO/IR thermo-optical sensor subsystem and estimator, BL-055)
 
 - A new `subsystems/eoir.py` (`EoirSubsystem`) models an electro-optical plus

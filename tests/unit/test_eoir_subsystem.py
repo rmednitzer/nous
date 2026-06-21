@@ -158,3 +158,84 @@ def test_step_advances_clock_and_guards_nonpositive_dt() -> None:
     eoir.step(0.0)
     eoir.step(-1.0)
     assert eoir.truth()["t"] == pytest.approx(0.5)
+
+
+class _FlatWorld:
+    def elevation(self, lat: float, lon: float) -> float:
+        return 0.0
+
+    def path_profile(
+        self, lat1: float, lon1: float, lat2: float, lon2: float, n: int
+    ) -> list[tuple[float, float]]:
+        return [(i / (n - 1) * 10000.0, 0.0) for i in range(n)]
+
+
+class _RidgeWorld:
+    def elevation(self, lat: float, lon: float) -> float:
+        return 0.0
+
+    def path_profile(
+        self, lat1: float, lon1: float, lat2: float, lon2: float, n: int
+    ) -> list[tuple[float, float]]:
+        out = []
+        for i in range(n):
+            d = i / (n - 1)
+            out.append((d * 10000.0, 2000.0 if 0.4 < d < 0.6 else 0.0))
+        return out
+
+
+def _pos() -> tuple[float, float, float]:
+    return 47.0, 12.0, 100.0
+
+
+def test_target_inert_without_terrain_or_position() -> None:
+    eoir = EoirSubsystem({})
+    eoir.set_target(bearing_deg=90.0, range_m=5000.0, height_m=1.0)
+    t = eoir.truth()
+    assert t["target_set"] is True
+    assert t["target_visible"] is None  # no terrain/position seam wired
+    assert t["eo_detection_confidence"] is None
+
+
+def test_no_target_is_inert() -> None:
+    eoir = EoirSubsystem({}, terrain=_FlatWorld(), position_fn=_pos)
+    t = eoir.truth()
+    assert t["target_set"] is False
+    assert t["target_visible"] is None
+
+
+def test_ridge_occludes_target() -> None:
+    eoir = EoirSubsystem({}, terrain=_RidgeWorld(), position_fn=_pos)
+    eoir.set_target(bearing_deg=90.0, range_m=5000.0, height_m=1.0)
+    t = eoir.truth()
+    assert t["target_visible"] is False
+    assert t["eo_detection_confidence"] == pytest.approx(0.0)
+    assert t["ir_detection_confidence"] == pytest.approx(0.0)
+
+
+def test_clear_path_target_visible_with_range_scaled_confidence() -> None:
+    eoir = EoirSubsystem({}, terrain=_FlatWorld(), position_fn=_pos)
+    eoir.set_target(bearing_deg=90.0, range_m=5000.0, height_m=1.0)
+    t = eoir.truth()
+    assert t["target_visible"] is True
+    assert t["target_slant_m"] == pytest.approx(5000.0, rel=0.02)
+    # eo range ~12000 m, slant ~5000 -> confidence ~ 1 - 5000/12000.
+    assert t["eo_detection_confidence"] == pytest.approx(1.0 - 5000.0 / 12000.0, abs=0.02)
+
+
+def test_target_beyond_envelope_is_visible_but_zero_confidence() -> None:
+    eoir = EoirSubsystem({}, terrain=_FlatWorld(), position_fn=_pos)
+    eoir.set_target(bearing_deg=0.0, range_m=15000.0, height_m=1.0)  # > 12 km EO range
+    t = eoir.truth()
+    assert t["target_visible"] is True
+    assert t["eo_detection_confidence"] == pytest.approx(0.0)
+
+
+def test_clear_target_returns_to_envelope() -> None:
+    eoir = EoirSubsystem({}, terrain=_FlatWorld(), position_fn=_pos)
+    eoir.set_target(bearing_deg=90.0, range_m=5000.0, height_m=1.0)
+    assert eoir.truth()["target_set"] is True
+    eoir.clear_target()
+    t = eoir.truth()
+    assert t["target_set"] is False
+    assert t["target_visible"] is None
