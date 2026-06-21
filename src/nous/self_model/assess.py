@@ -102,19 +102,27 @@ def _priors(engine: Engine) -> _Priors:
     cfg = block if isinstance(block, dict) else {}
 
     def _nonneg(key: str, default: float) -> float:
+        raw = cfg.get(key, default)
+        # A bool is not a meaningful prior spread; `float(True)` is `1.0`, which
+        # would silently distort it, so reject it like any other non-numeric.
+        if isinstance(raw, bool):
+            return default
         try:
-            value = float(cfg.get(key, default))
+            value = float(raw)
         except (TypeError, ValueError):
             return default
         return value if math.isfinite(value) and value >= 0.0 else default
 
+    # Only a real boolean enables propagation; a string like "false" (truthy) or
+    # any other junk value falls back to the safe default (off).
+    flag = cfg.get("propagate_net_load", False)
     return _Priors(
         battery_wh_cv=_nonneg("battery_wh_cv", _DEFAULT_BATTERY_WH_CV),
         tok_per_s_cv=_nonneg("tok_per_s_cv", _DEFAULT_TOK_PER_S_CV),
         junction_throttle_sigma_c=_nonneg(
             "junction_throttle_sigma_c", _DEFAULT_JUNCTION_THROTTLE_SIGMA_C
         ),
-        propagate_net_load=bool(cfg.get("propagate_net_load", False)),
+        propagate_net_load=flag if isinstance(flag, bool) else False,
     )
 
 
@@ -235,9 +243,10 @@ def _endurance_capability(
     if mode == "monte_carlo" and soc_sigma > 0.0 and net_w > 0.0:
         n = _MONTE_CARLO_SAMPLES
         soc_samples = np.clip(rng.normal(point_soc, soc_sigma, size=n), 0.0, 100.0)
+        battery_scale = max(0.0, priors.battery_wh_cv * battery_wh)
         battery_samples = (
-            rng.normal(battery_wh, priors.battery_wh_cv * battery_wh, size=n)
-            if priors.battery_wh_cv > 0.0
+            rng.normal(battery_wh, battery_scale, size=n)
+            if battery_scale > 0.0
             else np.full(n, battery_wh)
         )
         remaining_wh = np.clip(battery_samples, 0.0, None) * soc_samples / 100.0

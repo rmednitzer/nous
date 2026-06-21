@@ -292,3 +292,27 @@ def test_priors_coerce_junk_profile_values_to_defaults(engine: Engine) -> None:
     assert clean is not None and junk is not None
     assert junk.p5 == pytest.approx(clean.p5)
     assert junk.p95 == pytest.approx(clean.p95)
+
+
+def test_priors_reject_bool_values_and_nonbool_flag(engine: Engine) -> None:
+    """Defensive coercion: a bool is not a valid prior spread (`float(True)` is
+    `1.0`), and a non-bool `propagate_net_load` value (e.g. the truthy string
+    "false") must not enable propagation. Both fall back to the safe default."""
+    clean = assess("status", engine=engine, seed=3).inference_capacity
+    engine.profile = {
+        **engine.profile,
+        "self_model": {"priors": {"tok_per_s_cv": True, "propagate_net_load": "false"}},
+    }
+    a = assess("status", engine=engine, seed=3)
+    assert a.inference_capacity is not None and clean is not None
+    assert a.inference_capacity.p95 == pytest.approx(clean.p95)
+    assert a.endurance is not None
+    assert a.endurance.drivers == ["power"]
+
+
+def test_endurance_negative_battery_wh_does_not_raise(engine: Engine) -> None:
+    """A negative injected `battery_wh` must not raise from numpy's scale
+    argument; the sampling sigma is clamped non-negative (ADR 0080)."""
+    engine.power.profile["power"]["battery_wh"] = -10.0
+    a = assess("status", engine=engine)
+    assert a.endurance is not None
