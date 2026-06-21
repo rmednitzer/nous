@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (EO/IR thermo-optical sensor subsystem and estimator, BL-055)
+
+- A new `subsystems/eoir.py` (`EoirSubsystem`) models an electro-optical plus
+  long-wave infrared payload as a per-band detection-range envelope (ADR 0077):
+  `R_eff = R0 x atm_factor x signal_factor x cal_factor`. The atmospheric factor is a
+  Koschmieder meteorological-range cap that tightens with humidity and an obscurant
+  level (IR penetrating haze better than EO); the signal factor is IR thermal contrast
+  (collapsing at thermal crossover) and EO illumination (night fall-off); the
+  calibration factor drifts on the ADR 0019 RNG seam and recovers on `recalibrate()`,
+  widening the reported sigma as it degrades. Ambient temperature and humidity are read
+  live from the environmental sensor pack through an injected closure, and the Johnson
+  criteria derive the recognition / identification ranges. A new `estimators/eoir.py`
+  (`EoirKalman`) is a two-channel gated scalar Kalman over the band ranges, reusing the
+  ADR 0045 `ScalarChannel` primitives. A new `eoir_status` read tool (T0) surfaces the
+  truth, the factor breakdown, and the filtered estimate; `set_obscurant` /
+  `set_illumination` / `recalibrate` are the scenario seams. Additive and inert without
+  an `eoir` profile section; LIMITATIONS L19 records the envelope-not-imagery boundary.
+
 ### Added (error-state IMU-bias estimation in the position EKF, BL-026)
 
 - The position EKF grew from `[e, n, v, psi]` to the error-state `[e, n, v, psi,

@@ -12,6 +12,9 @@ description: >
 #   fuel cell: SFC Energy EFOY-class methanol fuel cell
 #              (~25 W continuous, ~0.9 L/kWh -> ~1.4 Wh/g electrical).
 #   vehicle:   MIL-STD-1275 28 V DC vehicle bus.
+#   eo/ir:     Teledyne FLIR Hadron 640R (EO + Boson 640 LWIR) class;
+#              representative DRI-envelope ranges, not a calibrated datasheet
+#              spec (docs/bom.md "EO/IR sensor payload", docs/conformance/eoir.md).
 
 power:
   battery_wh: 588
@@ -97,6 +100,22 @@ sensors:
     heart_rate_bpm_sigma: 2.0
     core_temp_c_sigma: 0.05
     hydration_pct_sigma: 1.0
+
+# BL-055: EO/IR thermo-optical payload, a per-band detection-range envelope.
+# Ranges shorten with humidity, an obscurant level (set_obscurant), thermal
+# crossover (IR), darkness (EO, set_illumination), and calibration drift.
+# Values: Hadron 640R / Boson 640 class, representative per docs/bom.md.
+eoir:
+  eo_r0_m: 12000            # clear-air EO reference detection range
+  ir_r0_m: 8000             # clear-air IR reference detection range
+  target_c: 32              # nominal target surface temperature
+  contrast_dt_ref_c: 10     # thermal-contrast normalisation
+  johnson_k_rec: 3          # recognition cycle ratio
+  johnson_k_id: 6           # identification cycle ratio
+  eo_range_sigma_m: 200
+  ir_range_sigma_m: 150
+  cal_floor: 0.3
+  cal_drift_per_s: 0.002
 
 comms:
   links:

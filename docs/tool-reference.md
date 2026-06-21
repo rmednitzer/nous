@@ -30,6 +30,7 @@ the committed copy after changing a tool's signature or docstring.
 | `dtn_send` | T2 | Originate a bundle at the device node toward a remote EID (T2, BL-056). |
 | `emcon_set` | T2 | Set the active EMCON emission profile (T2, BL-060 / ADR 0065). |
 | `emcon_status` | T0 | Read the EMCON emission posture: active profile and permitted links (T0, BL-060). |
+| `eoir_status` | T0 | EO/IR payload: per-band detection range, the degrading factors, calibration. |
 | `inference_cloud` | T2 | Cloud-path inference through the SC-5 fallback ladder (ADR 0034). |
 | `inference_local` | T1 | Local-path inference. |
 | `inference_status` | T0 | Inference subsystem totals: calls, tokens, joules, last latency. |
@@ -473,6 +474,16 @@ tool registry.
 {
   "properties": {},
   "title": "emcon_statusArguments",
+  "type": "object"
+}
+```
+
+### `eoir_status`
+
+```json
+{
+  "properties": {},
+  "title": "eoir_statusArguments",
   "type": "object"
 }
 ```
