@@ -43,6 +43,7 @@ draws from this pack. The APU contributes only charge, never load
 | ``soc_pct`` | % | 0.5 (calibrated bound; see estimator covariance) |
 | ``voltage_v`` | V | 0.05 |
 | ``current_a`` | A | 0.10 |
+| ``load_w`` | W | 0.25 (well-known engine input; ADR 0083) |
 
 ## Profile fields
 

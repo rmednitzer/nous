@@ -85,3 +85,4 @@
 | 0080 | [honest multi-source capability quantiles](0080-self-model-honest-multi-source-quantiles.md) | Accepted (the net-load-propagation opt-in default amended by ADR 0082) | 2026-06-21 |
 | 0081 | [in-tree optional Genesis WorldSource adapter](0081-in-tree-optional-genesis-worldsource.md) | Accepted | 2026-06-21 |
 | 0082 | [net-load propagation is the endurance default](0082-endurance-net-load-propagation-default.md) | Accepted | 2026-06-21 |
+| 0083 | [a load_w channel on the power estimator](0083-power-estimator-load-channel.md) | Accepted | 2026-06-21 |

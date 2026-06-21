@@ -12,10 +12,13 @@
 
 ## Outputs
 
-`Estimate` with `point = {soc_pct, voltage_v, current_a}` and a two-entry
-diagonal covariance over `soc_pct` and `voltage_v`. `current_a` is the
-last observed value passed through verbatim: it is not filtered and has no
-covariance entry.
+`Estimate` with `point = {soc_pct, voltage_v, current_a, load_w}` and a
+three-entry diagonal covariance over `soc_pct`, `voltage_v`, and `load_w`.
+`current_a` is the last observed value passed through verbatim: it is not
+filtered and has no covariance entry. `load_w` (ADR 0083) is the total
+electrical load the battery sees, a well-known engine input, so its channel
+carries a small observation noise and converges tightly; the self-model reads
+this belief for endurance rather than ground truth.
 
 ## SLA
 
