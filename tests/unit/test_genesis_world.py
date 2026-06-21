@@ -15,10 +15,13 @@ import importlib.util
 import os
 import traceback
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 import pytest
 
+from nous.engine import Engine
+from nous.self_model.assess import assess
 from nous.subsystems.genesis_world import (
     GenesisWorldSource,
     _bilinear,
@@ -211,3 +214,24 @@ def test_genesis_scene_no_platform_position_raises() -> None:
     src = _build_or_skip(lambda: GenesisWorldSource(np.zeros((8, 8), dtype=np.float32)))
     with pytest.raises(RuntimeError, match="no platform"):
         src.platform_position()
+
+
+@pytest.mark.skipif(
+    not _RUN_SCENE,
+    reason="needs genesis-world + a GL backend + NOUS_GENESIS_SCENE_TESTS=1",
+)
+def test_engine_runs_against_genesis_world(tmp_nous_home: Path) -> None:
+    """The worked example (docs/genesis-world.md): inject a GenesisWorldSource into
+    the Engine `terrain=` seam and tick the twin against a live Genesis scene."""
+    field = np.zeros((32, 32), dtype=np.float32)
+    field[16:, :] = 100.0
+    world = _build_or_skip(
+        lambda: GenesisWorldSource(field, horizontal_scale_m=1.0, vertical_scale_m=1.0)
+    )
+    eng = Engine(terrain=world)
+    assert eng.terrain is world
+    eng.start()
+    for _ in range(5):
+        eng.tick()
+    a = assess("status", engine=eng)
+    assert a.endurance is not None

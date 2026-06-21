@@ -59,10 +59,12 @@ with a limiting-driver line.
 - The spec constants (`battery_wh`, the throttle threshold, the benchmark token
   rate) carry design priors, not estimator posteriors: the prior spreads are
   datasheet/benchmark tolerances configured under `self_model.priors`, so a band
-  is only as honest as those priors. Endurance can also propagate the net-load
-  posteriors (APU charge, compute draw) behind the opt-in
-  `self_model.priors.propagate_net_load`, off by default because the `1/net_w`
-  term saturates the upper quantile near energy balance.
+  is only as honest as those priors. Endurance also propagates the net-load
+  posteriors (APU charge, compute draw) by default (ADR 0082, disable with
+  `self_model.priors.propagate_net_load: false`); near energy balance the
+  `1/net_w` term is heavy-tailed, so the band stays wide and its upper tail is
+  capped conservatively at the point estimate, understating the net-charging
+  upside in the safe direction rather than saturating.
 - `endurance_min` under net charging is unbounded; it returns a 24 h sentinel
   with `confidence=0`, a hint rather than a bound.
 - `inference_capacity_tok_per_s` is a derate of the profile's

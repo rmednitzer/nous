@@ -170,6 +170,7 @@ nav:
       - "0079 perception_range self-model capability": adr/0079-self-model-perception-range.md
       - "0080 honest multi-source capability quantiles": adr/0080-self-model-honest-multi-source-quantiles.md
       - "0081 in-tree optional Genesis WorldSource adapter": adr/0081-in-tree-optional-genesis-worldsource.md
+      - "0082 net-load propagation is the endurance default": adr/0082-endurance-net-load-propagation-default.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md
@@ -188,6 +189,7 @@ nav:
   - Contributor runbook: contributor-runbook.md
   - Bandit suppressions: security/bandit-suppressions.md
   - Deployment: deployment.md
+  - Genesis world adapter: genesis-world.md
   - Releasing: releasing.md
 
 markdown_extensions:

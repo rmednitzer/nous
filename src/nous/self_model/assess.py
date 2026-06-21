@@ -15,11 +15,13 @@ from the estimator posteriors that feed it (SoC for endurance, the
 junction posterior for headroom, the load posterior for capacity) and,
 for the spec constants that have no estimator (``battery_wh``, the
 throttle threshold, the benchmark token rate), a small
-profile-configurable design prior. Endurance can additionally propagate
-the APU-charge and compute-draw posteriors through net load behind the
-opt-in ``self_model.priors.propagate_net_load`` (off by default because
-the ``1/net_w`` term saturates near energy balance). So the bands reflect
-total uncertainty rather than understating it behind a single source. The
+profile-configurable design prior. Endurance also propagates the
+APU-charge and compute-draw posteriors through net load by default
+(disable with ``self_model.priors.propagate_net_load: false``); near
+energy balance the ``1/net_w`` term is heavy-tailed, so the band stays
+wide and its upper tail is capped conservatively at the point estimate
+there rather than saturating (ADR 0082). So the bands reflect total
+uncertainty rather than understating it behind a single source. The
 number of samples (``_MONTE_CARLO_SAMPLES``) is small
 enough to stay well under the per-tick budget but large enough to be
 stable around 5 / 95 percentiles for the shapes the simulator produces.
@@ -113,16 +115,17 @@ def _priors(engine: Engine) -> _Priors:
             return default
         return value if math.isfinite(value) and value >= 0.0 else default
 
-    # Only a real boolean enables propagation; a string like "false" (truthy) or
-    # any other junk value falls back to the safe default (off).
-    flag = cfg.get("propagate_net_load", False)
+    # The flag honours a real boolean; a non-bool (e.g. a quoted "false") falls
+    # back to the default (on), the safe direction since a typo then widens the
+    # band rather than silently disabling propagation (ADR 0082).
+    flag = cfg.get("propagate_net_load", True)
     return _Priors(
         battery_wh_cv=_nonneg("battery_wh_cv", _DEFAULT_BATTERY_WH_CV),
         tok_per_s_cv=_nonneg("tok_per_s_cv", _DEFAULT_TOK_PER_S_CV),
         junction_throttle_sigma_c=_nonneg(
             "junction_throttle_sigma_c", _DEFAULT_JUNCTION_THROTTLE_SIGMA_C
         ),
-        propagate_net_load=flag if isinstance(flag, bool) else False,
+        propagate_net_load=flag if isinstance(flag, bool) else True,
     )
 
 
@@ -207,17 +210,19 @@ def _endurance_capability(
 ) -> Capability:
     """Endurance minutes from SoC, net load, and the inputs' posteriors.
 
-    Net load is ``load_w - charge_accepted_w``. By default the Monte Carlo
-    branch propagates the SoC posterior and a small ``battery_wh``
-    capacity-tolerance prior. With ``self_model.priors.propagate_net_load``
-    enabled it also samples the net load: the charge side from the APU
-    total-output posterior, the variable load from the compute-draw
-    posterior. That is honest where net load is comfortably positive, but
-    near energy balance the ``1/net_w`` term is heavy-tailed and the upper
-    quantile saturates at the net-charge sentinel, so it is opt-in rather
-    than the default (ADR 0080). When the battery is net-charged the
-    endurance is unbounded; we return the 24 h sentinel with ``confidence=0``
-    so the controller treats it as a hint, not a hard bound.
+    Net load is ``load_w - charge_accepted_w``. The Monte Carlo branch
+    propagates the SoC posterior, a small ``battery_wh`` capacity-tolerance
+    prior, and (by default, ADR 0082) the net load: the charge side from the
+    APU total-output posterior, the variable load from the compute-draw
+    posterior. Where net load is comfortably positive this simply widens the
+    band; near energy balance the ``1/net_w`` term is heavy-tailed, so the
+    band stays wide and the upper tail is capped conservatively at the point
+    estimate (a safe understatement of the net-charging upside) rather than
+    saturating. Disable with ``self_model.priors.propagate_net_load: false``
+    for a SoC-and-battery-only band. When the deterministic net load is
+    non-positive the battery is net-charged and endurance is unbounded; we
+    return the 24 h sentinel with ``confidence=0`` so the controller treats
+    it as a hint, not a hard bound.
     """
     power = engine.power
     estimate = engine.power_est.state()
@@ -252,12 +257,13 @@ def _endurance_capability(
         remaining_wh = np.clip(battery_samples, 0.0, None) * soc_samples / 100.0
         if priors.propagate_net_load:
             # The charge side carries the APU total-output posterior, the
-            # variable load the compute-draw posterior. Near energy balance the
-            # 1/net_w term is heavy-tailed, so a net-charging draw reads as the
-            # net-charge sentinel and the explosive tail is bounded there. This
-            # is honest but saturates the upper quantile, so it is opt-in
-            # (`self_model.priors.propagate_net_load`); see ADR 0080.
-            sentinel = max(point_min, _ENDURANCE_NET_CHARGE_CAP_MIN)
+            # variable load the compute-draw posterior (on by default, ADR
+            # 0082). Near energy balance the 1/net_w term is heavy-tailed, so a
+            # net-charging draw and the explosive tail are capped at the
+            # deterministic point estimate: a conservative bound that keeps the
+            # band wide without saturating it, so p95 never exceeds the point,
+            # at the cost of understating the net-charging upside.
+            sentinel = point_min
             net_samples = rng.normal(load_w, load_sigma, size=n) - rng.normal(
                 charge_w, charge_sigma, size=n
             )
