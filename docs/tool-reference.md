@@ -846,6 +846,18 @@ tool registry.
       "default": null,
       "title": "Inference Tok Per S"
     },
+    "perception_range_m": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Perception Range M"
+    },
     "task": {
       "title": "Task",
       "type": "string"

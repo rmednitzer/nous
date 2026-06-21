@@ -15,6 +15,8 @@ Recognised requirement keys (all optional):
   Compared against the thermal headroom capability's ``p5``.
 * ``inference_tok_per_s`` -- required sustained inference rate.
   Compared against the inference capacity capability's ``p5``.
+* ``perception_range_m`` -- required EO/IR detection range in metres.
+  Compared against the perception-range capability's ``p5``.
 
 If the controller passes no requirements, the viability layer falls
 back to keyword sniffing on the task string -- "run mission for 60
@@ -96,6 +98,18 @@ def viability(
             if cap.p5 < need:
                 failures.append(
                     f"inference p5 {cap.p5:.1f} tok/s < required {need:.1f} tok/s"
+                )
+
+    if "perception_range_m" in req:
+        need = float(req["perception_range_m"])
+        cap = assessment.perception_range
+        if cap is None:
+            failures.append("perception range capability unavailable; cannot verify")
+        else:
+            confidences.append(cap.confidence)
+            if cap.p5 < need:
+                failures.append(
+                    f"perception range p5 {cap.p5:.0f} m < required {need:.0f} m"
                 )
 
     confidence = min(confidences) if confidences else 0.0

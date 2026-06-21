@@ -45,6 +45,7 @@ async def test_publish_situation_over_mqtt(config: Settings) -> None:
         "endurance_min",
         "thermal_headroom_c",
         "inference_capacity_tok_per_s",
+        "perception_range_m",
     }
 
 

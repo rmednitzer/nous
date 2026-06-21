@@ -34,7 +34,12 @@ def _assess_payload(a: Assessment) -> dict[str, Any]:
         "question": a.question,
         "capabilities": {
             cap.name: cap.model_dump()
-            for cap in (a.endurance, a.thermal_headroom, a.inference_capacity)
+            for cap in (
+                a.endurance,
+                a.thermal_headroom,
+                a.inference_capacity,
+                a.perception_range,
+            )
             if cap is not None
         },
         "explanation": explain(a),
@@ -112,6 +117,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         endurance_min: float | None = None,
         thermal_headroom_c: float | None = None,
         inference_tok_per_s: float | None = None,
+        perception_range_m: float | None = None,
         ctx: Context | None = None,
     ) -> str:
         """Decide whether a task is feasible against the current capabilities."""
@@ -127,6 +133,8 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                 requirements["thermal_headroom_c"] = float(thermal_headroom_c)
             if inference_tok_per_s is not None:
                 requirements["inference_tok_per_s"] = float(inference_tok_per_s)
+            if perception_range_m is not None:
+                requirements["perception_range_m"] = float(perception_range_m)
 
             a = assess(task, engine=app.engine)
             v = viability(a, task, requirements=requirements or None)
@@ -147,6 +155,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                 "endurance_min": endurance_min,
                 "thermal_headroom_c": thermal_headroom_c,
                 "inference_tok_per_s": inference_tok_per_s,
+                "perception_range_m": perception_range_m,
             },
             ctx,
             _work,

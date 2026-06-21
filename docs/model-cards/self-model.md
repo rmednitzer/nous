@@ -2,20 +2,20 @@
 
 **Module:** `src/nous/self_model/` (`assess.py`, `viability.py`, `explain.py`)
 
-**Backlog:** BL-018, BL-035
+**Backlog:** BL-018, BL-035, BL-055
 
 ## Inputs
 
 - Live estimator state from the engine: the power SoC Kalman, the thermal
-  Kalman, and the compute Kalman (each point estimate plus its per-channel
-  variance), with the relevant profile constants (`battery_wh`, the junction
-  throttle threshold, the profile token rate). Each capability draws on one
-  estimator's posterior. Passing `engine=None` returns a zero-filled
-  assessment (the v0.1 stub contract).
+  Kalman, the compute Kalman, and the EO/IR detection-range Kalman (each point
+  estimate plus its per-channel variance), with the relevant profile constants
+  (`battery_wh`, the junction throttle threshold, the profile token rate). Each
+  capability draws on one estimator's posterior. Passing `engine=None` returns a
+  zero-filled assessment (the v0.1 stub contract).
 
 ## Outputs
 
-Three `Capability` claims, each with a point value, a calibrated
+Four `Capability` claims, each with a point value, a calibrated
 `p5 / p50 / p95` band, a `confidence` in [0, 1], and a `drivers` list:
 
 - `endurance_min` -- minutes the pack sustains the current net load
@@ -24,6 +24,10 @@ Three `Capability` claims, each with a point value, a calibrated
   the junction-temperature posterior.
 - `inference_capacity_tok_per_s` -- the profile token rate derated by the
   compute headroom left after thermal throttling, from the load posterior.
+- `perception_range_m` -- the best-band EO/IR detection range
+  (`max(eo, ir)`), from the EO/IR posterior over both bands (BL-055, ADR 0079).
+  The Monte Carlo branch takes the per-sample maximum so the band reflects the
+  nonlinear best-of-two.
 
 The bands come from a Monte Carlo over the estimator posterior (512 samples,
 seeded, the default `mode="monte_carlo"`), which is honest under the non-linear
@@ -55,3 +59,7 @@ with a limiting-driver line.
 - `inference_capacity_tok_per_s` is a derate of the profile's
   `compute.inference_local.tok_per_s_p50`, a published-benchmark estimate (the
   local model is the BL-043 mock), not a measured rate on this device.
+- `perception_range_m` reports only the best of the two bands as one number; a
+  controller that needs per-band reach or the target-specific line-of-sight
+  verdict reads `eoir_status`. Its advisory status floors are heuristics tuned to
+  the reference profile, like the other capabilities' floors.

@@ -916,7 +916,7 @@ class Engine:
 
         a = assess("tick", engine=self)
         caps: dict[str, float] = {}
-        for cap in (a.endurance, a.thermal_headroom, a.inference_capacity):
+        for cap in (a.endurance, a.thermal_headroom, a.inference_capacity, a.perception_range):
             if cap is not None:
                 caps[cap.name] = cap.point
         self.state.last_capabilities = caps

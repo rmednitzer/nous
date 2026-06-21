@@ -336,6 +336,6 @@ controller selects a band on. They are *derived from the profile and the
 sensor-pack seam*, not measured from an optical chain; do not use them for
 real targeting or detection-performance prediction.
 
-**Tracking.** [BL-055] is `[in-progress]`. The envelope (ADR 0077) and
-terrain line-of-sight masking (ADR 0078) have shipped; a self-model
-`perception_range` capability is the remaining named fast-follow.
+**Tracking.** [BL-055] is `[done]`. The envelope (ADR 0077), terrain
+line-of-sight masking (ADR 0078), and the self-model `perception_range_m`
+capability (ADR 0079) have all shipped.

@@ -26,12 +26,20 @@ def test_assess_returns_quantile_bands(engine: Engine) -> None:
     assert a.endurance is not None
     assert a.thermal_headroom is not None
     assert a.inference_capacity is not None
+    assert a.perception_range is not None
 
     assert a.endurance.units == "min"
     assert a.thermal_headroom.units == "C"
     assert a.inference_capacity.units == "tok/s"
+    assert a.perception_range.units == "m"
+    assert a.perception_range.name == "perception_range_m"
 
-    for cap in (a.endurance, a.thermal_headroom, a.inference_capacity):
+    for cap in (
+        a.endurance,
+        a.thermal_headroom,
+        a.inference_capacity,
+        a.perception_range,
+    ):
         assert cap.p5 <= cap.p50 <= cap.p95
         assert cap.drivers
 
@@ -84,6 +92,26 @@ def test_inference_capacity_falls_to_zero_at_full_load(engine: Engine) -> None:
     assert a.inference_capacity.point < 10.0
 
 
+def test_perception_range_is_the_best_band(engine: Engine) -> None:
+    a = assess("how far can i see?", engine=engine)
+    assert a.perception_range is not None
+    best = max(engine.eoir.eo_range_m, engine.eoir.ir_range_m)
+    assert a.perception_range.point == pytest.approx(best, rel=0.05)
+    assert a.perception_range.drivers == ["eoir", "sensors"]
+
+
+def test_perception_range_collapses_under_fog_and_night(engine: Engine) -> None:
+    baseline = assess("see", engine=engine).perception_range
+    assert baseline is not None
+    engine.eoir.set_obscurant(1.0)
+    engine.eoir.set_illumination(0.05)
+    for _ in range(20):
+        engine.tick()
+    degraded = assess("see", engine=engine).perception_range
+    assert degraded is not None
+    assert degraded.point < baseline.point
+
+
 def test_explain_lists_each_capability(engine: Engine) -> None:
     a = assess("status", engine=engine)
     text = explain(a)
@@ -91,6 +119,7 @@ def test_explain_lists_each_capability(engine: Engine) -> None:
     assert "endurance_min" in text
     assert "thermal_headroom_c" in text
     assert "inference_capacity_tok_per_s" in text
+    assert "perception_range_m" in text
 
 
 def test_viability_with_explicit_requirements(engine: Engine) -> None:
@@ -142,6 +171,16 @@ def test_engine_tick_refreshes_last_capabilities(engine: Engine) -> None:
     assert "endurance_min" in caps
     assert "thermal_headroom_c" in caps
     assert "inference_capacity_tok_per_s" in caps
+    assert "perception_range_m" in caps
+
+
+def test_viability_gates_on_perception_range(engine: Engine) -> None:
+    a = assess("detect a target", engine=engine)
+    reachable = viability(a, "detect", requirements={"perception_range_m": 1000.0})
+    assert reachable.feasible is True
+    beyond = viability(a, "detect", requirements={"perception_range_m": 50000.0})
+    assert beyond.feasible is False
+    assert "perception range" in beyond.reason
 
 
 def test_monte_carlo_and_gaussian_modes_agree_on_point(engine: Engine) -> None:

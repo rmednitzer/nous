@@ -81,3 +81,4 @@
 | 0076 | [Error-state IMU bias estimation in the position EKF](0076-error-state-imu-bias-estimation.md) | Accepted | 2026-06-21 |
 | 0077 | [EO/IR thermo-optical sensor as a detection-range envelope](0077-eoir-thermo-optical-sensor.md) | Accepted | 2026-06-21 |
 | 0078 | [EO/IR terrain line-of-sight masking](0078-eoir-terrain-line-of-sight.md) | Accepted | 2026-06-21 |
+| 0079 | [perception_range self-model capability](0079-self-model-perception-range.md) | Accepted | 2026-06-21 |
