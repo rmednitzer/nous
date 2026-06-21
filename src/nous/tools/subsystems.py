@@ -801,7 +801,11 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                     "rejected_updates": _rejected_from_health(estimate),
                 },
             }
-            if truth["target_set"]:
+            # The target block appears only when the line of sight was actually
+            # evaluated (a target set AND the terrain/position seams wired); the
+            # subsystem reports the fields as None otherwise, so this gate keeps
+            # round() off None and the tool inert in the no-seam configuration.
+            if truth["target_visible"] is not None:
                 payload["target"] = {
                     "visible": truth["target_visible"],
                     "slant_m": round(truth["target_slant_m"], 1),
