@@ -120,7 +120,15 @@ def test_custom_world_source_drives_comms_terrain() -> None:
 
 
 class _FakeWorld:
-    """A minimal WorldSource (no genesis), to test the Engine injection seam."""
+    """A minimal WorldSource (no genesis), to test the Engine injection seam.
+
+    Deliberately falsy (`__bool__` returns False) so the injection must be
+    selected by `is not None`, not truthiness: with a `terrain or default` check
+    this world would be silently dropped and the assertions below would fail.
+    """
+
+    def __bool__(self) -> bool:
+        return False
 
     def elevation(self, lat: float, lon: float) -> float:
         return 1234.0

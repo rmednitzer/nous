@@ -255,8 +255,8 @@ class Engine:
         # ADR 0074/0081: an injected `WorldSource` (e.g. a GenesisWorldSource)
         # overrides the procedural default and persists across profile reloads.
         self._injected_terrain = terrain
-        self.terrain: WorldSource | None = terrain or TerrainModel.from_profile(
-            self.profile
+        self.terrain: WorldSource | None = (
+            terrain if terrain is not None else TerrainModel.from_profile(self.profile)
         )
         self.comms = CommsSubsystem(
             self.profile,
@@ -434,7 +434,11 @@ class Engine:
             new_profile, compute=new_compute, rng=self.rng
         )
         new_storage = StorageSubsystem(new_profile, rng=self.rng)
-        new_terrain = self._injected_terrain or TerrainModel.from_profile(new_profile)
+        new_terrain = (
+            self._injected_terrain
+            if self._injected_terrain is not None
+            else TerrainModel.from_profile(new_profile)
+        )
         new_comms = CommsSubsystem(
             new_profile,
             rng=self.rng,

@@ -259,10 +259,11 @@ def _endurance_capability(
             # The charge side carries the APU total-output posterior, the
             # variable load the compute-draw posterior (on by default, ADR
             # 0082). Near energy balance the 1/net_w term is heavy-tailed, so a
-            # net-charging draw and the explosive tail are capped at the point
-            # estimate: a conservative bound that keeps the band wide without
-            # saturating it, at the cost of understating the net-charging upside.
-            sentinel = max(point_min, _ENDURANCE_NET_CHARGE_CAP_MIN)
+            # net-charging draw and the explosive tail are capped at the
+            # deterministic point estimate: a conservative bound that keeps the
+            # band wide without saturating it, so p95 never exceeds the point,
+            # at the cost of understating the net-charging upside.
+            sentinel = point_min
             net_samples = rng.normal(load_w, load_sigma, size=n) - rng.normal(
                 charge_w, charge_sigma, size=n
             )
