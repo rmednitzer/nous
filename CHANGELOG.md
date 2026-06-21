@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Genesis-backed WorldSource adapter, ADR 0081)
+
+- `nous.subsystems.genesis_world.GenesisWorldSource` is an opt-in, in-tree
+  adapter that satisfies the `WorldSource` Protocol (and the comms / EO-IR
+  `position_fn` seam) from a headless Genesis (`genesis-world`) rigid-body scene,
+  so the comms link budget and the EO/IR line-of-sight can run against an
+  engine-simulated world instead of the procedural `TerrainModel`. It mirrors
+  `TerrainModel`'s equirectangular projection and haversine ground distance
+  exactly (a structural drop-in: `isinstance(src, WorldSource)` holds), reads
+  elevation as a bilinear lookup of the height field Genesis built (no per-query
+  physics step), and exposes an optional platform position/motion seam
+  (`platform_lla`, `step`, `position_fn`). `genesis-world` is a manual, unlocked
+  dependency (not a `nous` extra, so it never enters the lock or CI's `uv sync
+  --all-extras`); the core import graph never imports it and `genesis` is
+  imported lazily, so the standalone default is byte-for-byte unchanged
+  (LIMITATIONS L17, amending ADR 0074). Projection and interpolation are
+  unit-tested without it; the scene-build path is gated on `genesis`.
+
 ### Changed (honest multi-source capability quantiles, BL-035)
 
 - Self-model capability bands now propagate every uncertain input a capability

@@ -276,7 +276,14 @@ inputs are injected behind narrow seams (the engine `rng`, the `position_fn`
 getter, the `WorldSource` terrain, the `set_velocity` / `set_motion` motion
 commands), so an out-of-tree adapter, including one backed by an external
 physics engine, can drive the twin without `nous` importing it (ADR 0074). The
-in-tree default for each seam stays standalone.
+in-tree default for each seam stays standalone. One such adapter, a
+Genesis-backed `WorldSource`, now ships in-tree (ADR 0081): the core import graph
+never imports it, it imports `genesis` lazily, and `genesis-world` is a manual,
+unlocked dependency (not a `nous` extra), so it never enters the lock or CI's
+`uv sync --all-extras` and the standalone default is byte-for-byte unchanged,
+installing and running engine-free without it. The literal "no physics engine
+even optionally" reading is thereby narrowed to "the adapter source lives
+in-tree".
 
 **Tracking.** The em-dash rule is enforced today by
 `scripts/policy_checks.sh` (the `policy` CI job and `make policy`

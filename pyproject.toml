@@ -125,6 +125,9 @@ module = [
     "sqlmodel.*",
     "alembic.*",
     "opentelemetry.*",
+    # Optional external-physics extra (ADR 0081); not installed in CI, the
+    # adapter imports it lazily and keeps its handles ``Any``.
+    "genesis.*",
 ]
 ignore_missing_imports = true
 

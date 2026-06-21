@@ -76,10 +76,11 @@
 | 0071 | [Self-model inference status reads the central point, with a degraded advisory](0071-self-model-inference-status-basis.md) | Accepted | 2026-06-21 |
 | 0072 | [Multi-edge terrain diffraction over a procedural world](0072-multi-edge-terrain-diffraction.md) | Accepted | 2026-06-21 |
 | 0073 | [Nonlinear position EKF with GNSS/INS fusion](0073-nonlinear-position-ekf.md) | Accepted | 2026-06-21 |
-| 0074 | [Injectable physics sources, the standalone-to-external seam](0074-injectable-physics-sources.md) | Accepted | 2026-06-21 |
+| 0074 | [Injectable physics sources, the standalone-to-external seam](0074-injectable-physics-sources.md) | Accepted (the out-of-tree-only stance amended by ADR 0081) | 2026-06-21 |
 | 0075 | [PMU/PDU bus regulation and dual-slot battery hot-swap](0075-pmu-dual-slot-hot-swap.md) | Accepted | 2026-06-21 |
 | 0076 | [Error-state IMU bias estimation in the position EKF](0076-error-state-imu-bias-estimation.md) | Accepted | 2026-06-21 |
 | 0077 | [EO/IR thermo-optical sensor as a detection-range envelope](0077-eoir-thermo-optical-sensor.md) | Accepted | 2026-06-21 |
 | 0078 | [EO/IR terrain line-of-sight masking](0078-eoir-terrain-line-of-sight.md) | Accepted | 2026-06-21 |
 | 0079 | [perception_range self-model capability](0079-self-model-perception-range.md) | Accepted | 2026-06-21 |
 | 0080 | [honest multi-source capability quantiles](0080-self-model-honest-multi-source-quantiles.md) | Accepted | 2026-06-21 |
+| 0081 | [in-tree optional Genesis WorldSource adapter](0081-in-tree-optional-genesis-worldsource.md) | Accepted | 2026-06-21 |

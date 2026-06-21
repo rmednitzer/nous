@@ -169,6 +169,7 @@ nav:
       - "0078 EO/IR terrain line-of-sight masking": adr/0078-eoir-terrain-line-of-sight.md
       - "0079 perception_range self-model capability": adr/0079-self-model-perception-range.md
       - "0080 honest multi-source capability quantiles": adr/0080-self-model-honest-multi-source-quantiles.md
+      - "0081 in-tree optional Genesis WorldSource adapter": adr/0081-in-tree-optional-genesis-worldsource.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md
