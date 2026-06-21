@@ -97,7 +97,10 @@ class PmuSubsystem:
     @property
     def active_battery(self) -> PowerSubsystem:
         battery = self._slots[self._active]
-        assert battery is not None  # the active slot always holds a pack
+        if battery is None:
+            # Invariant: the active slot always holds a pack (remove_slot refuses
+            # the active slot, and arbitration only ever activates a present one).
+            raise RuntimeError("PMU active slot is empty")
         return battery
 
     @property
