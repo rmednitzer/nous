@@ -120,6 +120,25 @@ def test_full_load_drives_inference_status_critical(engine: Engine) -> None:
     assert any(r.startswith("inference:") for r in s.recommendations)
 
 
+def test_mode_throttle_drives_inference_degraded_with_advisory(engine: Engine) -> None:
+    # A mode-load ceiling (not thermal) clips delivered load below the request, so
+    # compute.throttled is true while inference capacity stays above the floor: the
+    # inference status is degraded, and ADR 0071 gives it its own advisory even
+    # though no thermal advisory fires.
+    for _ in range(6):
+        engine.compute.set_mode_load_ceiling(50.0)
+        engine.compute.set_load_pct(100.0)
+        engine.tick()
+    s = situation(engine)
+    inference = next(
+        c for c in s.capabilities if c.name == "inference_capacity_tok_per_s"
+    )
+    assert inference.status == "degraded"
+    assert engine.compute.throttled is True
+    assert any(r.startswith("inference:") for r in s.recommendations)
+    assert not any(r.startswith("thermal:") for r in s.recommendations)
+
+
 def test_operator_incapacitated_recommends_safe_hold(engine: Engine) -> None:
     engine.state.operator_state = OperatorState.INCAPACITATED
     engine.state.operator_state_reason = "no vitals detected"

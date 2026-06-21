@@ -4,8 +4,9 @@ Implements the :class:`~nous.subsystems.base.Subsystem` Protocol. The model
 is a single Li-ion pack whose discharge curves come from the hardware
 profile (``battery_wh``, ``voltage_v_nominal``, ``peukert_k``,
 ``internal_resistance_ohm``, ``thermal_derate_c``, ...). Charge input
-arrives from the APU (see :mod:`nous.subsystems.apu`); the bus regulator
-clamps it to ``charge_limit_w``.
+arrives from the PMU (see :mod:`nous.subsystems.pmu`), which owns the bus
+regulation (the ``charge_limit_w`` clamp and the CC/CV taper, BL-005b /
+ADR 0075); the battery records the already-regulated charge it is handed.
 
 The battery is the *primary* power source. APU sources are auxiliary and
 never deliver power directly to the load (see ADR-0015). Per
@@ -37,7 +38,6 @@ _DEFAULT_LOW_THRESHOLD = 20.0
 _DEFAULT_CRITICAL_THRESHOLD = 5.0
 _DEFAULT_THERMAL_DERATE_C = 45.0
 _DEFAULT_DERATE_SLOPE_PER_C = 0.02
-_DEFAULT_CHARGE_LIMIT_W = 100.0
 _DEFAULT_INITIAL_SOC_PCT = 100.0
 _DEFAULT_CELL_C = 25.0
 
@@ -108,9 +108,6 @@ class PowerSubsystem:
         self._derate_slope_per_c = float(
             cfg.get("thermal_derate_slope_per_c", _DEFAULT_DERATE_SLOPE_PER_C)
         )
-        self._charge_limit_w = float(
-            cfg.get("charge_limit_w", _DEFAULT_CHARGE_LIMIT_W)
-        )
         self._nominal_capacity_ah = self._battery_wh / max(self._voltage_nominal, 1.0)
 
         self._load_w = 0.0
@@ -128,15 +125,17 @@ class PowerSubsystem:
         self._load_w = max(0.0, float(load_w))
 
     def set_charge_w(self, charge_w: float) -> None:
-        """Record the APU's offered charge for this tick.
+        """Record the charge delivered to the battery this tick.
 
-        The bus regulator caps the accepted power at ``charge_limit_w``.
-        The full offered value is preserved on the subsystem so the
-        controller can see how much APU power was clipped.
+        The bus regulation (the ``charge_limit_w`` clamp and the CC/CV taper)
+        moved to the PMU (BL-005b / ADR 0075): the value passed here is already
+        the regulated, accepted charge, so the battery records it as both the
+        offered and accepted figure. The PMU surfaces how much source power was
+        clipped.
         """
-        offered = max(0.0, float(charge_w))
-        self._charge_offered_w = offered
-        self._charge_accepted_w = min(offered, self._charge_limit_w)
+        accepted = max(0.0, float(charge_w))
+        self._charge_offered_w = accepted
+        self._charge_accepted_w = accepted
 
     def set_cell_c(self, cell_c: float) -> None:
         """Update the cell temperature used for the thermal derate."""

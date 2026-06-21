@@ -101,6 +101,30 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         return await wrap("apu_status", {}, ctx, _work)
 
     @mcp.tool()
+    async def pmu_status(ctx: Context | None = None) -> str:
+        """PMU bus regulation: charge limit, CC/CV mode, dual-slot state (BL-005b)."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.pmu.truth())
+            secondary_soc = truth["secondary_soc_pct"]
+            payload = {
+                "charge_limit_w": round(truth["charge_limit_w"], 3),
+                "charge_offered_w": round(truth["charge_offered_w"], 3),
+                "charge_accepted_w": round(truth["charge_accepted_w"], 3),
+                "charge_mode": truth["charge_mode"],
+                "active_slot": truth["active_slot"],
+                "primary_present": truth["primary_present"],
+                "secondary_present": truth["secondary_present"],
+                "secondary_soc_pct": (
+                    round(secondary_soc, 3) if secondary_soc is not None else None
+                ),
+                "swaps": truth["swaps"],
+            }
+            return json.dumps(payload)
+
+        return await wrap("pmu_status", {}, ctx, _work)
+
+    @mcp.tool()
     async def thermal_status(ctx: Context | None = None) -> str:
         """Two-state thermal model (junction + enclosure + ambient)."""
 
@@ -241,7 +265,10 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         held in the store-and-forward outbox (``reason`` ``emcon``) instead of
         dropped, so they ship when emissions resume. Returns ``{"ok": bool,
         "link_id": str, "bytes_accepted": int, "connected": bool}``; ``ok`` is
-        ``false`` when no bytes were accepted. An EMCON defer adds ``reason``
+        ``false`` when no bytes were accepted. A non-EMCON failure adds
+        ``reason`` naming the cause (the link's ``last_tx_reason``:
+        ``forced_down`` / ``no_capacity`` / ``empty``, or ``unknown_link``;
+        BL-109). An EMCON defer adds ``reason``
         (``emcon``), ``emcon_profile``, and ``enqueued`` (whether the outbox
         took the held bytes); ``connected`` still reflects the link's real
         ``is_live`` health, since EMCON is orthogonal to connectivity. Tier T2
@@ -273,14 +300,24 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                 )
             accepted = engine.comms.tx(link_id, n_bytes, now_s=now_s)
             link = engine.comms.link(link_id)
-            return json.dumps(
-                {
-                    "ok": accepted > 0,
-                    "link_id": link_id,
-                    "bytes_accepted": accepted,
-                    "connected": bool(link.is_live()) if link is not None else False,
-                }
-            )
+            body: dict[str, Any] = {
+                "ok": accepted > 0,
+                "link_id": link_id,
+                "bytes_accepted": accepted,
+                "connected": bool(link.is_live()) if link is not None else False,
+            }
+            if accepted <= 0:
+                from .publish import tx_failure_reason
+
+                # A non-positive send is empty by definition. tx() checks the EMCON
+                # gate before the empty guard, so under a silent posture it would
+                # stamp last_tx_reason="emcon"; report "empty" here so a bare
+                # reason:"emcon" only ever appears on the defer shape above (which
+                # carries emcon_profile/enqueued). (PR #170 review.)
+                body["reason"] = (
+                    "empty" if n_bytes <= 0 else tx_failure_reason(engine, link_id)
+                )
+            return json.dumps(body)
 
         return await wrap(
             "comms_send", {"link_id": link_id, "n_bytes": n_bytes}, ctx, _work

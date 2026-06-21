@@ -127,7 +127,13 @@ async def test_emcon_defer_keeps_link_health_and_skips_nonpositive(
     )
     assert zero["ok"] is False
     assert zero["bytes_accepted"] == 0
-    assert "reason" not in zero
+    # A non-positive send is rejected outright, not deferred to the outbox: it
+    # reports the honest `empty` cause (BL-109) with no enqueue, and the bare
+    # `reason: emcon` only appears on the byte-bearing defer above (which carries
+    # `emcon_profile` / `enqueued`). (PR #170 review.)
+    assert "enqueued" not in zero
+    assert zero["reason"] == "empty"
+    assert "emcon_profile" not in zero
 
 
 def test_emcon_silence_defers_a_publish_then_drains(config: Settings) -> None:

@@ -124,7 +124,11 @@ def test_viability_fails_closed_when_required_capability_missing() -> None:
 
 
 def test_endurance_caps_when_net_charging(engine: Engine) -> None:
-    engine.power.set_load_w(0.0)
+    # Below the PMU's CV knee the charge is not tapered (BL-005b / ADR 0075), so a
+    # generous source net-charges a light idle load and the endurance is a capped
+    # hint rather than an unbounded figure.
+    engine.power.set_soc_pct(50.0)
+    engine.compute.set_load_pct(0.0)
     engine.apu.set_solar_w(50.0)
     for _ in range(5):
         engine.tick()

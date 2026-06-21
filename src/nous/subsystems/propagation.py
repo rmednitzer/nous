@@ -28,7 +28,7 @@ pin them.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -40,6 +40,7 @@ __all__ = [
     "LinkPropagation",
     "antenna_gain_offset_db",
     "bearing_deg",
+    "bullington_diffraction_db",
     "capacity_bps",
     "free_space_path_loss_db",
     "knife_edge_diffraction_db",
@@ -96,6 +97,10 @@ class LinkPropagation:
     antenna_half_beamwidth_deg: float = 60.0
     antenna_front_to_back_db: float = 20.0
     rician_k_db: float | None = None
+    # BL-089: opt in to multi-edge diffraction over a sampled terrain path. When
+    # false (the default) the single-knife-edge model above is unchanged.
+    use_terrain: bool = False
+    terrain_samples: int = 16
 
     @classmethod
     def from_profile(cls, entry: Mapping[str, Any]) -> LinkPropagation | None:
@@ -171,6 +176,8 @@ class LinkPropagation:
             ),
             antenna_front_to_back_db=max(0.0, _f("antenna_front_to_back_db", 20.0)),
             rician_k_db=_opt("rician_k_db"),
+            use_terrain=bool(block.get("use_terrain", False)),
+            terrain_samples=max(2, int(_f("terrain_samples", 16.0))),
         )
 
 
@@ -335,9 +342,63 @@ def knife_edge_diffraction_db(
     h = obstruction_height_m - los_height_m
     wavelength = _SPEED_OF_LIGHT_M_S / max(1.0, frequency_hz)
     v = h * math.sqrt(2.0 / wavelength * (1.0 / d1_m + 1.0 / d2_m))
+    return _fresnel_diffraction_loss_db(v)
+
+
+def _fresnel_diffraction_loss_db(v: float) -> float:
+    """ITU-R P.526 single knife-edge loss ``J(v)`` in dB; 0 for ``v <= -0.78``.
+
+    The shared diffraction kernel: the single knife edge computes one ``v`` from
+    its geometry, the Bullington method computes one ``v`` for its equivalent edge,
+    and both pass it here. ``v <= -0.78`` is a clear path (obstacle below the
+    first Fresnel zone), so the loss is zero.
+    """
     if v <= -0.78:
         return 0.0
     return 6.9 + 20.0 * math.log10(math.sqrt((v - 0.1) ** 2 + 1.0) + v - 0.1)
+
+
+def bullington_diffraction_db(
+    profile: Sequence[tuple[float, float]],
+    tx_height_m: float,
+    rx_height_m: float,
+    frequency_hz: float,
+) -> float:
+    """Multi-edge diffraction loss over a terrain path profile (Bullington), in dB.
+
+    ``profile`` is the sampled path ``[(distance_from_tx_m, terrain_elevation_m), ...]``
+    including both endpoints (BL-089); ``tx_height_m`` and ``rx_height_m`` are the
+    device and peer antenna heights on the same datum as the terrain elevations.
+    The Bullington construction (ITU-R P.526) takes the steepest obstacle seen from
+    each end, intersects their rays to form one equivalent knife edge, and applies
+    :func:`_fresnel_diffraction_loss_db` once. With a single interior obstacle it
+    reduces exactly to :func:`knife_edge_diffraction_db`: the Bullington point lands
+    on that obstacle and ``2 d / (d1 d2) == 2 (1/d1 + 1/d2)`` when ``d1 + d2 = d``.
+    Returns 0 for a path whose terrain stays at or below the line of sight.
+    """
+    if len(profile) < 2:
+        return 0.0
+    total_d = profile[-1][0]
+    if total_d <= 0.0:
+        return 0.0
+    interior = [(di, hi) for di, hi in profile if 0.0 < di < total_d]
+    if not interior:
+        return 0.0
+    los_slope = (rx_height_m - tx_height_m) / total_d
+    s_tx = max((hi - tx_height_m) / di for di, hi in interior)
+    if s_tx <= los_slope:
+        return 0.0
+    s_rx = max((hi - rx_height_m) / (total_d - di) for di, hi in interior)
+    denom = s_tx + s_rx
+    if denom <= 0.0:
+        return 0.0
+    d_b = (rx_height_m - tx_height_m + s_rx * total_d) / denom
+    if d_b <= 0.0 or d_b >= total_d:
+        return 0.0
+    wavelength = _SPEED_OF_LIGHT_M_S / max(1.0, frequency_hz)
+    excess_h = (s_tx - los_slope) * d_b
+    v = excess_h * math.sqrt(2.0 * total_d / (wavelength * d_b * (total_d - d_b)))
+    return _fresnel_diffraction_loss_db(v)
 
 
 def antenna_gain_offset_db(
@@ -396,6 +457,7 @@ def solve_link_budget(
     bandwidth_bps: float,
     shadowing_db: float = 0.0,
     fast_fade_db: float = 0.0,
+    terrain_profile: Sequence[tuple[float, float]] | None = None,
 ) -> LinkBudget:
     """Solve the full link budget for one link given the device position.
 
@@ -403,9 +465,11 @@ def solve_link_budget(
     supplied by the caller (drawn from the engine RNG) so this function stays pure
     and deterministic; pass ``0.0`` for the noise-free geometry. The four
     deterministic BL-088 upgrades (log-distance exponent, knife-edge diffraction,
-    directional antenna, kTB noise floor) are read from ``prop``. Returns the
-    range, total path loss, RSSI, SNR, SNR-derived capacity, packet loss, and the
-    BL-088 diagnostic breakdown.
+    directional antenna, kTB noise floor) are read from ``prop``. When the link
+    opts into terrain (``prop.use_terrain``) and a sampled ``terrain_profile`` is
+    supplied, multi-edge Bullington diffraction over that path replaces the single
+    configured knife edge (BL-089). Returns the range, total path loss, RSSI, SNR,
+    SNR-derived capacity, packet loss, and the diagnostic breakdown.
     """
     rng_m = slant_range_m(
         device_lat,
@@ -420,18 +484,25 @@ def solve_link_budget(
     )
 
     diffraction = 0.0
-    obstruction = prop.obstruction_distance_m
-    if obstruction is not None and 0.0 < obstruction < rng_m:
-        los_height = device_alt_m + (prop.peer_alt_m - device_alt_m) * (
-            obstruction / rng_m
+    if prop.use_terrain and terrain_profile is not None:
+        # BL-089: multi-edge diffraction over the sampled terrain path replaces the
+        # single configured knife edge when the link opts into terrain.
+        diffraction = bullington_diffraction_db(
+            terrain_profile, device_alt_m, prop.peer_alt_m, prop.frequency_hz
         )
-        diffraction = knife_edge_diffraction_db(
-            prop.obstruction_height_m,
-            los_height,
-            obstruction,
-            rng_m - obstruction,
-            prop.frequency_hz,
-        )
+    else:
+        obstruction = prop.obstruction_distance_m
+        if obstruction is not None and 0.0 < obstruction < rng_m:
+            los_height = device_alt_m + (prop.peer_alt_m - device_alt_m) * (
+                obstruction / rng_m
+            )
+            diffraction = knife_edge_diffraction_db(
+                prop.obstruction_height_m,
+                los_height,
+                obstruction,
+                rng_m - obstruction,
+                prop.frequency_hz,
+            )
 
     antenna_offset = 0.0
     if prop.antenna_boresight_deg is not None:

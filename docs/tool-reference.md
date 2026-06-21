@@ -36,6 +36,7 @@ the committed copy after changing a tool's signature or docstring.
 | `interop_decode` | T1 | Decode a hex-encoded payload via the named adapter (BL-041 / T1). |
 | `interop_encode` | T1 | Encode ``data`` via the named interop adapter (BL-041 / T1). |
 | `interop_formats` | T0 | List the interop adapters the server knows about. |
+| `pmu_status` | T0 | PMU bus regulation: charge limit, CC/CV mode, dual-slot state (BL-005b). |
 | `position_status` | T0 | Position subsystem: lat/lon/alt ground truth, fix state, drift. |
 | `power_status` | T0 | Battery state-of-charge, draw, projected endurance. |
 | `profile_reload` | T2 | Hot-reload the hardware profile from disk. |
@@ -597,6 +598,16 @@ tool registry.
 {
   "properties": {},
   "title": "interop_formatsArguments",
+  "type": "object"
+}
+```
+
+### `pmu_status`
+
+```json
+{
+  "properties": {},
+  "title": "pmu_statusArguments",
   "type": "object"
 }
 ```

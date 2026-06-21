@@ -1,6 +1,6 @@
 # ADR 0015: APU is strictly auxiliary; the primary battery is the sole bus
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR 0075
 - **Date:** 2026-05-20
 - **Authors:** rmednitzer
 - **Builds on:** ADR 0003, ADR 0010

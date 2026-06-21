@@ -1,0 +1,140 @@
+schema_version: "0.1.1"
+name: terrain-demo
+description: >
+  BL-089 demonstration profile. Identical to propagation-demo except the
+  relay link opts into terrain diffraction (use_terrain) and a top-level
+  world section adds a deterministic procedural elevation field. The link
+  budget samples the terrain along the great circle to the relay each tick
+  and runs multi-edge Bullington diffraction over the path, so a ridge
+  between the device and the relay degrades the link where the single
+  knife-edge model would not. With use_terrain false (or no world section)
+  the link is byte-for-byte the propagation-demo behaviour. See
+  tests/integration/test_terrain_propagation.py.
+
+# Hardware sections are copied verbatim from jetson-agx-orin; only the comms
+# section and the new world section differ. schema_version stays 0.1.1: the
+# world block and the use_terrain field are additive (ADR 0007 / ADR 0012).
+
+power:
+  battery_wh: 588
+  voltage_v_nominal: 14.4
+  voltage_v_min: 12.0
+  voltage_v_max: 16.8
+  internal_resistance_ohm: 0.05
+  rated_current_a: 5.0
+  peukert_k: 1.04
+  soc_pct_low_threshold: 20
+  soc_pct_critical_threshold: 5
+  cycle_life: 500
+  thermal_derate_c: 45
+  thermal_derate_slope_per_c: 0.02
+  charge_limit_w: 100
+
+apu:
+  solar_w_peak: 60
+  fuelcell_w_continuous: 25
+  solar:
+    panel_w_peak: 60
+    mppt_efficiency: 0.92
+    panel_temp_derate_per_c_above_25: 0.004
+  fuel_cell:
+    continuous_w: 25
+    fuel_capacity_g: 790
+    efficiency: 0.25
+    wh_per_g_fuel: 1.4
+  vehicle:
+    bus_voltage_v: 28.0
+    current_limit_a: 5.0
+  usb_c_pd:
+    profiles_w: [15, 27, 45, 60, 100]
+    default_profile_w: 60
+
+thermal:
+  ambient_c_default: 25
+  junction_temp_max: 95
+  junction_temp_throttle: 85
+  thermal_resistance_c_per_w: 0.30
+  enclosure_to_ambient_resistance_c_per_w: 0.5
+  enclosure_mass_kg: 1.2
+  enclosure_specific_heat_j_per_kg_k: 900
+  junction_heat_capacity_j_per_k: 5.0
+  headroom_threshold_c: 5.0
+
+compute:
+  draw_w_idle: 8
+  draw_w_load: 60
+  load_curve:
+    - { load_pct: 0,   draw_w: 8 }
+    - { load_pct: 25,  draw_w: 18 }
+    - { load_pct: 50,  draw_w: 35 }
+    - { load_pct: 75,  draw_w: 50 }
+    - { load_pct: 100, draw_w: 60 }
+  inference_local:
+    tok_per_s_p50: 200
+    energy_j_per_tok: 0.12
+
+storage:
+  capacity_gib: 1024
+  wear_pct_initial: 0.0
+  write_amplification: 1.2
+
+sensors:
+  position:
+    lat_sigma: 3.0e-5
+    lon_sigma: 3.0e-5
+    alt_m_sigma: 5.0
+    fix_rate_hz: 10
+  environmental:
+    temp_c_sigma: 0.2
+    humidity_pct_sigma: 1.0
+    baro_kpa_sigma: 0.1
+  biometrics:
+    heart_rate_bpm_sigma: 2.0
+    core_temp_c_sigma: 0.05
+    hydration_pct_sigma: 1.0
+
+# BL-089 procedural world. A deterministic seeded elevation field: ridges on a
+# ~700 m horizontal scale, +/- 400 m of relief around a 450 m base, sampled
+# along each terrain-enabled link's path. Standalone (no DEM dataset); a real
+# elevation-tile loader could implement the same interface out of tree.
+world:
+  enabled: true
+  seed: 7
+  anchor_lat: 47.0
+  anchor_lon: 13.0
+  base_elevation_m: 450
+  relief_m: 400
+  feature_m: 700
+  components: 4
+
+comms:
+  links:
+    - id: relay
+      bandwidth_bps: 2000000
+      rssi_dbm_nominal: -80
+      loss_pct_nominal: 0.5
+      max_age_s: 60
+      propagation:
+        peer: { lat: 47.0, lon: 12.98, alt_m: 470 }
+        tx_power_dbm: 20.0
+        frequency_hz: 2.4e9
+        tx_gain_dbi: 2.0
+        rx_gain_dbi: 2.0
+        excess_loss_db: 5.0
+        shadowing_sigma_db: 0.0      # deterministic geometry for the demo
+        noise_floor_dbm: -100.0
+        snr_floor_db: 5.0
+        snr_full_db: 20.0
+        good_rssi_dbm: -85.0
+        sensitivity_dbm: -115.0
+        loss_floor_pct: 0.5
+        # BL-089: sample the world terrain along the path and run multi-edge
+        # diffraction over it. A ridge between the device and the relay blocks
+        # the link where the single knife-edge model would miss it.
+        use_terrain: true
+        terrain_samples: 24
+  outbox:
+    enabled: true
+    max_packages: 256
+    max_bytes: 1048576
+    default_ttl_s: 300

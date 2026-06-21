@@ -27,7 +27,7 @@ from .estimators.apu import ApuEstimator
 from .estimators.biometrics import BiometricsKalman
 from .estimators.comms import CommsParticleFilter
 from .estimators.compute import ComputeKalman
-from .estimators.position import PositionKalman
+from .estimators.position_ekf import PositionEkf
 from .estimators.power import PowerEstimator
 from .estimators.sensors import EnvironmentalKalman
 from .estimators.storage import StorageKalman
@@ -56,11 +56,13 @@ from .subsystems.apu import ApuSubsystem
 from .subsystems.biometrics import BiometricsSubsystem
 from .subsystems.comms import CommsSubsystem
 from .subsystems.compute import ComputeSubsystem
+from .subsystems.imu import ImuSubsystem
 from .subsystems.inference import InferenceSubsystem
+from .subsystems.pmu import PmuSubsystem
 from .subsystems.position import PositionSubsystem
-from .subsystems.power import PowerSubsystem
 from .subsystems.sensors import SensorsSubsystem
 from .subsystems.storage import StorageSubsystem
+from .subsystems.terrain import TerrainModel
 from .subsystems.thermal import ThermalSubsystem
 from .types import TickContext
 
@@ -236,7 +238,8 @@ class Engine:
         # ADR 0019 follow-up: thread the engine RNG into every
         # subsystem at construction so future noise sampling can draw
         # from a deterministic seam.
-        self.power = PowerSubsystem(self.profile, rng=self.rng)
+        self.pmu = PmuSubsystem.from_profile(self.profile, rng=self.rng)
+        self.power = self.pmu.active_battery
         self.apu = ApuSubsystem(self.profile, rng=self.rng)
         self.thermal = ThermalSubsystem(self.profile, rng=self.rng)
         self.compute = ComputeSubsystem(self.profile, rng=self.rng)
@@ -244,6 +247,9 @@ class Engine:
             self.profile, compute=self.compute, rng=self.rng
         )
         self.storage = StorageSubsystem(self.profile, rng=self.rng)
+        # BL-089: the shared procedural world (None unless the profile carries a
+        # `world` section); the comms link budget samples it for terrain diffraction.
+        self.terrain = TerrainModel.from_profile(self.profile)
         self.comms = CommsSubsystem(
             self.profile,
             rng=self.rng,
@@ -252,12 +258,14 @@ class Engine:
                 self.position.lon,
                 self.position.alt_m,
             ),
+            terrain=self.terrain,
         )
         self.outbox = CommsOutbox(self.profile, rng=self.rng)
         self._build_dtn_mesh()
         self.position = PositionSubsystem(self.profile, rng=self.rng)
         self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
         self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
+        self.imu = ImuSubsystem(self.profile, rng=self.rng)
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
@@ -280,7 +288,7 @@ class Engine:
         self.state.comms_state, self.state.comms_state_reason = (
             self.comms.derive_state()
         )
-        self.position_est = PositionKalman()
+        self.position_est = PositionEkf()
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est = EnvironmentalKalman()
         self.sensors_est.update(self.sensors.sensor_obs())
@@ -397,7 +405,7 @@ class Engine:
         # constructor the error propagates with nothing committed, so the engine
         # keeps the previous profile and subsystems rather than tearing into a
         # mixed-generation state (BL-103 / ADR 0069).
-        new_power = PowerSubsystem(new_profile, rng=self.rng)
+        new_pmu = PmuSubsystem.from_profile(new_profile, rng=self.rng)
         new_apu = ApuSubsystem(new_profile, rng=self.rng)
         new_thermal = ThermalSubsystem(new_profile, rng=self.rng)
         new_compute = ComputeSubsystem(new_profile, rng=self.rng)
@@ -405,6 +413,7 @@ class Engine:
             new_profile, compute=new_compute, rng=self.rng
         )
         new_storage = StorageSubsystem(new_profile, rng=self.rng)
+        new_terrain = TerrainModel.from_profile(new_profile)
         new_comms = CommsSubsystem(
             new_profile,
             rng=self.rng,
@@ -413,27 +422,32 @@ class Engine:
                 self.position.lon,
                 self.position.alt_m,
             ),
+            terrain=new_terrain,
         )
         new_outbox = CommsOutbox(new_profile, rng=self.rng)
         new_position = PositionSubsystem(new_profile, rng=self.rng)
         new_sensors = SensorsSubsystem(new_profile, rng=self.rng)
         new_biometrics = BiometricsSubsystem(new_profile, rng=self.rng)
+        new_imu = ImuSubsystem(new_profile, rng=self.rng)
 
         # Every subsystem constructed: commit the new generation atomically.
         if new_name != self.settings.profile:
             self.settings = self.settings.model_copy(update={"profile": new_name})
         self.profile = new_profile
-        self.power = new_power
+        self.pmu = new_pmu
+        self.power = new_pmu.active_battery
         self.apu = new_apu
         self.thermal = new_thermal
         self.compute = new_compute
         self.inference = new_inference
         self.storage = new_storage
+        self.terrain = new_terrain
         self.comms = new_comms
         self.outbox = new_outbox
         self.position = new_position
         self.sensors = new_sensors
         self.biometrics = new_biometrics
+        self.imu = new_imu
         self._build_dtn_mesh()
 
         self.power_est = PowerEstimator(
@@ -455,7 +469,7 @@ class Engine:
         )
         self.comms_est = CommsParticleFilter(rng=self.rng)
         self.comms_est.update(self.comms.sensor_obs())
-        self.position_est = PositionKalman()
+        self.position_est = PositionEkf()
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est = EnvironmentalKalman()
         self.sensors_est.update(self.sensors.sensor_obs())
@@ -778,6 +792,10 @@ class Engine:
         self.storage.step(dt)
         self.comms.step(dt)
         self.position.step(dt)
+        # BL-026: the IMU senses the platform's motion (the position subsystem's
+        # commanded speed and heading), differentiated into accel and yaw rate.
+        self.imu.set_motion(self.position.speed_mps, self.position.heading_deg)
+        self.imu.step(dt)
         self.sensors.step(dt)
         self.biometrics.step(dt)
         load_w = self.compute.draw_w
@@ -787,10 +805,18 @@ class Engine:
         self.thermal.set_load_w(load_w)
         self.thermal.set_ambient_c(ambient_c)
         self.thermal.step(dt)
+        # BL-005b: the PMU regulates the APU's offered power into the accepted
+        # charge (charge_limit clamp + CC/CV taper) and routes it to the active
+        # pack; after the pack steps it arbitrates the dual slots, handing the bus
+        # to a charged standby when the active pack is exhausted (no bus collapse).
+        accepted_charge_w = self.pmu.regulate_charge(self.apu.total_w)
         self.power.set_load_w(load_w)
-        self.power.set_charge_w(self.apu.total_w)
+        self.power.set_charge_w(accepted_charge_w)
         self.power.set_cell_c(self.thermal.enclosure_c)
         self.power.step(dt)
+        self.pmu.step(dt)
+        if self.pmu.arbitrate():
+            self.power = self.pmu.active_battery
 
         self.power_est.predict(dt)
         self.power_est.update(self.power.sensor_obs())
@@ -816,6 +842,9 @@ class Engine:
         self.dtn_mesh.step(dt, self.state.ts_s)
         if self.dtn_mesh.enabled and self.dtn_mesh.consume_dirty():
             self.dtn_store.save(self.dtn_mesh.snapshot(self.state.ts_s))
+        # BL-026: the IMU drives the EKF prediction (stored as the control), then
+        # predict propagates the nonlinear model, then GNSS corrects the position.
+        self.position_est.update(self.imu.sensor_obs())
         self.position_est.predict(dt)
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est.predict(dt)

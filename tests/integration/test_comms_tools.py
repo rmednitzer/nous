@@ -41,6 +41,28 @@ async def test_comms_send_rejects_unknown_link(config: Settings) -> None:
     assert out["bytes_accepted"] == 0
 
 
+async def test_comms_send_surfaces_failure_reason(config: Settings) -> None:
+    """A forced-down link names the cause on the failure body (BL-109)."""
+    app = build_app(config)
+    link_id = app.engine.comms.link_ids[0]
+    app.engine.comms.set_link_state(link_id, connected=False)
+    out = _payload(
+        await app.mcp.call_tool("comms_send", {"link_id": link_id, "n_bytes": 256})
+    )
+    assert out["ok"] is False
+    assert out["bytes_accepted"] == 0
+    assert out["reason"] == "forced_down"
+
+
+async def test_comms_send_unknown_link_names_reason(config: Settings) -> None:
+    app = build_app(config)
+    out = _payload(
+        await app.mcp.call_tool("comms_send", {"link_id": "no-such-link", "n_bytes": 100})
+    )
+    assert out["ok"] is False
+    assert out["reason"] == "unknown_link"
+
+
 async def test_comms_publish_encodes_and_transmits(config: Settings) -> None:
     app = build_app(config)
     link_id = app.engine.comms.link_ids[0]
@@ -60,6 +82,27 @@ async def test_comms_publish_encodes_and_transmits(config: Settings) -> None:
     # The encoded byte count is exactly what the link accounted for.
     assert out["bytes_accepted"] == out["len"]
     assert bytes.fromhex(out["payload_hex"]).startswith(b"<?xml")
+
+
+async def test_comms_publish_surfaces_failure_reason(config: Settings) -> None:
+    """The encoded payload is still returned, with a reason for the dropped tx (BL-109)."""
+    app = build_app(config)
+    link_id = app.engine.comms.link_ids[0]
+    app.engine.comms.set_link_state(link_id, connected=False)
+    out = _payload(
+        await app.mcp.call_tool(
+            "comms_publish",
+            {
+                "link_id": link_id,
+                "adapter": "cot",
+                "data": {"uid": "unit", "ts_s": time.time(), "lat": 47.0, "lon": 13.0},
+            },
+        )
+    )
+    assert out["ok"] is False
+    assert out["bytes_accepted"] == 0
+    assert out["reason"] == "forced_down"
+    assert out["len"] > 0
 
 
 async def test_comms_publish_unknown_adapter(config: Settings) -> None:

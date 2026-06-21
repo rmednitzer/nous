@@ -111,19 +111,24 @@ higher-fidelity terms layered on: a log-distance path-loss exponent for the
 environment, a single knife-edge diffraction loss for a discrete
 obstruction, a kTB thermal-noise floor, a directional antenna pattern keyed
 on the bearing to the peer, and a Rician multipath fast-fade. A particle
-filter still tracks connection state. What is not modelled: multi-obstacle
-or DEM-driven terrain raytracing, frequency-selective fading, and mesh or
-multi-hop routing. A link with no propagation block stays at its static
-nominal.
+filter still tracks connection state. A link that opts into terrain
+(`use_terrain`) samples a procedural elevation field along the path and runs
+multi-edge Bullington diffraction over it (BL-089, ADR 0072). What is not
+modelled: a real surveyed DEM (the field is procedural, not a fetched dataset),
+frequency-selective fading, and mesh or multi-hop routing. A link with no
+propagation block stays at its static nominal.
 
 **Implication.** Comms scenarios reproduce graded, geometry- and
 environment-driven degradation (range, clutter, a ridge, antenna pointing,
 and fading all move the link), not just scripted link states. The terrain
-model is a single knife edge, so it captures one dominant obstruction
-rather than a DEM-accurate path profile.
+model is multi-edge over a procedural elevation field, so it captures the
+controlling ridges along the path; it is not a surveyed DEM, so it
+demonstrates the physics rather than a specific real location.
 
-**Tracking.** DEM-driven terrain is `[planned]` under [BL-089]; mesh routing
-is part of the [BL-056] delay-tolerant-networking layer.
+**Tracking.** Multi-edge terrain diffraction over a procedural world shipped
+under [BL-089] (ADR 0072); a real surveyed-DEM loader and frequency-selective
+fading remain out of scope for v0.1. Mesh routing is part of the [BL-056]
+delay-tolerant-networking layer.
 
 ## L8. Li-ion only
 
@@ -201,18 +206,26 @@ physics (RSSI, range, fade) the device's own comms links do.
 under BL-077. Neighbour discovery and RF-physics-backed mesh links are not
 tracked for v0.1.
 
-## L13. Linear-Gaussian estimators only
+## L13. Linear-Gaussian estimators (the position EKF excepted)
 
-**State.** All estimators are linear Kalman filters (scalar, multi-channel,
-or constant-velocity) or a particle filter (comms link state). There
-is no neural estimator, no learned residual model, and no online
-parameter estimation.
+**State.** The position estimator is a nonlinear Extended Kalman Filter that
+fuses GNSS with an IMU in a local east-north-up frame (BL-026, ADR 0073): the
+unicycle process couples the axes through `sin`/`cos` of the heading, so
+`predict` propagates the covariance through the analytic Jacobian. The
+remaining estimators are linear Kalman filters (scalar or multi-channel) or a
+particle filter (comms link state). There is no neural estimator, no learned
+residual model, and no online IMU-bias estimation.
 
-**Implication.** Estimator covariance bounds are valid only inside the
-Gaussian assumption. Heavy-tailed disturbances will inflate the actual
-error beyond what the filter reports.
+**Implication.** The linear estimators' covariance bounds are valid only inside
+the Gaussian assumption; heavy-tailed disturbances inflate the actual error
+beyond what the filter reports. The position EKF is nonlinear but still
+Gaussian: its bound holds while the linearisation is good (it degrades far from
+the anchor or during long IMU-only coasts, where an unestimated bias drifts the
+solution).
 
-**Tracking.** Out of scope for v0.1.
+**Tracking.** The position EKF + IMU fusion shipped under [BL-026] (ADR 0073);
+error-state IMU-bias estimation and nonlinear filters for the other channels are
+out of scope for v0.1.
 
 ## L14. Parametric self-model
 
@@ -255,7 +268,12 @@ alone.
 other internal repository, public or private, and must remain so.
 
 **Implication.** Code patterns may be ported by hand from other projects;
-runtime dependencies on other internal projects are forbidden.
+runtime dependencies on other internal projects are forbidden. The physics
+inputs are injected behind narrow seams (the engine `rng`, the `position_fn`
+getter, the `WorldSource` terrain, the `set_velocity` / `set_motion` motion
+commands), so an out-of-tree adapter, including one backed by an external
+physics engine, can drive the twin without `nous` importing it (ADR 0074). The
+in-tree default for each seam stays standalone.
 
 **Tracking.** The em-dash rule is enforced today by
 `scripts/policy_checks.sh` (the `policy` CI job and `make policy`

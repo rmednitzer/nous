@@ -6,6 +6,100 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (PMU/PDU bus regulation and dual-slot battery hot-swap, BL-005b)
+
+- A new `subsystems/pmu.py` (`PmuSubsystem`) owns the bus regulation lifted off the
+  battery (ADR 0075, superseding ADR-0015): the `charge_limit_w` clamp (defaulting to
+  the legacy `power.charge_limit_w`) plus a CC/CV taper that backs the accepted charge
+  off past the `cv_soc_pct` knee toward full. `PowerSubsystem.set_charge_w` no longer
+  clamps; it records the PMU-regulated charge. The PMU holds a primary slot and an
+  optional `pmu.secondary` slot, arbitrates the active pack, and hands the bus to a
+  charged standby when the active pack is exhausted (no bus collapse); the inactive
+  slot can be removed and a fresh pack inserted while the bus runs, and removing the
+  active slot is refused. The engine routes the regulated charge to the active pack
+  each tick and points `self.power` at it, so `power_status` and the power estimator
+  follow the bus. New `pmu_status` read tool (T0). Single-slot profiles are unchanged.
+
+### Added (injectable physics-source seam, ADR 0074)
+
+- The procedural world is now a `WorldSource` Protocol (`subsystems/terrain.py`):
+  `elevation` + `path_profile`, the methods the comms link budget samples. The
+  in-tree `TerrainModel` is the standalone default and satisfies it structurally;
+  the comms subsystem types its `terrain` parameter as `WorldSource`, so any
+  conforming source (an out-of-tree adapter backed by an external physics engine or
+  a real elevation dataset) drops in without `nous` importing it. Together with the
+  existing `rng` / `position_fn` / `set_motion` seams, this is the documented
+  standalone-to-external physics boundary that keeps the twin standalone (L17) while
+  leaving the world swappable. Documentation and contract only; no in-tree behaviour
+  change.
+
+### Added (nonlinear position EKF with GNSS/INS fusion, BL-026)
+
+- The position estimator is now a nonlinear Extended Kalman Filter that fuses GNSS
+  with an IMU in a local east-north-up frame (ADR 0073), the GNSS/INS architecture
+  real autopilots run, replacing the degrees-space linear Kalman filter in the
+  engine. A new `subsystems/imu.py` (`ImuSubsystem`) models a body-frame
+  longitudinal accelerometer and a yaw-rate gyro derived from the platform motion
+  (bias random walk + white noise on the ADR 0019 RNG seam); a new
+  `estimators/position_ekf.py` (`PositionEkf`) holds `[e, n, v, psi]` anchored on the
+  first fix, drives the unicycle prediction from the IMU control and propagates the
+  covariance through its analytic Jacobian, corrects east/north from GNSS, and
+  recovers speed and heading through the cross-covariance. A chi-square gate rejects
+  an outlier fix; a sustained jump re-anchors (the ADR 0045 persist-then-reset).
+  Under a GNSS outage the EKF coasts on the inferred velocity and tracks a moving
+  platform rather than freezing. The estimate flows through the existing
+  `position_status` (no new tool, no `policy.py` touch); the legacy
+  degrees-per-second velocity keys had no consumer and are dropped. `PositionKalman`
+  is retained for reference. Breaks the position half of LIMITATIONS L13.
+
+### Added (multi-edge terrain diffraction over a procedural world, BL-089)
+
+- Comms links opt into terrain (`propagation.use_terrain`): the link budget now
+  samples a deterministic procedural elevation field along the path to the peer
+  and runs multi-edge Bullington diffraction over it (ADR 0072), lifting the
+  BL-088 single knife edge to the controlling ridges of a real path. A new
+  `subsystems/terrain.py` `TerrainModel` (a seeded sum of sinusoidal ridge
+  components, ADR 0019) supplies the field, exposing `elevation` and a
+  `path_profile` sampler; `subsystems/propagation.py` gains
+  `bullington_diffraction_db`, which shares the Fresnel `J(v)` kernel with the
+  single knife edge and reduces to it exactly for one obstacle. The engine builds
+  the terrain from an optional top-level `world` profile section and threads it
+  into the comms subsystem beside `rng` / `position_fn`; a link with no `world`
+  section or `use_terrain: false` is byte-for-byte unchanged. Standalone (no
+  fetched DEM dataset; the interface is the seam for an out-of-tree elevation
+  loader) and under the tick budget. Demonstrated by `profiles/terrain-demo.yaml`
+  and `tests/integration/test_terrain_propagation.py`.
+
+### Added (transmit-failure reason on the send/publish path, BL-109)
+
+- `comms_send`, and the shared `encode_and_tx` behind `comms_publish` /
+  `self_model_publish`, returned `{ok: false, bytes_accepted: 0}` on a non-EMCON
+  transmit failure with no field naming the cause, even though BL-108 records it
+  on `Link.last_tx_reason` (AUDIT-2026-06-16, MED). A zero-capacity below-SNR
+  link reads `connected: true` yet rejects, indistinguishable from a healthy
+  reject. Both failure bodies now carry `reason` (the link's `last_tx_reason`:
+  `forced_down` / `no_capacity` / `empty`, or `unknown_link`), via a shared
+  `tools/publish.py::tx_failure_reason`, matching the `reason` the EMCON defer
+  path already carries. A non-positive `comms_send` reports `empty` rather than
+  the EMCON attribution `tx` records when its gate is checked first, so a bare
+  `reason: emcon` only appears on the defer shape (PR #170 review). Additive and
+  reporting-only; no ADR.
+
+### Changed (self-model inference status basis and degraded advisory, BL-111)
+
+- The self-model situational read coloured the inference capability on the
+  central `cap.point` while endurance and thermal use the conservative `cap.p5`,
+  and a `degraded` inference (compute throttled, point above the floor) produced
+  no advisory line where every other degraded capability does (AUDIT-2026-06-16,
+  LOW). Decided (ADR 0071) to keep the `point` basis: the inference floor is a
+  breach test (has local inference collapsed), not a margin test, and uncertainty
+  is already routed to the `watch` branch, so reading `p5` would raise a spurious
+  `critical` on a healthy-but-uncertain estimate. Added a degraded-inference
+  advisory that names the throttle generically, since the degraded trigger
+  (`compute.throttled`) is also set by an FSM mode-load ceiling with no thermal
+  throttling, so a mode-ceiling throttle is not covered by the thermal advisory.
+  Reporting-only; no estimator, FSM, or safety path moves.
+
 ### Documentation (adversarial audit 2026-06-16: comms diagnostics and legibility)
 
 - A focused adversarial pass over the surfaces changed in PRs #160 through #167
