@@ -272,6 +272,12 @@ class Engine:
             self.profile,
             rng=self.rng,
             ambient_fn=lambda: (self.sensors.temp_c, self.sensors.humidity_pct),
+            terrain=self.terrain,
+            position_fn=lambda: (
+                self.position.lat,
+                self.position.lon,
+                self.position.alt_m,
+            ),
         )
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
@@ -444,6 +450,12 @@ class Engine:
             # Read the new generation's sensor pack: the constructor recomputes
             # immediately, so the closure must not capture the pre-reload sensors.
             ambient_fn=lambda: (new_sensors.temp_c, new_sensors.humidity_pct),
+            terrain=new_terrain,
+            position_fn=lambda: (
+                new_position.lat,
+                new_position.lon,
+                new_position.alt_m,
+            ),
         )
 
         # Every subsystem constructed: commit the new generation atomically.

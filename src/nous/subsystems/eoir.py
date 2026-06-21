@@ -32,10 +32,13 @@ from typing import Any
 import numpy as np
 
 from ..types import Observation
+from .propagation import los_clear, slant_range_m
+from .terrain import WorldSource
 
 __all__ = ["EoirSubsystem"]
 
 AmbientFn = Callable[[], tuple[float, float]]
+PositionFn = Callable[[], tuple[float, float, float]]
 
 _DEFAULT_EO_R0_M = 12000.0
 _DEFAULT_IR_R0_M = 8000.0
@@ -63,6 +66,9 @@ _DEFAULT_EO_OBSC_EXT = 3.0
 _DEFAULT_IR_OBSC_EXT = 1.5
 _NOMINAL_AMBIENT_C = 22.0
 _NOMINAL_HUMIDITY_PCT = 50.0
+# WGS84-ish metres per degree of latitude, matching position.py / position_ekf.py.
+_METERS_PER_DEG_LAT = 111_320.0
+_TERRAIN_SAMPLES = 24
 
 
 class EoirSubsystem:
@@ -76,9 +82,13 @@ class EoirSubsystem:
         *,
         rng: np.random.Generator | None = None,
         ambient_fn: AmbientFn | None = None,
+        terrain: WorldSource | None = None,
+        position_fn: PositionFn | None = None,
     ) -> None:
         self._rng = rng  # ADR 0019 follow-up: engine RNG seam
         self._ambient_fn = ambient_fn
+        self._terrain = terrain
+        self._position_fn = position_fn
         self.profile = profile
         cfg = dict(profile.get("eoir") or {})
         self._eo_r0 = max(0.0, float(cfg.get("eo_r0_m", _DEFAULT_EO_R0_M)))
@@ -111,6 +121,11 @@ class EoirSubsystem:
         self._atm_ir = 1.0
         self._ir_contrast = 1.0
         self._eo_illum = 1.0
+        self._target: tuple[float, float, float] | None = None
+        self._target_visible: bool | None = None
+        self._target_slant_m: float | None = None
+        self._eo_conf: float | None = None
+        self._ir_conf: float | None = None
         self._recompute()
 
     def set_obscurant(self, level: float) -> None:
@@ -125,6 +140,29 @@ class EoirSubsystem:
         """Restore the focal-plane calibration health to full."""
         self._cal_factor = 1.0
         self._recompute()
+
+    def set_target(self, bearing_deg: float, range_m: float, height_m: float = 0.0) -> None:
+        """Place a target at a bearing (deg CW from north), ground range, and height.
+
+        With a target set, and the terrain + position seams wired, the subsystem
+        masks detection when a ridge occludes the sightline (target_visible) and
+        reports a per-band detection_confidence. Inert without terrain/position.
+        """
+        self._target = (float(bearing_deg), max(0.0, float(range_m)), float(height_m))
+        self._recompute()
+
+    def clear_target(self) -> None:
+        """Remove the configured target; the subsystem reports the envelope only."""
+        self._target = None
+        self._recompute()
+
+    @property
+    def target_visible(self) -> bool | None:
+        return self._target_visible
+
+    @property
+    def target_slant_m(self) -> float | None:
+        return self._target_slant_m
 
     @property
     def eo_range_m(self) -> float:
@@ -178,6 +216,36 @@ class EoirSubsystem:
         self._eo_illum = _clamp01(self._illumination)
         self._eo_range_m = self._eo_r0 * self._atm_eo * self._eo_illum * self._cal_factor
         self._ir_range_m = self._ir_r0 * self._atm_ir * self._ir_contrast * self._cal_factor
+        self._evaluate_target()
+
+    def _evaluate_target(self) -> None:
+        if self._target is None or self._terrain is None or self._position_fn is None:
+            self._target_visible = None
+            self._target_slant_m = None
+            self._eo_conf = None
+            self._ir_conf = None
+            return
+        plat_lat, plat_lon, plat_alt = self._position_fn()
+        bearing_deg, range_m, height_m = self._target
+        brg = math.radians(bearing_deg)
+        cos_lat = max(1e-6, math.cos(math.radians(plat_lat)))
+        tgt_lat = plat_lat + (range_m * math.cos(brg)) / _METERS_PER_DEG_LAT
+        tgt_lon = plat_lon + (range_m * math.sin(brg)) / (_METERS_PER_DEG_LAT * cos_lat)
+        tgt_alt = self._terrain.elevation(tgt_lat, tgt_lon) + height_m
+        profile = self._terrain.path_profile(
+            plat_lat, plat_lon, tgt_lat, tgt_lon, _TERRAIN_SAMPLES
+        )
+        self._target_visible = los_clear(profile, plat_alt, tgt_alt)
+        self._target_slant_m = slant_range_m(
+            plat_lat, plat_lon, plat_alt, tgt_lat, tgt_lon, tgt_alt
+        )
+        self._eo_conf = self._detection_confidence(self._eo_range_m)
+        self._ir_conf = self._detection_confidence(self._ir_range_m)
+
+    def _detection_confidence(self, band_range_m: float) -> float:
+        if not self._target_visible or band_range_m <= 0.0 or self._target_slant_m is None:
+            return 0.0
+        return _clamp01(1.0 - self._target_slant_m / band_range_m)
 
     def truth(self) -> Mapping[str, Any]:
         return {
@@ -194,6 +262,11 @@ class EoirSubsystem:
             "cal_factor": self._cal_factor,
             "obscurant": self._obscurant,
             "illumination": self._illumination,
+            "target_set": self._target is not None,
+            "target_visible": self._target_visible,
+            "target_slant_m": self._target_slant_m,
+            "eo_detection_confidence": self._eo_conf,
+            "ir_detection_confidence": self._ir_conf,
             "t": self._t,
         }
 

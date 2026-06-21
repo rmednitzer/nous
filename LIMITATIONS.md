@@ -325,8 +325,10 @@ geometric scaling of the detection range, not a probability of
 identification. Thermal contrast is computed against a single profile
 target temperature, not a background distribution, and the atmospheric
 model is a Koschmieder meteorological-range cap, not a spectral
-transmittance calculation. There is no terrain line-of-sight masking of a
-specific target yet.
+transmittance calculation. Terrain line-of-sight masking (ADR 0078) covers
+one configured target at a time with a straight-line clearance test (no
+earth curvature or refraction); the reported `detection_confidence` is a
+geometric range fraction, not a probability of detection.
 
 **Implication.** The detection ranges report which band can reach how far
 under the current ambient and calibration, the legible capability a
@@ -334,6 +336,6 @@ controller selects a band on. They are *derived from the profile and the
 sensor-pack seam*, not measured from an optical chain; do not use them for
 real targeting or detection-performance prediction.
 
-**Tracking.** [BL-055] is `[in-progress]` (shipped). Terrain line-of-sight
-masking of a configured target and a self-model `perception_range`
-capability are the named fast-follows in ADR 0077.
+**Tracking.** [BL-055] is `[in-progress]`. The envelope (ADR 0077) and
+terrain line-of-sight masking (ADR 0078) have shipped; a self-model
+`perception_range` capability is the remaining named fast-follow.

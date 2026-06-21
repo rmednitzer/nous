@@ -33,7 +33,9 @@ sources.
 | `set_obscurant` | Battlefield obscurant in [0, 1]: 0 clear, 1 heavy fog / dust / smoke |
 | `set_illumination` | EO scene illumination in [0, 1]: 1 daylight, 0 unlit night |
 | `recalibrate` | Restores calibration health to full |
+| `set_target` / `clear_target` | Place / remove a target at `(bearing_deg, range_m, height_m)` for line-of-sight masking |
 | `ambient_fn` | Engine closure returning live `(temp_c, humidity_pct)`; falls back to a nominal ambient when absent |
+| `terrain` / `position_fn` | Optional `WorldSource` + platform-position closure; enable terrain LOS masking of the target (inert when absent) |
 
 ## State (truth())
 
@@ -47,6 +49,9 @@ sources.
 | `eo_illum_factor` | -- | Illumination in [0, 1] |
 | `cal_factor` | -- | Calibration health in (0, 1] |
 | `obscurant` / `illumination` | -- | Current scene inputs |
+| `target_set` / `target_visible` | -- | Whether a target is configured and, if terrain+position are wired, whether the sightline is clear (else `None`) |
+| `target_slant_m` | m | Slant range to the configured target |
+| `eo_detection_confidence` / `ir_detection_confidence` | -- | Per-band `visible ? clamp(1 - slant / R_eff, 0, 1) : 0` |
 
 ## Outputs (sensor_obs())
 
@@ -88,9 +93,10 @@ eoir:
 - Single target temperature. Thermal contrast is computed against one profile
   target temperature, not a background distribution or a per-target signature, so
   crossover is a single sharp transition rather than a scene-dependent band.
-- No terrain line-of-sight yet. The range is the clear-field envelope; occlusion
-  of a specific target by terrain is the named follow-on (it reuses the
-  `WorldSource` `path_profile`).
+- Terrain line-of-sight masking (ADR 0078) covers one target at a time with a
+  straight-line clearance test over the sampled profile (no earth curvature or
+  refraction term); `detection_confidence` is a geometric range fraction, not a
+  probability of detection.
 - The atmospheric model is a Koschmieder meteorological-range cap, not a spectral
   transmittance calculation; it captures the haze/fog/obscurant trend, not band
   fine structure within the LWIR window.

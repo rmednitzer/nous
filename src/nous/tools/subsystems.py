@@ -801,6 +801,13 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                     "rejected_updates": _rejected_from_health(estimate),
                 },
             }
+            if truth["target_set"]:
+                payload["target"] = {
+                    "visible": truth["target_visible"],
+                    "slant_m": round(truth["target_slant_m"], 1),
+                    "eo_detection_confidence": round(truth["eo_detection_confidence"], 3),
+                    "ir_detection_confidence": round(truth["ir_detection_confidence"], 3),
+                }
             return json.dumps(payload)
 
         return await wrap("eoir_status", {}, ctx, _work)
