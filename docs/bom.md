@@ -97,6 +97,18 @@ name is searchable and stable.
 | Li-ion charge derate onset | ~40-45 C cell | Generic Li-ion cell datasheets (Samsung, LG, Panasonic) | `power.thermal_derate_c: 45` (all profiles) |
 | Li-ion charge derate slope | ~2 % per C above onset | Same | `power.thermal_derate_slope_per_c: 0.02` |
 
+## EO/IR sensor payload
+
+| Part | Vendor | Reference | Profile usage | Notes |
+|------|--------|-----------|---------------|-------|
+| Hadron 640R EO/IR module | Teledyne FLIR | Teledyne FLIR Hadron 640R datasheet ; Boson 640 LWIR core datasheet | `eoir.*` (jetson-agx-orin) | Dual-band small-platform module: a high-resolution EO camera plus a Boson 640 LWIR core (640x512, NETD < 50 mK). The `eo_r0_m: 12000` / `ir_r0_m: 8000` reference detection ranges are representative clear-air vehicle-detection figures for a gimbal of this class, derived via the Johnson DRI criteria (`docs/conformance/eoir.md`), not a calibrated datasheet range: the subsystem is a capability envelope, not a sensor model (LIMITATIONS L19). The `*_range_sigma_m` and `cal_drift_per_s` represent range-estimate and non-uniformity-correction-drift uncertainty anchored to the Boson NETD class. |
+
+| Quantity | Value | Reference |
+|----------|-------|-----------|
+| Johnson DRI cycle ratios | recognition ~3x, identification ~6x the detection range | Johnson (1958), the Johnson criteria (see `docs/conformance/eoir.md`) |
+| Atmospheric extinction cap | `V = 3.912 / sigma_ext` (2 % contrast) | Koschmieder (1924), meteorological-range law |
+| LWIR thermal sensitivity / windows | NETD, 8-12 um window | Holst, "Common Sense Approach to Thermal Imaging" (SPIE) |
+
 ## Out of scope (referenced in architecture, not yet modeled)
 
 The PMU / PDU subsystem (BL-005b) will own bus regulation, source

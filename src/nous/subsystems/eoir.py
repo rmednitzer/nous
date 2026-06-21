@@ -47,6 +47,10 @@ _DEFAULT_EO_RANGE_SIGMA = 200.0
 _DEFAULT_IR_RANGE_SIGMA = 150.0
 _DEFAULT_CAL_FLOOR = 0.3
 _DEFAULT_CAL_DRIFT_PER_S = 0.002
+# A positive floor on the sigma divisor: a profile may set cal_floor to 0, and a
+# fully decalibrated payload (cal_factor -> 0) must inflate the sigma, not divide
+# by zero on the tick / tool path.
+_MIN_CAL_DIVISOR = 1e-3
 # Koschmieder constant: meteorological range V (km) = 3.912 / extinction (1/km)
 # at the 2 percent contrast threshold.
 _KOSCHMIEDER = 3.912
@@ -196,7 +200,7 @@ class EoirSubsystem:
     def sensor_obs(self) -> Observation:
         # A degraded calibration is reported as a wider range sigma, so the
         # estimator down-weights an untrustworthy payload toward its prior.
-        cal = max(self._cal_floor, self._cal_factor)
+        cal = max(self._cal_floor, self._cal_factor, _MIN_CAL_DIVISOR)
         return Observation(
             source=self.name,
             ts_s=self._t,

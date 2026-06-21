@@ -441,7 +441,9 @@ class Engine:
         new_eoir = EoirSubsystem(
             new_profile,
             rng=self.rng,
-            ambient_fn=lambda: (self.sensors.temp_c, self.sensors.humidity_pct),
+            # Read the new generation's sensor pack: the constructor recomputes
+            # immediately, so the closure must not capture the pre-reload sensors.
+            ambient_fn=lambda: (new_sensors.temp_c, new_sensors.humidity_pct),
         )
 
         # Every subsystem constructed: commit the new generation atomically.

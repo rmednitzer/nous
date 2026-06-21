@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import numpy as np
@@ -112,6 +113,21 @@ def test_observation_payload_matches_truth() -> None:
     assert obs.source == "eoir"
     assert obs.payload["eo_range_m"] == pytest.approx(truth["eo_range_m"])
     assert obs.payload["ir_range_m"] == pytest.approx(truth["ir_range_m"])
+
+
+def test_zero_cal_floor_does_not_crash_sensor_obs() -> None:
+    # A profile may set cal_floor to 0; drift to a fully decalibrated payload must
+    # inflate the reported sigma, not raise ZeroDivisionError on the obs path.
+    eoir = EoirSubsystem(
+        {"eoir": {"cal_floor": 0.0, "cal_drift_per_s": 5.0}},
+        rng=np.random.default_rng(1),
+    )
+    for _ in range(20):
+        eoir.step(1.0)
+    assert eoir.cal_factor == pytest.approx(0.0)  # floored at zero
+    obs = eoir.sensor_obs()  # must not raise
+    assert obs.noise["eo_range_m_sigma"] > 0.0
+    assert math.isfinite(obs.noise["eo_range_m_sigma"])
 
 
 def test_degraded_calibration_widens_the_reported_sigma() -> None:
