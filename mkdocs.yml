@@ -168,6 +168,7 @@ nav:
       - "0077 EO/IR thermo-optical sensor as a detection-range envelope": adr/0077-eoir-thermo-optical-sensor.md
       - "0078 EO/IR terrain line-of-sight masking": adr/0078-eoir-terrain-line-of-sight.md
       - "0079 perception_range self-model capability": adr/0079-self-model-perception-range.md
+      - "0080 honest multi-source capability quantiles": adr/0080-self-model-honest-multi-source-quantiles.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md

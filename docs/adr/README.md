@@ -82,3 +82,4 @@
 | 0077 | [EO/IR thermo-optical sensor as a detection-range envelope](0077-eoir-thermo-optical-sensor.md) | Accepted | 2026-06-21 |
 | 0078 | [EO/IR terrain line-of-sight masking](0078-eoir-terrain-line-of-sight.md) | Accepted | 2026-06-21 |
 | 0079 | [perception_range self-model capability](0079-self-model-perception-range.md) | Accepted | 2026-06-21 |
+| 0080 | [honest multi-source capability quantiles](0080-self-model-honest-multi-source-quantiles.md) | Accepted | 2026-06-21 |

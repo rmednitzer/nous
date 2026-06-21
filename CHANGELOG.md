@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (honest multi-source capability quantiles, BL-035)
+
+- Self-model capability bands now propagate every uncertain input a capability
+  depends on rather than a single source (ADR 0080), closing the model-card
+  limitation that the bands understated total uncertainty. Each spec constant
+  with no estimator (`battery_wh`, the junction throttle threshold, the benchmark
+  token rate) gains a small profile-configurable design prior under
+  `self_model.priors` (`battery_wh_cv` 0.03, `junction_throttle_sigma_c` 1.5 C,
+  `tok_per_s_cv` 0.10), sampled in the Monte Carlo path and on by default so the
+  bands are honestly wider; a value of 0 recovers the v0.1 band, and a junk
+  profile value falls back to the default. Endurance can additionally propagate
+  the APU-charge and compute-draw posteriors through net load behind the opt-in
+  `self_model.priors.propagate_net_load` (off by default, since the `1/net_w`
+  term saturates near energy balance). The `mode="gaussian"` single-source linear
+  approximation is unchanged. Read-side only: no estimator, subsystem, or MCP
+  tool change.
+
 ### Added (perception_range self-model capability, BL-055)
 
 - The self-model gains a fourth capability, `perception_range_m` (ADR 0079),
