@@ -78,3 +78,4 @@
 | 0073 | [Nonlinear position EKF with GNSS/INS fusion](0073-nonlinear-position-ekf.md) | Accepted | 2026-06-21 |
 | 0074 | [Injectable physics sources, the standalone-to-external seam](0074-injectable-physics-sources.md) | Accepted | 2026-06-21 |
 | 0075 | [PMU/PDU bus regulation and dual-slot battery hot-swap](0075-pmu-dual-slot-hot-swap.md) | Accepted | 2026-06-21 |
+| 0076 | [Error-state IMU bias estimation in the position EKF](0076-error-state-imu-bias-estimation.md) | Accepted | 2026-06-21 |

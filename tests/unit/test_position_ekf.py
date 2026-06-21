@@ -147,3 +147,52 @@ def test_heading_wraps_and_speed_is_nonnegative_in_state() -> None:
         ekf.update(_imu(0.0, math.radians(20.0)))
     h = ekf.state().point["heading_deg"]
     assert 0.0 <= h < 360.0
+
+
+def test_estimates_a_constant_accel_bias_from_gnss() -> None:
+    # The platform truly holds a constant 10 m/s north, so the true longitudinal
+    # acceleration is zero, but the accelerometer reads a constant +0.3 m/s^2
+    # bias. A constant bias accumulates a quadratic position error that GNSS
+    # (which sees the real linear-in-time motion) observes, so the error state
+    # recovers the bias through the same cross-covariance that recovers velocity.
+    ekf = PositionEkf()
+    dt = 0.5
+    bias = 0.3
+    lat = 47.0
+    for i in range(600):
+        lat += 10.0 * dt / _M_PER_DEG
+        ekf.update(_imu(bias, 0.0))
+        ekf.predict(dt)
+        ekf.update(_gnss(lat, 13.0, 500.0, ts=i * dt))
+    s = ekf.state()
+    assert s.point["accel_bias_mps2"] == pytest.approx(bias, abs=0.1)
+    assert s.point["speed_mps"] == pytest.approx(10.0, abs=1.0)
+    # The bias variance has collapsed well below its wide prior (0.25).
+    assert s.covariance["accel_bias_mps2"] < 0.05
+
+
+def test_debiased_coast_tracks_truth_better_than_ignoring_the_bias() -> None:
+    # Converge the accel bias, then lose GNSS and coast on the biased IMU. The
+    # de-biased prediction (accel - b_a ~ 0) holds speed near the true 10 m/s, so
+    # the coast tracks the real trajectory. A filter that ignored the bias would
+    # integrate the raw +0.3 m/s^2 into a runaway speed: over this 20 s coast that
+    # is a ~60 m drift, an order of magnitude worse than the de-biased coast.
+    ekf = PositionEkf()
+    dt = 0.5
+    bias = 0.3
+    lat = 47.0
+    for i in range(600):
+        lat += 10.0 * dt / _M_PER_DEG
+        ekf.update(_imu(bias, 0.0))
+        ekf.predict(dt)
+        ekf.update(_gnss(lat, 13.0, 500.0, ts=i * dt))
+
+    truth_lat = lat
+    for _ in range(40):
+        truth_lat += 10.0 * dt / _M_PER_DEG
+        ekf.update(_imu(bias, 0.0))
+        ekf.predict(dt)  # no GNSS: coast on the de-biased inertial solution
+    est_lat = ekf.state().point["lat"]
+    coast_error_m = abs(est_lat - truth_lat) * _M_PER_DEG
+    naive_drift_m = 0.5 * bias * (40 * dt) ** 2  # 0.5 * a * t^2 if the bias rode raw
+    assert coast_error_m < 0.25 * naive_drift_m

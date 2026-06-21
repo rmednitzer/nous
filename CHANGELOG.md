@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (error-state IMU-bias estimation in the position EKF, BL-026)
+
+- The position EKF grew from `[e, n, v, psi]` to the error-state `[e, n, v, psi,
+  b_a, b_omega]` (ADR 0076, the named follow-on of ADR 0073): the accelerometer and
+  yaw-rate gyro biases are carried as two extra states. `predict` subtracts the
+  estimated bias before integrating the IMU, the Jacobian couples each bias into the
+  state it corrupts, and a constant bias accrues a position error that GNSS observes,
+  so the biases are recovered through the same cross-covariance that recovers speed
+  and heading: no new measurement, two more observable error states. Under a GNSS
+  outage a converged filter now coasts on the de-biased inertial solution instead of
+  drifting on the raw bias (the regression test pins the coast at under a quarter of
+  the drift the bias would otherwise produce). `state()` and `position_status` surface
+  `accel_bias_mps2` / `gyro_bias_rps` with one-sigma bounds, plus the EKF's inferred
+  speed and heading, additively. A new `ImuSubsystem.set_bias` seam injects a known
+  inertial bias (a scenario sensor fault, a test hook). No profile, Protocol, or tool
+  change; LIMITATIONS L13 updated.
+
 ### Added (PMU/PDU bus regulation and dual-slot battery hot-swap, BL-005b)
 
 - A new `subsystems/pmu.py` (`PmuSubsystem`) owns the bus regulation lifted off the

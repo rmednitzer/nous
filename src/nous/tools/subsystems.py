@@ -714,6 +714,20 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                     "alt_sigma_m": round(
                         estimate.covariance.get("alt_m", 0.0) ** 0.5, 4
                     ),
+                    "speed_mps": round(estimate.point.get("speed_mps", 0.0), 3),
+                    "heading_deg": round(estimate.point.get("heading_deg", 0.0), 3),
+                    "accel_bias_mps2": round(
+                        estimate.point.get("accel_bias_mps2", 0.0), 4
+                    ),
+                    "gyro_bias_rps": round(
+                        estimate.point.get("gyro_bias_rps", 0.0), 5
+                    ),
+                    "accel_bias_sigma_mps2": round(
+                        estimate.covariance.get("accel_bias_mps2", 0.0) ** 0.5, 4
+                    ),
+                    "gyro_bias_sigma_rps": round(
+                        estimate.covariance.get("gyro_bias_rps", 0.0) ** 0.5, 5
+                    ),
                     "rejected_updates": _rejected_from_health(estimate),
                 },
             }

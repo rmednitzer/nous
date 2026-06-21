@@ -105,3 +105,22 @@ def test_imu_coast_through_engine_under_gnss_loss(engine: Engine) -> None:
     est_lat = engine.position_est.state().point["lat"]
     truth_lat = engine.position.lat
     assert abs(est_lat - truth_lat) < abs(lat_at_loss - truth_lat)
+
+
+def test_engine_ekf_estimates_an_injected_imu_accel_bias(engine: Engine) -> None:
+    # End to end: a real IMU accelerometer bias, injected as a sensor fault, flows
+    # through the engine tick (update(imu) -> predict -> update(gnss)) and the
+    # error-state EKF recovers it (ADR 0076). GNSS is held, so the bias cannot hide
+    # in position: it is absorbed by the bias state, and position stays locked to
+    # truth while `accel_bias_mps2` converges to the injected value.
+    engine.imu.set_bias(accel_bias=0.4, freeze_walk=True)
+    engine.position.set_position(47.0, 13.0, alt_m=500.0)
+    engine.position.set_velocity(10.0, 0.0)  # 10 m/s north, true accel ~ 0
+    for _ in range(600):
+        engine.position.set_velocity(10.0, 0.0)
+        engine.tick()
+    est = engine.position_est.state()
+    assert est.point["accel_bias_mps2"] == pytest.approx(0.4, abs=0.15)
+    # GNSS held: position tracks truth regardless of the absorbed bias.
+    assert est.point["lat"] == pytest.approx(engine.position.lat, abs=1e-3)
+    assert est.point["lon"] == pytest.approx(engine.position.lon, abs=1e-3)
