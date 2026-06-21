@@ -17,6 +17,11 @@ adapter::
 
     pip install torch genesis-world      # torch first, per the upstream notes
 
+Building a scene needs a working OpenGL backend even headless, because Genesis
+builds a rasterizer regardless of ``show_viewer``: on a server with no display,
+install OSMesa (``libosmesa6``) and set ``PYOPENGL_PLATFORM=osmesa``, or provide
+EGL (``libEGL`` plus a GPU). Without a GL backend ``scene.build`` raises.
+
 Coordinate convention mirrors ``TerrainModel`` so an instance is a drop-in
 wherever a ``TerrainModel`` is injected: a horizontal ``(lat, lon)`` maps through
 the same equirectangular projection from an anchor (``_DEG_TO_M``,
@@ -210,15 +215,16 @@ class GenesisWorldSource:
             )
         scene.build()
 
-        self._gs = gs
         self._scene = scene
         self._field = np.asarray(
             terrain.geoms[0].metadata["height_field"], dtype=np.float64
         )
         if self._platform is not None and any(v != 0.0 for v in platform_velocity_mps):
             vx, vy, vz = platform_velocity_mps
+            # set_dofs_velocity takes an array_like over the free body's 6 DOFs
+            # (3 linear, 3 angular); a numpy array avoids a hard torch import.
             self._platform.set_dofs_velocity(
-                velocity=self._gs.tensor([vx, vy, vz, 0.0, 0.0, 0.0])
+                velocity=np.asarray([vx, vy, vz, 0.0, 0.0, 0.0], dtype=np.float32)
             )
 
     def _scene_xyz(self, lat: float, lon: float, alt_m: float) -> tuple[float, float, float]:
