@@ -231,14 +231,16 @@ def _endurance_capability(
     soc_var = float(estimate.covariance.get("soc_pct", 0.0))
     soc_sigma = math.sqrt(max(0.0, soc_var))
 
-    load_w = float(power.truth().get("load_w", 0.0))
+    # Load is read from the power estimator's belief (ADR 0083), not ground
+    # truth: a well-known input the filter tracks tightly, so endurance reasons
+    # from the same belief surface as SoC and the band stays SoC-responsive near
+    # energy balance. Charge stays on the APU posterior.
+    load_w = float(estimate.point.get("load_w", power.truth().get("load_w", 0.0)))
     charge_w = float(power.truth().get("charge_accepted_w", 0.0))
     net_w = load_w - charge_w
     battery_wh = float(power.profile.get("power", {}).get("battery_wh", 0.0))
 
-    load_sigma = math.sqrt(
-        max(0.0, float(engine.compute_est.state().covariance.get("draw_w", 0.0)))
-    )
+    load_sigma = math.sqrt(max(0.0, float(estimate.covariance.get("load_w", 0.0))))
     charge_sigma = math.sqrt(
         max(0.0, float(engine.apu_est.state().covariance.get("total_w", 0.0)))
     )
@@ -257,8 +259,8 @@ def _endurance_capability(
         remaining_wh = np.clip(battery_samples, 0.0, None) * soc_samples / 100.0
         if priors.propagate_net_load:
             # The charge side carries the APU total-output posterior, the
-            # variable load the compute-draw posterior (on by default, ADR
-            # 0082). Near energy balance the 1/net_w term is heavy-tailed, so a
+            # variable load the power load_w posterior (ADR 0083; on by default,
+            # ADR 0082). Near energy balance the 1/net_w term is heavy-tailed, so a
             # net-charging draw and the explosive tail are capped at the
             # deterministic point estimate: a conservative bound that keeps the
             # band wide without saturating it, so p95 never exceeds the point,
@@ -287,7 +289,7 @@ def _endurance_capability(
         drivers = ["power", "apu"]
     else:
         confidence = max(0.0, 1.0 - soc_sigma / 50.0)
-        drivers = ["power", "compute", "apu"] if priors.propagate_net_load else ["power"]
+        drivers = ["power", "apu"] if priors.propagate_net_load else ["power"]
 
     return Capability(
         name="endurance_min",

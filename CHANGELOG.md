@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (unified load_w channel on the power estimator, ADR 0083)
+
+- `PowerEstimator` gains a `load_w` scalar channel: `PowerSubsystem.sensor_obs`
+  now emits `load_w` (the total electrical load the battery sees, a well-known
+  engine input) with a small observation noise (0.25 W), and the estimator tracks
+  it tightly. The self-model endurance band now draws the load side of `net_w`
+  from this belief (`power_est.point["load_w"]` and `covariance["load_w"]`)
+  instead of peeking at ground truth for the load point and borrowing the
+  compute-draw posterior for its uncertainty; the endurance drivers narrow from
+  `["power", "compute", "apu"]` to `["power", "apu"]`. On the reference profile
+  the load posterior is about 2.4x tighter than the compute-draw proxy it
+  replaces (sigma 0.12 W versus 0.30 W), so the near-balance band becomes
+  genuinely SoC-responsive (the SC-1 band-width margin rises from roughly 2
+  percent to roughly 155 percent), delivering the ADR 0082 revisit-trigger
+  payoff. Additive: a new key in the `Estimate` dicts (no `base.py` Protocol
+  change), engine wiring unchanged, the ADR 0082 conservative cap retained.
+  Read-side only.
+
 ### Changed (net-load propagation is the endurance default, ADR 0082)
 
 - Endurance net-load propagation (the APU-charge and compute-draw posteriors

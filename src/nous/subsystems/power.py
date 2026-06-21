@@ -248,11 +248,13 @@ class PowerSubsystem:
                 "soc_pct": self._soc_pct,
                 "voltage_v": self._voltage_v,
                 "current_a": self._current_a,
+                "load_w": self._load_w,
             },
             noise={
                 "soc_pct_sigma": 0.5,
                 "voltage_v_sigma": 0.05,
                 "current_a_sigma": 0.10,
+                "load_w_sigma": 0.25,
             },
         )
 

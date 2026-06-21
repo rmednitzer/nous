@@ -1,7 +1,8 @@
 """Power state-of-charge estimator: gated Kalman over SoC and voltage.
 
-The estimator runs a scalar Kalman filter over each of SoC and terminal
-voltage. Process noise grows their covariances in :meth:`predict`; an
+The estimator runs a scalar Kalman filter over each of SoC, terminal voltage,
+and total electrical load (``load_w``, ADR 0083). Process noise grows their
+covariances in :meth:`predict`; an
 observation from
 :meth:`~nous.subsystems.power.PowerSubsystem.sensor_obs` folds in through a
 gated Kalman update in :meth:`update`. Each channel rejects a measurement
@@ -10,7 +11,10 @@ so a converged belief stays honest about residual sensor noise, and adopts a
 sustained disagreement through a reset rather than fighting it forever (see
 :mod:`nous.estimators.health`). The last observed ``current_a`` is stored
 verbatim and passed through in :meth:`state` -- it is not filtered and has no
-covariance entry. See ``docs/model-cards/estimator-power-soc.md`` for the
+covariance entry. ``load_w`` is the total device load the battery sees, a
+well-known engine input, so its channel carries a small observation noise and
+converges tightly; the self-model reads this belief for endurance rather than
+ground truth. See ``docs/model-cards/estimator-power-soc.md`` for the
 covariance bound contract (BL-027 carries the full coupled EKF; this build
 ships the gated linear-Gaussian baseline).
 """
@@ -33,6 +37,12 @@ _DEFAULT_SOC_PROCESS_SIGMA_PER_S = 0.05
 _DEFAULT_VOLTAGE_PROCESS_SIGMA_PER_S = 0.01
 _SOC_FALLBACK_SIGMA = 0.5
 _VOLTAGE_FALLBACK_SIGMA = 0.05
+# Load is a well-known input (the engine sets `load_w` from the committed draw),
+# so the channel carries a small observation noise and tracks it tightly.
+_DEFAULT_LOAD_W = 0.0
+_DEFAULT_LOAD_SIGMA = 2.0
+_DEFAULT_LOAD_PROCESS_SIGMA_PER_S = 0.1
+_LOAD_FALLBACK_SIGMA = 0.25
 
 
 class PowerEstimator:
@@ -48,6 +58,9 @@ class PowerEstimator:
         voltage_sigma: float = _DEFAULT_VOLTAGE_SIGMA,
         soc_process_sigma_per_s: float = _DEFAULT_SOC_PROCESS_SIGMA_PER_S,
         voltage_process_sigma_per_s: float = _DEFAULT_VOLTAGE_PROCESS_SIGMA_PER_S,
+        initial_load_w: float = _DEFAULT_LOAD_W,
+        load_sigma: float = _DEFAULT_LOAD_SIGMA,
+        load_process_sigma_per_s: float = _DEFAULT_LOAD_PROCESS_SIGMA_PER_S,
     ) -> None:
         self._t = 0.0
         self._current = 0.0
@@ -62,6 +75,11 @@ class PowerEstimator:
                 float(initial_voltage),
                 float(voltage_sigma) ** 2,
                 ChannelSpec(process_var_per_s=float(voltage_process_sigma_per_s) ** 2),
+            ),
+            "load_w": ScalarChannel(
+                float(initial_load_w),
+                float(load_sigma) ** 2,
+                ChannelSpec(process_var_per_s=float(load_process_sigma_per_s) ** 2),
             ),
         }
 
@@ -90,6 +108,13 @@ class PowerEstimator:
             r = float(noise.get("voltage_v_sigma", _VOLTAGE_FALLBACK_SIGMA)) ** 2
             self._channels["voltage_v"].fuse(voltage, r)
 
+        load = parse_bounded(payload.get("load_w"), 0.0, math.inf)
+        if "load_w" in payload and load is None:
+            self._rejected += 1
+        elif load is not None:
+            r = float(noise.get("load_w_sigma", _LOAD_FALLBACK_SIGMA)) ** 2
+            self._channels["load_w"].fuse(load, r)
+
         current = payload.get("current_a")
         if current is not None:
             try:
@@ -112,6 +137,7 @@ class PowerEstimator:
     def state(self) -> Estimate:
         soc = self._channels["soc_pct"]
         voltage = self._channels["voltage_v"]
+        load = self._channels["load_w"]
         return Estimate(
             source=self.name,
             ts_s=self._t,
@@ -119,7 +145,12 @@ class PowerEstimator:
                 "soc_pct": soc.value,
                 "voltage_v": voltage.value,
                 "current_a": self._current,
+                "load_w": load.value,
             },
-            covariance={"soc_pct": soc.var, "voltage_v": voltage.var},
+            covariance={
+                "soc_pct": soc.var,
+                "voltage_v": voltage.var,
+                "load_w": load.var,
+            },
             health=self.health(),
         )

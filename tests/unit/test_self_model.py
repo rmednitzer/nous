@@ -274,7 +274,7 @@ def test_endurance_net_load_propagation_is_default_and_disablable(engine: Engine
     }
     disabled = assess("status", engine=engine, seed=5).endurance
     assert default is not None and disabled is not None
-    assert default.drivers == ["power", "compute", "apu"]
+    assert default.drivers == ["power", "apu"]
     assert disabled.drivers == ["power"]
     assert (default.p95 - default.p5) > (disabled.p95 - disabled.p5)
     assert default.p5 >= 0.0
@@ -322,7 +322,7 @@ def test_priors_reject_bool_cv_and_coerce_flag(engine: Engine) -> None:
         "self_model": {"priors": {"propagate_net_load": "false"}},
     }
     junk = assess("status", engine=engine, seed=3).endurance
-    assert junk is not None and junk.drivers == ["power", "compute", "apu"]
+    assert junk is not None and junk.drivers == ["power", "apu"]
 
 
 def test_endurance_negative_battery_wh_does_not_raise(engine: Engine) -> None:

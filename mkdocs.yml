@@ -171,6 +171,7 @@ nav:
       - "0080 honest multi-source capability quantiles": adr/0080-self-model-honest-multi-source-quantiles.md
       - "0081 in-tree optional Genesis WorldSource adapter": adr/0081-in-tree-optional-genesis-worldsource.md
       - "0082 net-load propagation is the endurance default": adr/0082-endurance-net-load-propagation-default.md
+      - "0083 a load_w channel on the power estimator": adr/0083-power-estimator-load-channel.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md
