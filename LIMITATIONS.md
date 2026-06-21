@@ -208,24 +208,27 @@ tracked for v0.1.
 
 ## L13. Linear-Gaussian estimators (the position EKF excepted)
 
-**State.** The position estimator is a nonlinear Extended Kalman Filter that
-fuses GNSS with an IMU in a local east-north-up frame (BL-026, ADR 0073): the
-unicycle process couples the axes through `sin`/`cos` of the heading, so
-`predict` propagates the covariance through the analytic Jacobian. The
-remaining estimators are linear Kalman filters (scalar or multi-channel) or a
-particle filter (comms link state). There is no neural estimator, no learned
-residual model, and no online IMU-bias estimation.
+**State.** The position estimator is a nonlinear error-state Extended Kalman
+Filter that fuses GNSS with an IMU in a local east-north-up frame (BL-026,
+ADR 0073, ADR 0076): the unicycle process couples the axes through `sin`/`cos`
+of the heading, so `predict` propagates the covariance through the analytic
+Jacobian, and the accelerometer and yaw-rate gyro biases are carried as two
+error states that GNSS observes through the cross-covariance. The remaining
+estimators are linear Kalman filters (scalar or multi-channel) or a particle
+filter (comms link state). There is no neural estimator and no learned residual
+model.
 
 **Implication.** The linear estimators' covariance bounds are valid only inside
 the Gaussian assumption; heavy-tailed disturbances inflate the actual error
 beyond what the filter reports. The position EKF is nonlinear but still
 Gaussian: its bound holds while the linearisation is good (it degrades far from
-the anchor or during long IMU-only coasts, where an unestimated bias drifts the
-solution).
+the anchor, or during long IMU-only coasts once a bias drifts faster than the
+random-walk process noise tracks). The bias states are observable only under
+motion and a fix, so they are meaningful only after the platform has manoeuvred.
 
 **Tracking.** The position EKF + IMU fusion shipped under [BL-026] (ADR 0073);
-error-state IMU-bias estimation and nonlinear filters for the other channels are
-out of scope for v0.1.
+error-state IMU-bias estimation followed under the same backlog item (ADR 0076).
+Nonlinear filters for the other channels are out of scope for v0.1.
 
 ## L14. Parametric self-model
 

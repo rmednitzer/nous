@@ -69,3 +69,28 @@ def test_bias_walks_deterministically_under_seed() -> None:
         b.step(0.5)
     assert a.accel_bias == b.accel_bias
     assert a.gyro_bias == b.gyro_bias
+
+
+def test_set_bias_injects_a_known_bias_into_the_observation() -> None:
+    imu = ImuSubsystem({})  # no rng: the obs is truth + the injected bias
+    imu.set_bias(accel_bias=0.4, gyro_bias=-0.02)
+    imu.set_motion(0.0, 0.0)
+    imu.step(1.0)
+    imu.set_motion(3.0, 0.0)
+    imu.step(1.0)
+    obs = imu.sensor_obs()
+    assert imu.accel_bias == pytest.approx(0.4)
+    assert imu.gyro_bias == pytest.approx(-0.02)
+    assert obs.payload["accel_mps2"] == pytest.approx(3.0 + 0.4)
+    assert obs.payload["yaw_rate_rps"] == pytest.approx(-0.02)
+
+
+def test_freeze_walk_pins_an_injected_bias_under_stepping() -> None:
+    imu = ImuSubsystem({}, rng=np.random.default_rng(3))
+    imu.set_bias(accel_bias=0.5, gyro_bias=0.01, freeze_walk=True)
+    for _ in range(50):
+        imu.set_motion(8.0, 30.0)
+        imu.step(0.5)
+    # The walk is frozen, so the bias is exactly what was injected.
+    assert imu.accel_bias == pytest.approx(0.5)
+    assert imu.gyro_bias == pytest.approx(0.01)

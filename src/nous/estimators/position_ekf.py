@@ -23,9 +23,12 @@ the same persist-then-reset discipline the scalar channels use. Input validation
 refuses NaN / out-of-range coordinates without poisoning the estimate, and a filter
 coasting without a fix raises ``dead_reckoning`` while its covariance grows.
 
-The IMU bias is not estimated in this increment (a fixed accel / gyro bias drifts
-the dead-reckoned solution during a GNSS outage, which is the realistic, visible
-behaviour); error-state bias estimation is the follow-on.
+The accelerometer and gyro biases are estimated as two extra error states (BL-026
+follow-on, ADR 0076): a constant bias accumulates a position error that GNSS
+observes, so the filter recovers the biases through the same cross-covariance,
+``predict`` subtracts the estimated bias before integrating the IMU, and a GNSS
+outage coasts on the de-biased inertial solution rather than drifting on the raw
+bias. The state is therefore ``[e, n, v, psi, b_a, b_omega]``.
 """
 
 from __future__ import annotations
@@ -52,18 +55,32 @@ _GATE_CHI2_2DOF = 13.816
 _RESET_AFTER = 3
 _ALT_VAR_FLOOR = 0.01
 _ALT_PROCESS_VAR_PER_S = 0.01
+# Error-state IMU biases (ADR 0076): a wide prior so GNSS can pull the bias in,
+# a small random walk so a slowly varying bias stays trackable.
+_INIT_BA_VAR = 0.25
+_INIT_BOMEGA_VAR = 0.01
+_Q_BA_PER_S = 1e-3
+_Q_BOMEGA_PER_S = 1e-5
 
 
 class PositionEkf:
-    """Extended Kalman filter over ``[e, n, v, psi]`` in a local ENU frame."""
+    """EKF over ``[e, n, v, psi, b_a, b_omega]`` in a local ENU frame."""
 
     name: str = "position"
 
     def __init__(self) -> None:
         self._t = 0.0
-        self._x = np.zeros(4)  # [east_m, north_m, speed_mps, heading_rad]
+        # [east_m, north_m, speed_mps, heading_rad, accel_bias, gyro_bias]
+        self._x = np.zeros(6)
         self._p = np.diag(
-            [_INIT_POS_VAR, _INIT_POS_VAR, _INIT_SPEED_VAR, _INIT_HEADING_VAR]
+            [
+                _INIT_POS_VAR,
+                _INIT_POS_VAR,
+                _INIT_SPEED_VAR,
+                _INIT_HEADING_VAR,
+                _INIT_BA_VAR,
+                _INIT_BOMEGA_VAR,
+            ]
         )
         self._anchor: tuple[float, float] | None = None
         self._accel = 0.0
@@ -93,22 +110,28 @@ class PositionEkf:
         if dt <= 0.0:
             return
         self._t += dt
-        e, n, v, psi = self._x
+        e, n, v, psi, b_a, b_omega = self._x
         s, c = math.sin(psi), math.cos(psi)
+        a_corr = self._accel - b_a
+        omega_corr = self._yaw_rate - b_omega
         self._x = np.array(
             [
                 e + v * s * dt,
                 n + v * c * dt,
-                v + self._accel * dt,
-                _wrap_angle(psi + self._yaw_rate * dt),
+                v + a_corr * dt,
+                _wrap_angle(psi + omega_corr * dt),
+                b_a,
+                b_omega,
             ]
         )
         f = np.array(
             [
-                [1.0, 0.0, s * dt, v * c * dt],
-                [0.0, 1.0, c * dt, -v * s * dt],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
+                [1.0, 0.0, s * dt, v * c * dt, 0.0, 0.0],
+                [0.0, 1.0, c * dt, -v * s * dt, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0, -dt, 0.0],
+                [0.0, 0.0, 0.0, 1.0, 0.0, -dt],
+                [0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
             ]
         )
         q = np.diag(
@@ -117,6 +140,8 @@ class PositionEkf:
                 _Q_POS_PER_S * dt,
                 _Q_SPEED_PER_S * dt,
                 _Q_HEADING_PER_S * dt,
+                _Q_BA_PER_S * dt,
+                _Q_BOMEGA_PER_S * dt,
             ]
         )
         self._p = f @ self._p @ f.T + q
@@ -155,7 +180,12 @@ class PositionEkf:
         r_e = (float(obs.noise.get("lon_sigma", 0.0)) * _METERS_PER_DEG_LAT * cos_lat) ** 2
         r_n = (float(obs.noise.get("lat_sigma", 0.0)) * _METERS_PER_DEG_LAT) ** 2
         r = np.diag([max(r_e, _POS_VAR_FLOOR), max(r_n, _POS_VAR_FLOOR)])
-        h = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]])
+        h = np.array(
+            [
+                [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            ]
+        )
         y = np.array([e_meas - self._x[0], n_meas - self._x[1]])
         s_mat = h @ self._p @ h.T + r
         try:
@@ -175,7 +205,7 @@ class PositionEkf:
         k = self._p @ h.T @ s_inv
         self._x = self._x + k @ y
         self._x[3] = _wrap_angle(self._x[3])
-        self._p = (np.eye(4) - k @ h) @ self._p
+        self._p = (np.eye(6) - k @ h) @ self._p
         self._p[0, 0] = max(float(self._p[0, 0]), _POS_VAR_FLOOR)
         self._p[1, 1] = max(float(self._p[1, 1]), _POS_VAR_FLOOR)
         self._fused = True
@@ -185,7 +215,7 @@ class PositionEkf:
         self._fuse_alt(obs)
 
     def state(self) -> Estimate:
-        e, n, v, psi = (float(self._x[i]) for i in range(4))
+        e, n, v, psi, b_a, b_omega = (float(self._x[i]) for i in range(6))
         if self._anchor is not None:
             lat0, lon0 = self._anchor
             cos_lat = max(1e-6, math.cos(math.radians(lat0)))
@@ -201,6 +231,8 @@ class PositionEkf:
             "heading_deg": math.degrees(psi) % 360.0,
             "v_e_mps": v * math.sin(psi),
             "v_n_mps": v * math.cos(psi),
+            "accel_bias_mps2": b_a,
+            "gyro_bias_rps": b_omega,
         }
         covariance = {
             "lat": float(self._p[1, 1]) / (_METERS_PER_DEG_LAT**2),
@@ -210,6 +242,8 @@ class PositionEkf:
             "n_m": float(self._p[1, 1]),
             "speed_mps": float(self._p[2, 2]),
             "heading_rad": float(self._p[3, 3]),
+            "accel_bias_mps2": float(self._p[4, 4]),
+            "gyro_bias_rps": float(self._p[5, 5]),
         }
         return Estimate(
             source=self.name,

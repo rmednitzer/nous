@@ -75,6 +75,26 @@ class ImuSubsystem:
         self._speed_mps = max(0.0, float(speed_mps))
         self._heading_deg = float(heading_deg) % 360.0
 
+    def set_bias(
+        self,
+        *,
+        accel_bias: float | None = None,
+        gyro_bias: float | None = None,
+        freeze_walk: bool = False,
+    ) -> None:
+        """Inject a known inertial-sensor bias (a scenario fault, a test seam).
+
+        ``freeze_walk`` pins the bias by zeroing the random-walk instability, so an
+        injected bias stays constant for a filter to converge against.
+        """
+        if accel_bias is not None:
+            self._accel_bias = float(accel_bias)
+        if gyro_bias is not None:
+            self._gyro_bias = float(gyro_bias)
+        if freeze_walk:
+            self._accel_bias_walk = 0.0
+            self._gyro_bias_walk = 0.0
+
     @property
     def accel_mps2(self) -> float:
         return self._accel_true
