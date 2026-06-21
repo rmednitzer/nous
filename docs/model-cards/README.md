@@ -20,6 +20,7 @@ the same questions:
 | Storage subsystem (NAND wear + capacity) | [subsystem-storage.md](subsystem-storage.md) |
 | Environmental sensor subsystem (ambient ground truth) | [subsystem-sensors.md](subsystem-sensors.md) |
 | Comms subsystem (per-link envelope, propagation, outbox, DTN, EMCON) | [subsystem-comms.md](subsystem-comms.md) |
+| EO/IR thermo-optical subsystem (detection-range envelope) | [subsystem-eoir.md](subsystem-eoir.md) |
 
 | Estimator / Model | Card |
 |-------------------|------|
@@ -30,6 +31,7 @@ the same questions:
 | Compute Kalman | [estimator-compute-kalman.md](estimator-compute-kalman.md) |
 | Storage Kalman | [estimator-storage-kalman.md](estimator-storage-kalman.md) |
 | Environmental sensor Kalman | [estimator-sensors-kalman.md](estimator-sensors-kalman.md) |
+| EO/IR detection-range Kalman | [estimator-eoir-kalman.md](estimator-eoir-kalman.md) |
 | Biometrics Kalman | [estimator-biometrics-kalman.md](estimator-biometrics-kalman.md) |
 | Comms particle filter | [estimator-comms-particle.md](estimator-comms-particle.md) |
 | Inference local mock | [inference-local-mock.md](inference-local-mock.md) |

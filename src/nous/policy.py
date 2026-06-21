@@ -84,6 +84,7 @@ _READ_ONLY_TOOLS = frozenset(
         "inference_status",
         "storage_status",
         "sensors_status",
+        "eoir_status",
         "self_model_assess",
         "self_model_viability",
         "self_estimator_status",

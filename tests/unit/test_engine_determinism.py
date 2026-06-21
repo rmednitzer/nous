@@ -59,6 +59,25 @@ def test_same_seed_produces_identical_comms_filter_state(
         engine_b.stop()
 
 
+def test_same_seed_produces_identical_eoir_state(tmp_nous_home: Path) -> None:
+    """The EO/IR calibration drift draws from the engine RNG (BL-055), so two
+    engines built with the same seed produce identical detection-range belief
+    after the same number of ticks."""
+    engine_a = Engine(seed=42)
+    engine_b = Engine(seed=42)
+    engine_a.start()
+    engine_b.start()
+    try:
+        for _ in range(10):
+            engine_a.tick()
+            engine_b.tick()
+        assert engine_a.eoir_est.state() == engine_b.eoir_est.state()
+        assert engine_a.eoir.truth() == engine_b.eoir.truth()
+    finally:
+        engine_a.stop()
+        engine_b.stop()
+
+
 def test_different_seeds_diverge_under_resampling(tmp_nous_home: Path) -> None:
     """Different seeds drive divergent particle-filter
     trajectories. This is the negative half of the determinism

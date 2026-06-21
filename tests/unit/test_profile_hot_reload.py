@@ -20,7 +20,7 @@ def test_reload_same_profile_returns_summary(engine: Engine) -> None:
     summary = engine.reload_profile()
     assert summary["profile"] == "jetson-agx-orin"
     assert summary["previous"] == "jetson-agx-orin"
-    assert summary["rebuilt_subsystems"] == 10
+    assert summary["rebuilt_subsystems"] == 11
 
 
 def test_reload_preserves_fsm_mode(engine: Engine) -> None:

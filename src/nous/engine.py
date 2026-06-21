@@ -27,6 +27,7 @@ from .estimators.apu import ApuEstimator
 from .estimators.biometrics import BiometricsKalman
 from .estimators.comms import CommsParticleFilter
 from .estimators.compute import ComputeKalman
+from .estimators.eoir import EoirKalman
 from .estimators.position_ekf import PositionEkf
 from .estimators.power import PowerEstimator
 from .estimators.sensors import EnvironmentalKalman
@@ -56,6 +57,7 @@ from .subsystems.apu import ApuSubsystem
 from .subsystems.biometrics import BiometricsSubsystem
 from .subsystems.comms import CommsSubsystem
 from .subsystems.compute import ComputeSubsystem
+from .subsystems.eoir import EoirSubsystem
 from .subsystems.imu import ImuSubsystem
 from .subsystems.inference import InferenceSubsystem
 from .subsystems.pmu import PmuSubsystem
@@ -266,6 +268,11 @@ class Engine:
         self.sensors = SensorsSubsystem(self.profile, rng=self.rng)
         self.biometrics = BiometricsSubsystem(self.profile, rng=self.rng)
         self.imu = ImuSubsystem(self.profile, rng=self.rng)
+        self.eoir = EoirSubsystem(
+            self.profile,
+            rng=self.rng,
+            ambient_fn=lambda: (self.sensors.temp_c, self.sensors.humidity_pct),
+        )
         self.power_est = PowerEstimator(
             initial_soc=self.power.soc_pct,
             initial_voltage=self.power.voltage_v,
@@ -292,6 +299,8 @@ class Engine:
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est = EnvironmentalKalman()
         self.sensors_est.update(self.sensors.sensor_obs())
+        self.eoir_est = EoirKalman()
+        self.eoir_est.update(self.eoir.sensor_obs())
         self.biometrics_est = BiometricsKalman()
         self.biometrics_est.update(self.biometrics.sensor_obs())
         self.state.operator_state, self.state.operator_state_reason = (
@@ -429,6 +438,11 @@ class Engine:
         new_sensors = SensorsSubsystem(new_profile, rng=self.rng)
         new_biometrics = BiometricsSubsystem(new_profile, rng=self.rng)
         new_imu = ImuSubsystem(new_profile, rng=self.rng)
+        new_eoir = EoirSubsystem(
+            new_profile,
+            rng=self.rng,
+            ambient_fn=lambda: (self.sensors.temp_c, self.sensors.humidity_pct),
+        )
 
         # Every subsystem constructed: commit the new generation atomically.
         if new_name != self.settings.profile:
@@ -448,6 +462,7 @@ class Engine:
         self.sensors = new_sensors
         self.biometrics = new_biometrics
         self.imu = new_imu
+        self.eoir = new_eoir
         self._build_dtn_mesh()
 
         self.power_est = PowerEstimator(
@@ -473,6 +488,8 @@ class Engine:
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est = EnvironmentalKalman()
         self.sensors_est.update(self.sensors.sensor_obs())
+        self.eoir_est = EoirKalman()
+        self.eoir_est.update(self.eoir.sensor_obs())
         self.biometrics_est = BiometricsKalman()
         self.biometrics_est.update(self.biometrics.sensor_obs())
 
@@ -498,7 +515,7 @@ class Engine:
         return {
             "profile": self.settings.profile,
             "previous": previous_name,
-            "rebuilt_subsystems": 10,
+            "rebuilt_subsystems": 11,
             "tick": self.state.tick,
             "mode": self.state.mode.value,
         }
@@ -798,6 +815,9 @@ class Engine:
         self.imu.step(dt)
         self.sensors.step(dt)
         self.biometrics.step(dt)
+        # BL-055: the EO/IR payload reads the settled ambient (temp / humidity)
+        # to recompute its detection-range envelope, so it steps after sensors.
+        self.eoir.step(dt)
         load_w = self.compute.draw_w
         ambient_c = self.sensors.temp_c
 
@@ -849,6 +869,8 @@ class Engine:
         self.position_est.update(self.position.sensor_obs())
         self.sensors_est.predict(dt)
         self.sensors_est.update(self.sensors.sensor_obs())
+        self.eoir_est.predict(dt)
+        self.eoir_est.update(self.eoir.sensor_obs())
         self.biometrics_est.predict(dt)
         self.biometrics_est.update(self.biometrics.sensor_obs())
         self.state.operator_state, self.state.operator_state_reason = (
@@ -902,6 +924,7 @@ class Engine:
             ("comms", self.comms_est),
             ("position", self.position_est),
             ("sensors", self.sensors_est),
+            ("eoir", self.eoir_est),
             ("biometrics", self.biometrics_est),
         ):
             estimate = est.state()
@@ -991,6 +1014,13 @@ class Engine:
                 "temp_c": round(self.sensors.temp_c, 3),
                 "humidity_pct": round(self.sensors.humidity_pct, 3),
                 "baro_kpa": round(self.sensors.baro_kpa, 3),
+            },
+            "eoir": {
+                "eo_range_m": round(self.eoir.eo_range_m, 1),
+                "ir_range_m": round(self.eoir.ir_range_m, 1),
+                "cal_factor": round(self.eoir.cal_factor, 4),
+                "obscurant": round(self.eoir.obscurant, 3),
+                "illumination": round(self.eoir.illumination, 3),
             },
             "biometrics": {
                 "heart_rate_bpm": round(self.biometrics.heart_rate_bpm, 2),

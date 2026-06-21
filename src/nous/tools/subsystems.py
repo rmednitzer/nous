@@ -769,6 +769,43 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         return await wrap("sensors_status", {}, ctx, _work)
 
     @mcp.tool()
+    async def eoir_status(ctx: Context | None = None) -> str:
+        """EO/IR payload: per-band detection range, the degrading factors, calibration."""
+
+        async def _work() -> str:
+            truth = dict(app.engine.eoir.truth())
+            estimate = app.engine.eoir_est.state()
+            payload = {
+                "eo_range_m": round(truth["eo_range_m"], 1),
+                "ir_range_m": round(truth["ir_range_m"], 1),
+                "eo_recognition_m": round(truth["eo_recognition_m"], 1),
+                "eo_identification_m": round(truth["eo_identification_m"], 1),
+                "ir_recognition_m": round(truth["ir_recognition_m"], 1),
+                "ir_identification_m": round(truth["ir_identification_m"], 1),
+                "atm_factor_eo": round(truth["atm_factor_eo"], 4),
+                "atm_factor_ir": round(truth["atm_factor_ir"], 4),
+                "ir_contrast_factor": round(truth["ir_contrast_factor"], 4),
+                "eo_illum_factor": round(truth["eo_illum_factor"], 4),
+                "cal_factor": round(truth["cal_factor"], 4),
+                "obscurant": round(truth["obscurant"], 3),
+                "illumination": round(truth["illumination"], 3),
+                "estimate": {
+                    "eo_range_m": round(estimate.point.get("eo_range_m", 0.0), 1),
+                    "eo_range_sigma_m": round(
+                        estimate.covariance.get("eo_range_m", 0.0) ** 0.5, 2
+                    ),
+                    "ir_range_m": round(estimate.point.get("ir_range_m", 0.0), 1),
+                    "ir_range_sigma_m": round(
+                        estimate.covariance.get("ir_range_m", 0.0) ** 0.5, 2
+                    ),
+                    "rejected_updates": _rejected_from_health(estimate),
+                },
+            }
+            return json.dumps(payload)
+
+        return await wrap("eoir_status", {}, ctx, _work)
+
+    @mcp.tool()
     async def biometrics_status(ctx: Context | None = None) -> str:
         """Operator biometrics: heart rate, core temp, hydration, cognitive load."""
 

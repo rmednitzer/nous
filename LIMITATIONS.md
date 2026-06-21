@@ -313,3 +313,27 @@ segment reader (ADR 0026 revisit trigger).
 
 **Tracking.** [BL-031] is `[in-progress]` (shipped). Signed anchors for
 regulated deployments are tracked under [BL-059].
+
+## L19. EO/IR is a capability envelope, not imagery
+
+**State.** The EO/IR subsystem (BL-055, ADR 0077) models the payload as a
+per-band effective detection range, the product of a clear-air reference
+range and atmospheric, signal, and calibration factors. It carries no
+imagery, no per-object track, and no learned detector. The Johnson
+detection / recognition / identification ranges are a deterministic
+geometric scaling of the detection range, not a probability of
+identification. Thermal contrast is computed against a single profile
+target temperature, not a background distribution, and the atmospheric
+model is a Koschmieder meteorological-range cap, not a spectral
+transmittance calculation. There is no terrain line-of-sight masking of a
+specific target yet.
+
+**Implication.** The detection ranges report which band can reach how far
+under the current ambient and calibration, the legible capability a
+controller selects a band on. They are *derived from the profile and the
+sensor-pack seam*, not measured from an optical chain; do not use them for
+real targeting or detection-performance prediction.
+
+**Tracking.** [BL-055] is `[in-progress]` (shipped). Terrain line-of-sight
+masking of a configured target and a self-model `perception_range`
+capability are the named fast-follows in ADR 0077.
