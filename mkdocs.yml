@@ -159,6 +159,7 @@ nav:
       - "0071 Self-model inference status reads the central point, with a degraded advisory": adr/0071-self-model-inference-status-basis.md
       - "0072 Multi-edge terrain diffraction over a procedural world": adr/0072-multi-edge-terrain-diffraction.md
       - "0073 Nonlinear position EKF with GNSS/INS fusion": adr/0073-nonlinear-position-ekf.md
+      - "0074 Injectable physics sources, the standalone-to-external seam": adr/0074-injectable-physics-sources.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md

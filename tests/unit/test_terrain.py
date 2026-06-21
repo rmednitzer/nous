@@ -61,3 +61,56 @@ def test_from_profile_reads_fields() -> None:
     assert t is not None
     assert t.base_elevation_m == 400.0
     assert t.relief_m == 300.0
+
+
+def test_terrain_model_satisfies_world_source_protocol() -> None:
+    from nous.subsystems.terrain import WorldSource
+
+    t = TerrainModel(relief_m=100.0, seed=1)
+    assert isinstance(t, WorldSource)
+
+
+def test_custom_world_source_drives_comms_terrain() -> None:
+    # ADR 0074: any WorldSource, not just the in-tree TerrainModel, plugs into the
+    # comms terrain seam, the standalone-to-external boundary.
+    from nous.subsystems.comms import CommsSubsystem
+
+    class RidgeWorld:
+        def elevation(self, lat: float, lon: float) -> float:
+            return 800.0
+
+        def path_profile(
+            self, lat1: float, lon1: float, lat2: float, lon2: float, n: int
+        ) -> list[tuple[float, float]]:
+            return [(0.0, 500.0), (2000.0, 800.0), (4000.0, 500.0)]
+
+    def _profile() -> dict[str, object]:
+        return {
+            "comms": {
+                "links": [
+                    {
+                        "id": "relay",
+                        "bandwidth_bps": 2_000_000,
+                        "max_age_s": 600.0,
+                        "propagation": {
+                            "peer": {"lat": 47.0, "lon": 12.96, "alt_m": 500.0},
+                            "use_terrain": True,
+                            "tx_power_dbm": 20.0,
+                        },
+                    }
+                ]
+            }
+        }
+
+    with_world = CommsSubsystem(
+        _profile(), position_fn=lambda: (47.0, 13.0, 500.0), terrain=RidgeWorld()
+    )
+    without = CommsSubsystem(_profile(), position_fn=lambda: (47.0, 13.0, 500.0))
+    with_world.step(1.0)
+    without.step(1.0)
+    blocked = with_world.link("relay")
+    clear = without.link("relay")
+    assert blocked is not None and clear is not None
+    assert blocked.path_loss_db is not None and clear.path_loss_db is not None
+    # The injected ridge added multi-edge diffraction loss over the path.
+    assert blocked.path_loss_db > clear.path_loss_db

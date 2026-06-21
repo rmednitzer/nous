@@ -40,7 +40,7 @@ from ..types import LinkEstimate, Observation
 from .propagation import LinkPropagation, rician_fade_db, solve_link_budget
 
 if TYPE_CHECKING:
-    from .terrain import TerrainModel
+    from .terrain import WorldSource
 
 __all__ = ["CommsSubsystem", "Link"]
 
@@ -115,7 +115,7 @@ class CommsSubsystem:
         *,
         rng: np.random.Generator | None = None,
         position_fn: PositionFn | None = None,
-        terrain: TerrainModel | None = None,
+        terrain: WorldSource | None = None,
     ) -> None:
         self.profile = profile
         self._rng = rng  # ADR 0019 follow-up: engine RNG seam

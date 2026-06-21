@@ -26,11 +26,31 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
-__all__ = ["TerrainModel"]
+__all__ = ["TerrainModel", "WorldSource"]
+
+
+@runtime_checkable
+class WorldSource(Protocol):
+    """The world-terrain seam the comms link budget samples (BL-089, ADR 0074).
+
+    The in-tree :class:`TerrainModel` is the standalone default, but any source
+    that answers an elevation at a coordinate and a sampled path profile between
+    two points satisfies the comms subsystem's needs. An out-of-tree adapter (for
+    example one backed by an external physics engine, or by a real elevation-tile
+    dataset) can implement this Protocol and be injected wherever a ``TerrainModel``
+    is today, without ``nous`` importing it: the seam keeps the twin standalone
+    (LIMITATIONS L17) while leaving the world swappable.
+    """
+
+    def elevation(self, lat: float, lon: float) -> float: ...
+
+    def path_profile(
+        self, lat1: float, lon1: float, lat2: float, lon2: float, n: int
+    ) -> list[tuple[float, float]]: ...
 
 _EARTH_RADIUS_M = 6_371_000.0
 _DEG_TO_M = math.pi / 180.0 * _EARTH_RADIUS_M

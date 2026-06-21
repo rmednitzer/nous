@@ -76,3 +76,4 @@
 | 0071 | [Self-model inference status reads the central point, with a degraded advisory](0071-self-model-inference-status-basis.md) | Accepted | 2026-06-21 |
 | 0072 | [Multi-edge terrain diffraction over a procedural world](0072-multi-edge-terrain-diffraction.md) | Accepted | 2026-06-21 |
 | 0073 | [Nonlinear position EKF with GNSS/INS fusion](0073-nonlinear-position-ekf.md) | Accepted | 2026-06-21 |
+| 0074 | [Injectable physics sources, the standalone-to-external seam](0074-injectable-physics-sources.md) | Accepted | 2026-06-21 |

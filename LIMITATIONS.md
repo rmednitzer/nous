@@ -268,7 +268,12 @@ alone.
 other internal repository, public or private, and must remain so.
 
 **Implication.** Code patterns may be ported by hand from other projects;
-runtime dependencies on other internal projects are forbidden.
+runtime dependencies on other internal projects are forbidden. The physics
+inputs are injected behind narrow seams (the engine `rng`, the `position_fn`
+getter, the `WorldSource` terrain, the `set_velocity` / `set_motion` motion
+commands), so an out-of-tree adapter, including one backed by an external
+physics engine, can drive the twin without `nous` importing it (ADR 0074). The
+in-tree default for each seam stays standalone.
 
 **Tracking.** The em-dash rule is enforced today by
 `scripts/policy_checks.sh` (the `policy` CI job and `make policy`

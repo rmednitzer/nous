@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (injectable physics-source seam, ADR 0074)
+
+- The procedural world is now a `WorldSource` Protocol (`subsystems/terrain.py`):
+  `elevation` + `path_profile`, the methods the comms link budget samples. The
+  in-tree `TerrainModel` is the standalone default and satisfies it structurally;
+  the comms subsystem types its `terrain` parameter as `WorldSource`, so any
+  conforming source (an out-of-tree adapter backed by an external physics engine or
+  a real elevation dataset) drops in without `nous` importing it. Together with the
+  existing `rng` / `position_fn` / `set_motion` seams, this is the documented
+  standalone-to-external physics boundary that keeps the twin standalone (L17) while
+  leaving the world swappable. Documentation and contract only; no in-tree behaviour
+  change.
+
 ### Added (nonlinear position EKF with GNSS/INS fusion, BL-026)
 
 - The position estimator is now a nonlinear Extended Kalman Filter that fuses GNSS
