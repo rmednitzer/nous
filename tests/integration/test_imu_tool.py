@@ -34,7 +34,13 @@ async def test_imu_status_reports_truth_and_estimate(config: Settings) -> None:
     ):
         assert key in out
     assert "estimate" in out
-    for key in ("accel_bias_mps2", "gyro_bias_rps", "accel_bias_sigma_mps2"):
+    for key in (
+        "accel_bias_mps2",
+        "gyro_bias_rps",
+        "accel_bias_sigma_mps2",
+        "gyro_bias_sigma_rps",
+        "rejected_updates",
+    ):
         assert key in out["estimate"]
     assert out["accel_sigma_mps2"] >= 0.0
     assert out["gyro_sigma_rps"] >= 0.0
