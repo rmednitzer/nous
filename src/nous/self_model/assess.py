@@ -41,6 +41,9 @@ Capabilities surfaced:
 * ``inference_capacity_tok_per_s`` -- token-per-second the compute
   subsystem can sustain right now (after thermal clipping). Driven by
   ``compute`` (load_pct + thermal throttle).
+* ``perception_range_m`` -- best-band EO/IR detection range, the
+  device's perception reach (BL-055, ADR 0079). Driven by ``eoir``
+  (the better of the electro-optical and infrared range estimates).
 
 The function takes an :class:`~nous.engine.Engine` so the caller does
 not have to thread every estimator through manually; passing

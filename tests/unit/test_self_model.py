@@ -182,7 +182,10 @@ def test_tick_refresh_matches_monte_carlo_points(engine: Engine) -> None:
     mc = assess("tick", engine=engine, mode="monte_carlo")
     for cap in (mc.endurance, mc.thermal_headroom, mc.inference_capacity, mc.perception_range):
         assert cap is not None
-        assert caps[cap.name] == pytest.approx(cap.point)
+        # Strict equality, not approx: point is computed deterministically before
+        # the mode branch, so the Gaussian refresh and a Monte Carlo read must
+        # produce the identical float -- the whole premise of the fast path.
+        assert caps[cap.name] == cap.point
 
 
 def test_viability_gates_on_perception_range(engine: Engine) -> None:
@@ -208,7 +211,10 @@ def test_monte_carlo_and_gaussian_modes_agree_on_point(engine: Engine) -> None:
         mc_cap = getattr(mc, name)
         gauss_cap = getattr(gauss, name)
         assert mc_cap is not None and gauss_cap is not None
-        assert mc_cap.point == pytest.approx(gauss_cap.point), name
+        # Strict equality: point is rng-independent and computed before the mode
+        # branch, so any drift between modes is a real regression the fast path
+        # must not tolerate, not a tolerable numeric wobble.
+        assert mc_cap.point == gauss_cap.point, name
 
 
 def test_assess_is_deterministic_under_seed(engine: Engine) -> None:
