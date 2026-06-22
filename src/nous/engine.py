@@ -921,10 +921,20 @@ class Engine:
         Imported lazily to keep the engine module free of a self_model
         import at module load (the self_model imports engine through
         ``TYPE_CHECKING`` only).
+
+        The tick loop reads only each claim's ``point`` (the deterministic
+        headline), discarding the quantile bands, so it calls ``assess`` in
+        the cheap ``mode="gaussian"`` path: ``point`` is mode-invariant
+        (pinned by ``test_monte_carlo_and_gaussian_modes_agree_on_point``),
+        so this leaves ``state.last_capabilities`` byte-for-byte identical
+        while skipping the per-tick Monte Carlo sampling (BL-073). The
+        tool-facing reads (``self_model_assess`` / ``self_model_situation``)
+        call ``assess`` fresh in the default Monte Carlo mode, so the
+        calibrated bands a controller sees are unaffected.
         """
         from .self_model.assess import assess
 
-        a = assess("tick", engine=self)
+        a = assess("tick", engine=self, mode="gaussian")
         caps: dict[str, float] = {}
         for cap in (a.endurance, a.thermal_headroom, a.inference_capacity, a.perception_range):
             if cap is not None:
