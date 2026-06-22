@@ -111,6 +111,16 @@ class ImuSubsystem:
     def gyro_bias(self) -> float:
         return self._gyro_bias
 
+    @property
+    def accel_sigma(self) -> float:
+        """Accelerometer white-noise standard deviation (m/s^2)."""
+        return self._accel_sigma
+
+    @property
+    def gyro_sigma(self) -> float:
+        """Yaw-rate gyro white-noise standard deviation (rad/s)."""
+        return self._gyro_sigma
+
     def step(self, dt: float) -> None:
         if dt <= 0.0:
             return

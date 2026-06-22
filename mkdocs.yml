@@ -172,6 +172,7 @@ nav:
       - "0081 in-tree optional Genesis WorldSource adapter": adr/0081-in-tree-optional-genesis-worldsource.md
       - "0082 net-load propagation is the endurance default": adr/0082-endurance-net-load-propagation-default.md
       - "0083 a load_w channel on the power estimator": adr/0083-power-estimator-load-channel.md
+      - "0084 imu_status read tool": adr/0084-imu-status-tool.md
       # END generated ADR nav
   - STPA:
       - Overview: stpa/README.md

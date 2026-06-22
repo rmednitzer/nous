@@ -31,6 +31,7 @@ the committed copy after changing a tool's signature or docstring.
 | `emcon_set` | T2 | Set the active EMCON emission profile (T2, BL-060 / ADR 0065). |
 | `emcon_status` | T0 | Read the EMCON emission posture: active profile and permitted links (T0, BL-060). |
 | `eoir_status` | T0 | EO/IR payload: per-band detection range, the degrading factors, calibration. |
+| `imu_status` | T0 | IMU subsystem: strapdown accelerometer + yaw-rate gyro and bias. |
 | `inference_cloud` | T2 | Cloud-path inference through the SC-5 fallback ladder (ADR 0034). |
 | `inference_local` | T1 | Local-path inference. |
 | `inference_status` | T0 | Inference subsystem totals: calls, tokens, joules, last latency. |
@@ -484,6 +485,16 @@ tool registry.
 {
   "properties": {},
   "title": "eoir_statusArguments",
+  "type": "object"
+}
+```
+
+### `imu_status`
+
+```json
+{
+  "properties": {},
+  "title": "imu_statusArguments",
   "type": "object"
 }
 ```

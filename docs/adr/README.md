@@ -86,3 +86,4 @@
 | 0081 | [in-tree optional Genesis WorldSource adapter](0081-in-tree-optional-genesis-worldsource.md) | Accepted | 2026-06-21 |
 | 0082 | [net-load propagation is the endurance default](0082-endurance-net-load-propagation-default.md) | Accepted | 2026-06-21 |
 | 0083 | [a load_w channel on the power estimator](0083-power-estimator-load-channel.md) | Accepted | 2026-06-21 |
+| 0084 | [imu_status read tool](0084-imu-status-tool.md) | Accepted | 2026-06-22 |

@@ -736,6 +736,54 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
         return await wrap("position_status", {}, ctx, _work)
 
     @mcp.tool()
+    async def imu_status(ctx: Context | None = None) -> str:
+        """IMU subsystem: strapdown accelerometer + yaw-rate gyro and bias.
+
+        Reports the inertial truth (along-track acceleration, yaw rate), the
+        slowly drifting sensor biases that corrupt the raw signal, and the
+        white-noise envelope of the measurement. The IMU has no estimator of
+        its own; the GNSS/INS EKF (the position estimator) infers the two
+        biases as part of its error state (ADR 0076), so the ``estimate`` block
+        carries the filter's inferred biases with one-sigma bounds, readable
+        against the truth to see how well the filter has converged.
+
+        Reads ``truth()`` and the EKF ``state()`` only, never ``sensor_obs()``,
+        so the read draws no engine RNG and leaves the simulation's seeded
+        determinism intact (ADR 0019), the same discipline ``position_status``
+        follows.
+        """
+
+        async def _work() -> str:
+            truth = dict(app.engine.imu.truth())
+            estimate = app.engine.position_est.state()
+            payload = {
+                "accel_mps2": round(truth["accel_mps2"], 4),
+                "yaw_rate_rps": round(truth["yaw_rate_rps"], 5),
+                "accel_bias_mps2": round(truth["accel_bias"], 5),
+                "gyro_bias_rps": round(truth["gyro_bias"], 6),
+                "accel_sigma_mps2": round(app.engine.imu.accel_sigma, 5),
+                "gyro_sigma_rps": round(app.engine.imu.gyro_sigma, 6),
+                "estimate": {
+                    "accel_bias_mps2": round(
+                        estimate.point.get("accel_bias_mps2", 0.0), 5
+                    ),
+                    "gyro_bias_rps": round(
+                        estimate.point.get("gyro_bias_rps", 0.0), 6
+                    ),
+                    "accel_bias_sigma_mps2": round(
+                        estimate.covariance.get("accel_bias_mps2", 0.0) ** 0.5, 5
+                    ),
+                    "gyro_bias_sigma_rps": round(
+                        estimate.covariance.get("gyro_bias_rps", 0.0) ** 0.5, 6
+                    ),
+                    "rejected_updates": _rejected_from_health(estimate),
+                },
+            }
+            return json.dumps(payload)
+
+        return await wrap("imu_status", {}, ctx, _work)
+
+    @mcp.tool()
     async def sensors_status(ctx: Context | None = None) -> str:
         """Environmental sensor pack: ambient temp, humidity, baro pressure."""
 
