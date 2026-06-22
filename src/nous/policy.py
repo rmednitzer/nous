@@ -79,6 +79,7 @@ _READ_ONLY_TOOLS = frozenset(
         "dtn_mesh",
         "emcon_status",
         "position_status",
+        "imu_status",
         "biometrics_status",
         "compute_status",
         "inference_status",

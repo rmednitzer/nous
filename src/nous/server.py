@@ -289,9 +289,9 @@ Device telemetry (T0):
   audit_verify / audit_anchor_verify
 
 Subsystem reads (T0):
-  power_status / apu_status / thermal_status / compute_status / storage_status
-  comms_state / comms_status / position_status / sensors_status
-  biometrics_status / inference_status
+  power_status / pmu_status / apu_status / thermal_status / compute_status
+  storage_status / comms_state / comms_status / position_status / imu_status
+  sensors_status / biometrics_status / eoir_status / inference_status
 
 Self-model and estimators (T0):
   self_model_assess / self_model_viability / self_estimator_status

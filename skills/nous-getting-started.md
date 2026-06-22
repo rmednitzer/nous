@@ -42,6 +42,9 @@ anything.
   and the disposition counters (BL-077 / ADR 0047).
 - `position_status` returns lat / lon / alt, fix state, dead-reckoning
   duration, and the position Kalman estimate.
+- `imu_status` returns the strapdown accelerometer + yaw-rate gyro
+  truth, the true sensor biases and noise envelope, and the GNSS/INS
+  EKF's inferred biases with one-sigma bounds (BL-026 / ADR 0084).
 - `sensors_status` returns ambient temperature, humidity, and
   barometric pressure with Kalman covariance.
 - `biometrics_status` returns heart rate, core temperature, hydration,
