@@ -174,6 +174,17 @@ def test_engine_tick_refreshes_last_capabilities(engine: Engine) -> None:
     assert "perception_range_m" in caps
 
 
+def test_tick_refresh_matches_monte_carlo_points(engine: Engine) -> None:
+    """The Gaussian fast path on the tick loop (BL-073) yields the same headline
+    points a full Monte Carlo ``assess`` would, so the cheaper refresh leaves
+    ``state.last_capabilities`` identical to the calibrated tool-facing read."""
+    caps = engine.state.last_capabilities
+    mc = assess("tick", engine=engine, mode="monte_carlo")
+    for cap in (mc.endurance, mc.thermal_headroom, mc.inference_capacity, mc.perception_range):
+        assert cap is not None
+        assert caps[cap.name] == pytest.approx(cap.point)
+
+
 def test_viability_gates_on_perception_range(engine: Engine) -> None:
     a = assess("detect a target", engine=engine)
     reachable = viability(a, "detect", requirements={"perception_range_m": 1000.0})
@@ -184,13 +195,20 @@ def test_viability_gates_on_perception_range(engine: Engine) -> None:
 
 
 def test_monte_carlo_and_gaussian_modes_agree_on_point(engine: Engine) -> None:
-    """The headline point is mode-invariant; only the bands shift between MC and Gaussian."""
+    """The headline point is mode-invariant; only the bands shift between MC and Gaussian.
+
+    The tick-loop capability refresh relies on this: it reads only each claim's
+    ``point`` and calls ``assess`` in the cheaper Gaussian mode (BL-073), so a
+    drift between the two modes' points would silently change
+    ``state.last_capabilities``. Pin all four claims, not just two.
+    """
     mc = assess("status", engine=engine, mode="monte_carlo")
     gauss = assess("status", engine=engine, mode="gaussian")
-    assert mc.endurance is not None and gauss.endurance is not None
-    assert mc.endurance.point == pytest.approx(gauss.endurance.point)
-    assert mc.thermal_headroom is not None and gauss.thermal_headroom is not None
-    assert mc.thermal_headroom.point == pytest.approx(gauss.thermal_headroom.point)
+    for name in ("endurance", "thermal_headroom", "inference_capacity", "perception_range"):
+        mc_cap = getattr(mc, name)
+        gauss_cap = getattr(gauss, name)
+        assert mc_cap is not None and gauss_cap is not None
+        assert mc_cap.point == pytest.approx(gauss_cap.point), name
 
 
 def test_assess_is_deterministic_under_seed(engine: Engine) -> None:

@@ -22,12 +22,15 @@ energy balance the ``1/net_w`` term is heavy-tailed, so the band stays
 wide and its upper tail is capped conservatively at the point estimate
 there rather than saturating (ADR 0082). So the bands reflect total
 uncertainty rather than understating it behind a single source. The
-number of samples (``_MONTE_CARLO_SAMPLES``) is small
-enough to stay well under the per-tick budget but large enough to be
-stable around 5 / 95 percentiles for the shapes the simulator produces.
-The legacy Gaussian approximation is retained as a fallback when
-``mode="gaussian"`` so a test that needs the v0.1 contract can still opt
-out; it stays a single-source linear approximation.
+number of samples (``_MONTE_CARLO_SAMPLES``) is large enough to be
+stable around 5 / 95 percentiles for the shapes the simulator produces
+while staying cheap enough for an interactive tool read.
+
+The Gaussian approximation (``mode="gaussian"``) is a single-source
+linear fallback that skips the sampling: a test that needs the v0.1
+contract can opt out, and the engine's per-tick capability refresh uses
+it because it reads only each claim's mode-invariant ``point`` and so
+does not pay for bands it discards (BL-073).
 
 Capabilities surfaced:
 
