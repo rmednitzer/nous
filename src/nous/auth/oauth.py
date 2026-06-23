@@ -22,7 +22,9 @@ mints a new pair with the same ``issue_id`` and marks the consumed
 refresh record as ``consumed=True`` (it is not popped, so reuse stays
 detectable). A subsequent ``load_refresh_token`` or
 ``exchange_refresh_token`` against the consumed token revokes every
-record in the family (access plus refresh), per OAuth 2.1 BCP §4.13.
+record in the family (access plus refresh), per RFC 9700 (OAuth 2.0
+Security BCP) §4.14 (the draft-ietf-oauth-security-topics §4.13 that
+the published RFC renumbered).
 
 Errors here must surface as auth failures, never as a crashed transport;
 all I/O is defensive.
@@ -368,7 +370,7 @@ class FileOAuthProvider(OAuthAuthorizationServerProvider):  # type: ignore[type-
                 self._tokens.save(tokens)
                 return None
             if rec.get("consumed"):
-                # OAuth 2.1 BCP §4.13: a refresh token presented after
+                # RFC 9700 (OAuth 2.0 Security BCP) §4.14: a refresh token presented after
                 # it was rotated is a reuse signal. Revoke the entire
                 # family (every active access plus refresh sharing
                 # ``issue_id``) and refuse the load.

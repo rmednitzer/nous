@@ -52,14 +52,20 @@ exposes a small piece of it accurately.
 
 ```
 src/nous/
-  cli.py config.py policy.py audit.py runner.py server.py
-  engine.py tick.py db.py anthropic_client.py types.py
+  cli.py config.py policy.py audit.py audit_anchor.py runner.py server.py
+  engine.py tick.py db.py anthropic_client.py anthropic_status.py
+  inference_fallback.py telemetry.py clocks.py types.py
+  tools/        meta, subsystems, self_model, interop, inference,
+                publish, scenarios, state, audit (per-capability MCP
+                handlers; comms reads/writes live in subsystems)
+  safety/       enforcer (runtime SC-2 / SC-8 + label gates)
   state/        machine.py operator_state.py comms_state.py failsafe.py
                 comms_outbox.py dtn_mesh.py emcon.py
-  subsystems/   power, apu, thermal, compute, storage, sensors,
-                position, biometrics, comms, inference, propagation
-  estimators/   position, power, thermal, biometrics, comms, compute,
-                apu, sensors, storage, base, health
+  subsystems/   power, pmu, apu, thermal, compute, storage, sensors,
+                position, biometrics, comms, inference, imu, eoir,
+                propagation, terrain, genesis_world
+  estimators/   position, position_ekf, power, thermal, biometrics, comms,
+                compute, apu, sensors, storage, eoir, base, health
   self_model/   assess, explain, viability, situation
   interop/      cot, sensorthings, misb_klv, nmea0183, stanag_4774, mqtt
   auth/         oauth (file-backed issuer)

@@ -1535,3 +1535,41 @@ class TestBL111InferenceStatusBasisIsDeliberate:
         )
         recs = _recommendations(engine, {"inference_capacity_tok_per_s": degraded})
         assert any(r.startswith("inference:") for r in recs)
+
+
+class TestAudit20260623SelfEstimatorStatusCoversEoir:
+    """2026-06-23 audit (MED): ``self_estimator_status`` covers every estimator.
+
+    Original observation: the tool iterated nine estimators and omitted
+    ``eoir_est``, so the EO/IR Kalman's health, innovation ratios, and rejection
+    counts were invisible to a controller reading all estimator health, even
+    though the engine constructs, ticks, and finiteness-checks it.
+
+    The pin is derived from the engine rather than a static list: it collects
+    every ``*_est`` estimator the engine holds and asserts the tool reports
+    exactly that set, so a future estimator added to the engine but omitted from
+    the read fails here automatically.
+    """
+
+    @pytest.mark.asyncio
+    async def test_tool_covers_every_engine_estimator(self, config: Settings) -> None:
+        from nous.server import build_app
+
+        app = build_app(config)
+        engine = app.engine
+        engine_sources = {
+            getattr(engine, attr).state().source
+            for attr in dir(engine)
+            if attr.endswith("_est") and hasattr(getattr(engine, attr), "state")
+        }
+        assert "eoir" in engine_sources  # guards the test's own premise
+
+        result: Any = await app.mcp.call_tool("self_estimator_status", {})
+        content, _structured = result
+        rows = json.loads(content[0].text)["estimators"]
+        tool_sources = {row["source"] for row in rows}
+
+        assert tool_sources == engine_sources, (
+            f"omitted: {engine_sources - tool_sources}; "
+            f"extra: {tool_sources - engine_sources}"
+        )

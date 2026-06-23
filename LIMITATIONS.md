@@ -84,7 +84,7 @@ middle of a scenario run. The CLI's `scenario` subcommand reconstructs
 the engine for each invocation, and the scenario timeline has no
 profile-swap injector.
 
-**Tracking.** [BL-039] runtime hot-reload is `[in-progress]` (shipped);
+**Tracking.** [BL-039] runtime hot-reload is `[done]`;
 mid-scenario profile swap stays out of scope for v0.1.
 
 ## L6. Parametric biometrics
@@ -318,7 +318,7 @@ them. The anchor verifier also assumes the bundled logrotate naming; a
 deployment that rotates the audit log differently needs a matching
 segment reader (ADR 0026 revisit trigger).
 
-**Tracking.** [BL-031] is `[in-progress]` (shipped). Signed anchors for
+**Tracking.** [BL-031] is `[done]`. Signed anchors for
 regulated deployments are tracked under [BL-059].
 
 ## L19. EO/IR is a capability envelope, not imagery

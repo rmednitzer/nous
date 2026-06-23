@@ -7,7 +7,17 @@ yet?" questions.
 
 The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`. Two deployment failure modes found on `nous-prod-01` are closed in code: `deploy/install.sh` no longer installs `auto-update.sh` onto itself (the self-install errored under `set -e` and aborted every deploy after the `git reset`, the root cause of the freeze; BL-063), and `deploy/auto-update.sh` now rolls `HEAD` back and reinstalls the previous good artifacts on any failed deploy. The VM was manually resynced on 2026-05-28 (restarted onto current `main`; verified 29 tools, calibrated self-model, `audit.degraded:false`, so AUDIT N2 is cleared). A separate fix (BL-064 / ADR 0024) makes the engine tick at process scope: under `stateless_http=True` the per-request server lifespan had been rebooting the engine on every tool call, so `tick` and the FSM never advanced.
 
-Last reviewed: 2026-06-15 ([`docs/audit-2026-06-15b.md`](docs/audit-2026-06-15b.md),
+Last reviewed: 2026-06-23 ([`docs/audit-2026-06-23.md`](docs/audit-2026-06-23.md),
+a distill / validate / reconcile pass: the physics constants (Friis, kTB noise,
+ITU-R P.526, Koschmieder, Peukert, methanol LHV), the Anthropic model identifiers
+and prompt-cache discipline, and the standards citations (BPv7 / BPSec / RFC 9700
+OAuth BCP) were re-verified against trusted sources, and the code-versus-doc drift
+the two prior passes had accrued was fixed: the `self_estimator_status` EO/IR
+omission, the stale `rebuilt_subsystems` count, the RFC 9700 section number, the
+STATUS / LIMITATIONS / CLAUDE layout staleness, and a model card for the active
+position EKF). Prior: 2026-06-16
+([`docs/audit-2026-06-16.md`](docs/audit-2026-06-16.md), the BL-109 to BL-111
+remediation pass). Prior: 2026-06-15 ([`docs/audit-2026-06-15b.md`](docs/audit-2026-06-15b.md),
 a documentation and hardware-profile cross-check: code-comment, markdown, and
 BOM-versus-datasheet verification against trusted sources, fixing the DTN and
 audit-anchor doc drift and three profile/BOM number errors). Prior: 2026-06-14
@@ -36,7 +46,7 @@ for the prior baseline.
 
 Deployment-side status note: the L1 subsystem rollout has been on
 `origin/main` since PR #38, so the auto-update timer lands the
-current fifty-tool surface on the live VM on the next poll after
+current fifty-three-tool surface on the live VM on the next poll after
 `origin/main` advances (no-op when the remote HEAD is unchanged).
 Eight audit findings have closed since the 2026-05-23 baseline and
 the post-baseline §10 re-audit: **C3** (FastMCP lifespan ticks the
@@ -68,9 +78,9 @@ re-audit).
 | Phase | Name | State | Scope |
 |-------|------|-------|-------|
 | L0 | Scaffold | stable | Layout, governance docs, audited tool surface, FSM, engine tick, hardware-profile loader, OAuth issuer. v0.1 shipped; the FastMCP lifespan now drives `tick_loop` so the live server advances state (PR #40 + #42). |
-| L1 | Subsystem models + state machine | in-progress | All ten subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) implement step / truth / sensor_obs with live estimators; the state machine transitions on derived OperatorState and CommsState. Self-model layer (BL-018) now emits real capability claims; scenario loader / injectors / runner (BL-014) drive the engine end-to-end; SQLite migration (BL-015) and FSM transition persistence (BL-017) ship. The audit hash chain (BL-016) ships behind ADR 0025 and the daily anchor (BL-031) behind ADR 0026; the SQLite audit mirror (BL-065) remains an optional follow-up. |
-| L2 | claude.ai integration + scenarios | planned | HTTP transport with OAuth + Caddy lockdown in place; scenario pack runs end-to-end; biometrics physiology-grounded; profile hot-reload. |
-| L3 | STPA completion + benchmarks | planned | STPA derived requirements complete; comms propagation model; learned self-model; multi-tenant claude.ai; real local inference; additional interop adapters. |
+| L1 | Subsystem models + state machine | in-progress | All ten core subsystems (power, APU, thermal, compute, inference, storage, comms, position, sensors, biometrics) implement step / truth / sensor_obs with live estimators, joined since by the PMU dual-slot regulator (BL-005b), the strapdown IMU (BL-026), and the EO/IR payload (BL-055), plus the propagation, terrain, and Genesis world-source support modules; the state machine transitions on derived OperatorState and CommsState. Self-model layer (BL-018) now emits real capability claims; scenario loader / injectors / runner (BL-014) drive the engine end-to-end; SQLite migration (BL-015) and FSM transition persistence (BL-017) ship. The audit hash chain (BL-016) ships behind ADR 0025 and the daily anchor (BL-031) behind ADR 0026; the SQLite audit mirror (BL-065) remains an optional follow-up. |
+| L2 | claude.ai integration + scenarios | in-progress | HTTP transport with OAuth + Caddy lockdown, the scenario pack running end-to-end, and profile hot-reload all ship; physiology-grounded biometrics (BL-040) and multi-tenant integration (BL-045) remain. |
+| L3 | STPA completion + benchmarks | in-progress | STPA derived requirements complete and the comms propagation model ships (link budget, terrain diffraction; BL-048 / BL-088 / BL-089); learned self-model, multi-tenant claude.ai, real local inference, and additional interop adapters remain. |
 
 ## Per-document maturity
 
@@ -91,7 +101,7 @@ re-audit).
 | `docs/deployment.md` | in-progress |
 | `docs/releasing.md` | in-progress |
 | `docs/backlog.md` | in-progress |
-| `docs/adr/0001` through `docs/adr/0075` | stable (decisions, not implementations) |
+| `docs/adr/0001` through `docs/adr/0084` | stable (decisions, not implementations) |
 | `docs/stpa/01..11` | in-progress (BL-044: derived requirements + coverage report complete) |
 | `docs/conformance/*` | in-progress |
 | `docs/model-cards/*` | in-progress |
@@ -146,7 +156,12 @@ re-audit).
 ## Quality gates
 
 - `make check` (ruff + mypy strict + pytest) is green on `main` and every
-  feature branch before merge. 1076 tests pass at HEAD: BL-103 (atomic profile
+  feature branch before merge. 1223 tests pass at HEAD (1226 collected, 3
+  skipped): the 2026-06-23 distill / validate pass added the
+  `self_estimator_status` EO/IR-coverage tests, on top of the count carried
+  through BL-104 to BL-113 and the 2026-06-16 audit. The
+  historical chain below is preserved for provenance. 1076 tests passed at the
+  BL-103 increment: BL-103 (atomic profile
   reload, ADR 0069) added one (a reload to a profile with a malformed section fails
   closed with the previous profile and subsystems intact, in
   `tests/unit/test_profile_hot_reload.py`), on top of the 1075 from BL-098/099/100
