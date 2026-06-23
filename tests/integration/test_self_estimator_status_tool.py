@@ -36,7 +36,12 @@ async def test_self_estimator_status_includes_every_estimator(config: Settings) 
         "eoir",
         "biometrics",
     }
-    assert expected <= sources, f"missing estimators: {expected - sources}"
+    # Exact equality, not subset: a new estimator omitted from the tool must fail
+    # here, not slip through. (The dynamic engine-derived pin lives in the
+    # regression suite, `TestAudit20260623SelfEstimatorStatusCoversEoir`.)
+    assert sources == expected, (
+        f"missing: {expected - sources}; unexpected: {sources - expected}"
+    )
 
 
 async def test_self_estimator_status_surfaces_eoir_health(config: Settings) -> None:

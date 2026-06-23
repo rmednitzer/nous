@@ -56,7 +56,8 @@ src/nous/
   engine.py tick.py db.py anthropic_client.py anthropic_status.py
   inference_fallback.py telemetry.py clocks.py types.py
   tools/        meta, subsystems, self_model, interop, inference,
-                scenarios, comms, state (per-capability MCP handlers)
+                publish, scenarios, state, audit (per-capability MCP
+                handlers; comms reads/writes live in subsystems)
   safety/       enforcer (runtime SC-2 / SC-8 + label gates)
   state/        machine.py operator_state.py comms_state.py failsafe.py
                 comms_outbox.py dtn_mesh.py emcon.py
