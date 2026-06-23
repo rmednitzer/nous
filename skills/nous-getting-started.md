@@ -28,6 +28,9 @@ anything.
 - `apu_status` returns per-source power (solar, fuel cell, vehicle
   tether, USB-C PD) plus fuel level. APU is strictly auxiliary
   (ADR-0015); every watt it produces flows through the battery.
+- `pmu_status` returns the bus regulator and dual-slot battery
+  arbitration (active pack, charge limit, CC/CV taper, hot-swap
+  state; BL-005b / ADR 0075).
 - `thermal_status` returns the two-state thermal model (junction +
   enclosure + ambient) and the throttle headroom.
 - `compute_status` returns the load fraction, electrical draw, and
@@ -49,6 +52,10 @@ anything.
   barometric pressure with Kalman covariance.
 - `biometrics_status` returns heart rate, core temperature, hydration,
   and cognitive-load proxy with Kalman covariance.
+- `eoir_status` returns the EO/IR payload's per-band detection-range
+  envelope, the degrading factors (atmospheric, thermal-contrast,
+  illumination), calibration drift, and optional target line-of-sight
+  (BL-055 / ADR 0077 / ADR 0078).
 - `inference_status` returns running totals (local calls, tokens,
   joules, last latency) and the profile's nominal capacity.
 - `self_estimator_status` reports live covariances for every

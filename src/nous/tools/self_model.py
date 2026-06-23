@@ -185,6 +185,7 @@ def register(mcp: FastMCP, app: Nous, wrap: WrapFn) -> None:
                 app.engine.comms_est,
                 app.engine.position_est,
                 app.engine.sensors_est,
+                app.engine.eoir_est,
                 app.engine.biometrics_est,
             ):
                 state = est.state()

@@ -20,7 +20,9 @@ def test_reload_same_profile_returns_summary(engine: Engine) -> None:
     summary = engine.reload_profile()
     assert summary["profile"] == "jetson-agx-orin"
     assert summary["previous"] == "jetson-agx-orin"
-    assert summary["rebuilt_subsystems"] == 11
+    # Power, PMU, APU, thermal, compute, inference, storage, comms, position,
+    # sensors, IMU, EO/IR, biometrics (the original 11 plus IMU and EO/IR).
+    assert summary["rebuilt_subsystems"] == 13
 
 
 def test_reload_preserves_fsm_mode(engine: Engine) -> None:

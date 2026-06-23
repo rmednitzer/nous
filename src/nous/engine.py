@@ -536,10 +536,28 @@ class Engine:
         self._apply_mode_entry(self.state.mode)
         self._refresh_capabilities()
 
+        # Count the rebuilt subsystem physics modules rather than hardcode it, so
+        # the figure cannot drift as subsystems are added (it was stale at 11 once
+        # the IMU and EO/IR payloads landed).
+        rebuilt_subsystems = (
+            self.power,
+            self.pmu,
+            self.apu,
+            self.thermal,
+            self.compute,
+            self.inference,
+            self.storage,
+            self.comms,
+            self.position,
+            self.sensors,
+            self.imu,
+            self.eoir,
+            self.biometrics,
+        )
         return {
             "profile": self.settings.profile,
             "previous": previous_name,
-            "rebuilt_subsystems": 11,
+            "rebuilt_subsystems": len(rebuilt_subsystems),
             "tick": self.state.tick,
             "mode": self.state.mode.value,
         }
