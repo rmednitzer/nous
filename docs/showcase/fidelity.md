@@ -20,8 +20,8 @@ records the move; the showcase pages are reviewed at the same time.
 ## Current subsystem mapping
 
 Reflects `origin/main`. The L1 subsystem rollout reached `main` in PR #38;
-the live VM auto-updates from `main`, so it tracks this mapping within about
-five minutes of a merge.
+a host running the reference deployment auto-updates from `main`, so it
+tracks this mapping within about five minutes of a merge.
 
 | Subsystem | Badge | Notes |
 | --- | --- | --- |

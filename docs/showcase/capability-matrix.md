@@ -8,8 +8,8 @@ Last reviewed: 2026-06-21.
 
 > **Deployment note.** The badges below track `origin/main` (most
 > recently the BL-005b PMU power-management and BL-055 EO/IR perception
-> subsystems). The live VM
-> auto-updates from `main` within about five minutes of a merge (see
+> subsystems). A host running the
+> reference deployment auto-updates from `main` within about five minutes of a merge (see
 > [deployment](../deployment.md)), so it picks up a badge change on the next
 > poll after `origin/main` advances. The earliest live MCP audit
 > ([`docs/audit-2026-05-23.md`](../audit-2026-05-23.md)) predates the L1

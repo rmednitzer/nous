@@ -93,10 +93,10 @@ Neither read is access control: both supplement the append-only bit and
 off-host shipping. A clean pair is evidence, not proof, that the medium
 was never writable.
 
-## The live VM is serving an older tool surface
+## A deployed instance is serving an older tool surface
 
 The auto-update timer tracks `origin/main` every five minutes. If
-`origin/main` lags the development line, the live MCP serves the
+`origin/main` lags the development line, the deployed MCP serves the
 older surface even though the development line registers more
 tools. Triage:
 
@@ -104,8 +104,8 @@ tools. Triage:
    shows the most recent fetch / reset / restart cycle.
 2. Confirm the merge to `main` has actually landed
    (`git ls-remote origin main`); a development branch that consumed
-   merge commits locally without pushing them does not move the live
-   VM.
+   merge commits locally without pushing them does not move a deployed
+   host.
 3. To suspend auto-update during incident triage:
    `systemctl disable --now nous-auto-update.timer`. Re-enable when
    the merge lands.

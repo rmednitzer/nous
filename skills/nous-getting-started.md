@@ -93,11 +93,12 @@ freshly started engine settles in the `IDLE` standby posture (ADR 0039).
 
 ## Deployment posture
 
-The live VM tracks `origin/main`; the development line may be ahead
-of `main` and therefore ahead of the live MCP. If the read surface
-above is not all reachable, the live host is on an older
-revision (see [`docs/audit-2026-06-06.md`](../docs/audit-2026-06-06.md)
-§6 for the most recent live-MCP probe).
+A host running the reference deployment tracks `origin/main`; the
+development line may be ahead of `main` and therefore ahead of a
+deployed MCP surface. If the read surface above is not all reachable,
+that host is on an older revision (see
+[`docs/audit-2026-06-06.md`](../docs/audit-2026-06-06.md) §6 for the
+most recent probe taken against a running instance).
 
 ## Talking to a model
 

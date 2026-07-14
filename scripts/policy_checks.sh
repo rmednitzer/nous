@@ -72,14 +72,15 @@ run_grep "em-dash (U+2014) found above. Use '--' or punctuation per CLAUDE.md." 
 # repositories ("``nous`` is a standalone codebase"). The check is
 # wired with a deny list so the contract is in code, not in prose.
 # Append a bash regex below when a specific private-repo name needs to
-# be banned; today the list is empty and the rule is a structured
-# extension point rather than an active check.
+# be banned. The list carries the decommissioned live-deployment FQDN
+# (ADR 0017) so it cannot be reintroduced now that the VM is gone.
 #
 # This file is excluded from the scan: every declared pattern would
 # otherwise match its own deny-list entry in this script.
 private_repo_patterns=(
     # "example-internal-repo"
     # "another-private-name"
+    "blackphoenix\.org"
 )
 if [ "${#private_repo_patterns[@]}" -gt 0 ]; then
     note "checking for private-repository references"

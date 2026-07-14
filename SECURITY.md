@@ -124,8 +124,8 @@ lands (every audit-write goes through the `write()` path); an
 operator who pauses diagnosis by not making tool calls keeps
 complete control of the timing.
 
-The live VM auto-update loop (`nous-auto-update.timer`) tracks
-`origin/main` every five minutes. Three kill switches and one
+The reference deployment's auto-update loop (`nous-auto-update.timer`)
+tracks `origin/main` every five minutes. Three kill switches and one
 rollback path:
 
 ```sh

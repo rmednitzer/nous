@@ -122,8 +122,9 @@ See [ADR 0037](adr/0037-schema-migration-workflow.md) for the workflow and
 
 ## Auto-deploy from `main`
 
-The live VM tracks `origin/main`. A oneshot systemd unit
-(`nous-auto-update.service`) runs `deploy/auto-update.sh`, which:
+A host that enables the auto-update timer tracks `origin/main`. A
+oneshot systemd unit (`nous-auto-update.service`) runs
+`deploy/auto-update.sh`, which:
 
 1. `git fetch origin main`
 2. If `HEAD == origin/main`, exits 0 (silent no-op).

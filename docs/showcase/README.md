@@ -32,9 +32,10 @@ conformance is self-declared, not certified. See the
 substance findings. The fidelity badges exist to keep the showcase
 honest about that. ADR 0017 records the decision behind this section.
 
-If you are looking for the live reference instance, it remains
-private and gated; see `docs/deployment.md` for the deployment
-pattern. The live VM tracks `origin/main` via auto-update; if `main`
-lags the development line, the live MCP serves an older surface than
-this showcase claims (see the 2026-06-14b audit for the most recent
-live probe).
+There is no public live instance; this showcase is generated from
+scenarios at docs-build time and stands on its own. See
+`docs/deployment.md` for the reference deployment pattern: a host stood
+up from the bundle tracks `origin/main` via auto-update, so if `main`
+lags the development line its MCP surface can trail what this showcase
+claims (the 2026-06-14b audit records the last probe taken against a
+running instance).
