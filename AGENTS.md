@@ -184,10 +184,10 @@ Never introduce a runtime dependency on a private repository. `nous` is a
 standalone codebase; if a piece of infrastructure is useful, port the
 shape rather than the dependency. `scripts/policy_checks.sh` (the
 `policy` CI job and `make policy` locally) ships the deny-list grep
-as a structured extension point: `private_repo_patterns` is currently
-empty, so the rule is held by author discipline today. Append a
-specific private name to that array to activate the grep against it;
-CI will then fail any commit that introduces a reference.
+as a structured extension point: `private_repo_patterns` carries the
+decommissioned deployment domain (ADR 0017), so CI fails any commit
+that reintroduces it. Append another specific private name to that
+array to extend the grep.
 
 ## Self-driving simulator mode
 

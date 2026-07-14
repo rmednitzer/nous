@@ -99,7 +99,7 @@ field flips to `true`, the JSONL sink could not be opened or fsynced;
 the server falls back to stderr-only logging, which is *not* an
 auditable surface. Treat a degraded sink as a hard incident: stop
 serving the affected MCP endpoint until the sink is restored. The
-2026-05-23 audit (N2) caught this state on the live VM; the runbook
+2026-05-23 audit (N2) caught this state on the then-live VM; the runbook
 for triage lives in `skills/nous-troubleshooting.md`.
 
 The in-process recovery path is the `audit_resync` MCP tool (T2,

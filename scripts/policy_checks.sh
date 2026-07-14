@@ -72,8 +72,9 @@ run_grep "em-dash (U+2014) found above. Use '--' or punctuation per CLAUDE.md." 
 # repositories ("``nous`` is a standalone codebase"). The check is
 # wired with a deny list so the contract is in code, not in prose.
 # Append a bash regex below when a specific private-repo name needs to
-# be banned. The list carries the decommissioned live-deployment FQDN
-# (ADR 0017) so it cannot be reintroduced now that the VM is gone.
+# be banned. The list carries the decommissioned live deployment's
+# domain (ADR 0017); banning the domain blocks the FQDN and any
+# subdomain from being reintroduced now that the VM is gone.
 #
 # This file is excluded from the scan: every declared pattern would
 # otherwise match its own deny-list entry in this script.
@@ -83,9 +84,9 @@ private_repo_patterns=(
     "blackphoenix\.org"
 )
 if [ "${#private_repo_patterns[@]}" -gt 0 ]; then
-    note "checking for private-repository references"
+    note "checking for deny-listed private references"
     pattern_alternation="$(IFS='|'; printf '%s' "${private_repo_patterns[*]}")"
-    run_grep "private-repo reference found above. See AGENTS.md Boundaries." \
+    run_grep "deny-listed private reference found above. See AGENTS.md Boundaries." \
         -rEn "(${pattern_alternation})" \
         --exclude="$(basename "$0")" \
         --exclude-dir=.git --exclude-dir=.venv --exclude-dir=site \

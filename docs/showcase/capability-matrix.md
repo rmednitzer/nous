@@ -11,7 +11,8 @@ Last reviewed: 2026-06-21.
 > subsystems). A host running the
 > reference deployment auto-updates from `main` within about five minutes of a merge (see
 > [deployment](../deployment.md)), so it picks up a badge change on the next
-> poll after `origin/main` advances. The earliest live MCP audit
+> poll after `origin/main` advances. The earliest audit taken against a
+> running instance
 > ([`docs/audit-2026-05-23.md`](../audit-2026-05-23.md)) predates the L1
 > catch-up train; the 2026-06-15b audit
 > ([`docs/audit-2026-06-15b.md`](../audit-2026-06-15b.md)) records the
@@ -39,7 +40,7 @@ Last reviewed: 2026-06-21.
 
 | Surface | Status | Notes |
 | --- | --- | --- |
-| audit (JSONL, output-hashed) | `filtered` | append-only with fsync + chmod 0600, plus the BL-016 per-record hash chain and the BL-031 daily anchor; redaction still flat (AUDIT-2026-05-23 C2). The live VM resynced 2026-05-28 (AUDIT-2026-05-23 N2 cleared; `audit.degraded:false` confirmed by the 2026-06-14b live probe). |
+| audit (JSONL, output-hashed) | `filtered` | append-only with fsync + chmod 0600, plus the BL-016 per-record hash chain and the BL-031 daily anchor; redaction still flat (AUDIT-2026-05-23 C2). The then-live instance resynced 2026-05-28 (AUDIT-2026-05-23 N2 cleared; `audit.degraded:false` confirmed by the 2026-06-14b probe against the running instance). |
 | policy + runner (tier-classified admission) | `filtered` | tiers consistent with ADR 0001 and 0013. Denial path still misses `exit_code=1` (AUDIT-2026-05-23 M1). |
 | OAuth issuer | `filtered` for single-client lockdown; `planned` for L3 multi-tenant | BL-019, BL-059. File-store lock and refresh-family revocation still open (AUDIT-2026-05-23 H6, H7). |
 | anthropic client (daily cap + prompt cache) | `filtered` | Flush-before-unlock race closed (AUDIT C1); test coverage in `tests/unit/test_anthropic_client.py`. BL-021 surfacing still planned. |

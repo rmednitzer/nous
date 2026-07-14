@@ -66,7 +66,7 @@ Treat this as an incident, not a warning. Triage:
    backoff to its initial value.
 6. As a last resort, stop the service (`systemctl stop nous.service`)
    until the sink is restored. The 2026-05-23 audit (N2) caught the
-   live VM in this state; the `audit_resync` tool and the auto-
+   then-live VM in this state; the `audit_resync` tool and the auto-
    resync schedule (closes N2) are the in-process recovery paths
    that replace the restart.
 
