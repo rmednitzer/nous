@@ -21,7 +21,7 @@ in `deploy/` is idempotent.
 4. Edit `/etc/caddy/Caddyfile` to set the public hostname and the
    operator CIDR.
 5. `systemctl enable --now nous.service nous-state-flush.timer caddy`.
-6. Enable auto-update if the live VM should track `main`:
+6. Enable auto-update if the deployed host should track `main`:
    `systemctl enable --now nous-auto-update.timer`. The timer polls
    `origin/main` every five minutes, fast-forwards on a change,
    re-runs `install.sh`, and restarts the service. It asserts

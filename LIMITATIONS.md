@@ -289,11 +289,10 @@ in-tree".
 `scripts/policy_checks.sh` (the `policy` CI job and `make policy`
 locally; PR #41 closed AUDIT-2026-05-23 C6). The private-repo rule
 ships as a structured extension point in the same script:
-`private_repo_patterns` is currently empty, so the deny-list grep
-does not actively scan and L17 is held by author discipline. Append
-a specific private name to `private_repo_patterns` to activate the
-grep against that name; CI will then fail any commit that introduces
-a reference.
+`private_repo_patterns` carries the decommissioned deployment domain
+(ADR 0017), so the deny-list grep actively fails any commit that
+reintroduces it. Append another specific private name to
+`private_repo_patterns` to extend the grep against that name.
 
 ## L18. Audit tamper-evidence is bounded by the retention window
 

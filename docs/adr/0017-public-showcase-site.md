@@ -23,11 +23,12 @@ plots `self_model_assess` output without disclosing fidelity would be
 the exact failure mode the simulator is designed to prevent: a viewer
 forming confidence in numbers that have no calibration behind them.
 
-A third pressure is the public exposure of `nous.blackphoenix.org` in
-the repo. The auto-update timer makes the FQDN an attractive target;
-the surface is gated but the gate depends on hardcoded Anthropic egress
-ranges. A public showcase that satisfies the "transparency about what
-nous does" goal removes the operational need to advertise the live VM.
+A third pressure was the past public exposure of the live deployment
+FQDN in the repo. The auto-update timer makes that FQDN an attractive
+target; the surface is gated but the gate depends on hardcoded Anthropic
+egress ranges. A public showcase that satisfies the "transparency about
+what nous does" goal removes the operational need to advertise a live
+deployment.
 
 ## Decision
 

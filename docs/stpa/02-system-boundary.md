@@ -18,7 +18,7 @@
 - The operator's body and environment. The biometric subsystem
   produces parametric outputs about a *simulated* operator; the
   hazards of harming a real operator are out of scope.
-- The Hetzner VM kernel and Linux distribution. Faults there are
+- The deployment VM kernel and Linux distribution. Faults there are
   treated as a deployment environment concern, not a `nous` concern.
 
 The boundary is what makes the simulator simulable: everything inside

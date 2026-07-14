@@ -5,7 +5,7 @@ yet?" questions.
 
 ## Deployment posture
 
-The single-VM reference instance (`nous-prod-01`) tracks `main` automatically. A systemd timer (`nous-auto-update.timer`) polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`. Every merged PR therefore reaches the live VM within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. The host FQDN is intentionally not advertised in the repo (ADR 0017); the public face is the showcase under `docs/showcase/`. Two deployment failure modes found on `nous-prod-01` are closed in code: `deploy/install.sh` no longer installs `auto-update.sh` onto itself (the self-install errored under `set -e` and aborted every deploy after the `git reset`, the root cause of the freeze; BL-063), and `deploy/auto-update.sh` now rolls `HEAD` back and reinstalls the previous good artifacts on any failed deploy. The VM was manually resynced on 2026-05-28 (restarted onto current `main`; verified 29 tools, calibrated self-model, `audit.degraded:false`, so AUDIT N2 is cleared). A separate fix (BL-064 / ADR 0024) makes the engine tick at process scope: under `stateless_http=True` the per-request server lifespan had been rebooting the engine on every tool call, so `tick` and the FSM never advanced.
+`nous` ships a single-VM reference deployment (the `deploy/` bundle: cloud-init, systemd units, and a Caddy front). A host stood up from it can enable the `nous-auto-update.timer`, which polls `origin/main` every 5 minutes and, if the remote HEAD has advanced, fast-forwards the working tree, re-runs `deploy/install.sh`, and restarts `nous.service`, so a merged PR reaches that host within ~5 minutes with no manual intervention. See `docs/deployment.md` for the operational details and the abort-the-loop procedure. No public instance is currently running; the public face of the project is the showcase under `docs/showcase/`. Any deployed host's FQDN is intentionally kept out of the repo (ADR 0017). Two deployment failure modes surfaced while operating an earlier instance are closed in code: `deploy/install.sh` no longer installs `auto-update.sh` onto itself (the self-install errored under `set -e` and aborted every deploy after the `git reset`, the root cause of the freeze; BL-063), and `deploy/auto-update.sh` now rolls `HEAD` back and reinstalls the previous good artifacts on any failed deploy. That earlier instance was manually resynced on 2026-05-28 (restarted onto current `main`; verified 29 tools, calibrated self-model, `audit.degraded:false`), clearing AUDIT N2. A separate fix (BL-064 / ADR 0024) makes the engine tick at process scope: under `stateless_http=True` the per-request server lifespan had been rebooting the engine on every tool call, so `tick` and the FSM never advanced.
 
 Last reviewed: 2026-06-23 ([`docs/audit-2026-06-23.md`](docs/audit-2026-06-23.md),
 a distill / validate / reconcile pass: the physics constants (Friis, kTB noise,
@@ -45,8 +45,8 @@ the delta and [`docs/audit-2026-05-27.md`](docs/audit-2026-05-27.md)
 for the prior baseline.
 
 Deployment-side status note: the L1 subsystem rollout has been on
-`origin/main` since PR #38, so the auto-update timer lands the
-current fifty-three-tool surface on the live VM on the next poll after
+`origin/main` since PR #38, so the auto-update timer on a deployed host
+lands the current fifty-three-tool surface on the next poll after
 `origin/main` advances (no-op when the remote HEAD is unchanged).
 Eight audit findings have closed since the 2026-05-23 baseline and
 the post-baseline §10 re-audit: **C3** (FastMCP lifespan ticks the

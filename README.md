@@ -150,13 +150,14 @@ tour.
 - [CONTRIBUTING.md](CONTRIBUTING.md) -- how to land changes
 - [SECURITY.md](SECURITY.md) -- reporting and hardening posture
 
-## Live deployment
+## Reference deployment
 
-A single-VM reference instance tracks `main` automatically; every
-merged PR reaches it within five minutes (`docs/deployment.md`). The
-public face of the project is the showcase under
-[`docs/showcase/`](docs/showcase/README.md); the live VM itself
-remains private and CIDR-gated (ADR 0017).
+`nous` ships a single-VM reference deployment (`deploy/`): a host stood
+up from the bundle can track `main` automatically, so every merged PR
+reaches it within five minutes (`docs/deployment.md`). No public
+instance is currently running; the public face of the project is the
+showcase under [`docs/showcase/`](docs/showcase/README.md). A deployed
+host is meant to stay private and CIDR-gated (ADR 0017).
 
 ## License
 

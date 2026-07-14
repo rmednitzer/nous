@@ -66,7 +66,7 @@ Treat this as an incident, not a warning. Triage:
    backoff to its initial value.
 6. As a last resort, stop the service (`systemctl stop nous.service`)
    until the sink is restored. The 2026-05-23 audit (N2) caught the
-   live VM in this state; the `audit_resync` tool and the auto-
+   then-live VM in this state; the `audit_resync` tool and the auto-
    resync schedule (closes N2) are the in-process recovery paths
    that replace the restart.
 
@@ -93,10 +93,10 @@ Neither read is access control: both supplement the append-only bit and
 off-host shipping. A clean pair is evidence, not proof, that the medium
 was never writable.
 
-## The live VM is serving an older tool surface
+## A deployed instance is serving an older tool surface
 
 The auto-update timer tracks `origin/main` every five minutes. If
-`origin/main` lags the development line, the live MCP serves the
+`origin/main` lags the development line, the deployed MCP serves the
 older surface even though the development line registers more
 tools. Triage:
 
@@ -104,8 +104,8 @@ tools. Triage:
    shows the most recent fetch / reset / restart cycle.
 2. Confirm the merge to `main` has actually landed
    (`git ls-remote origin main`); a development branch that consumed
-   merge commits locally without pushing them does not move the live
-   VM.
+   merge commits locally without pushing them does not move a deployed
+   host.
 3. To suspend auto-update during incident triage:
    `systemctl disable --now nous-auto-update.timer`. Re-enable when
    the merge lands.
