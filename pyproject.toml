@@ -33,7 +33,7 @@ classifiers = [
     "Topic :: System :: Hardware",
 ]
 dependencies = [
-    "mcp>=1.27",
+    "mcp>=1.28.1",
     "pydantic>=2.11",
     "pydantic-settings>=2.7",
     "sqlmodel>=0.0.22",
