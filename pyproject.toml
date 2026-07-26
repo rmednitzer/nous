@@ -58,7 +58,7 @@ dev = [
     # ruff is pinned to a minor range so contributors and CI agree on
     # the same rule set. Bump together with the lint output the new
     # minor produces.
-    "ruff>=0.15,<0.16",
+    "ruff>=0.16,<0.17",
     "mypy>=2.1.0",
     "hypothesis>=6.115",
     "types-PyYAML>=6.0.12.20260518",
