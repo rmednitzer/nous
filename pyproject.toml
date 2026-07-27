@@ -59,7 +59,7 @@ dev = [
     # the same rule set. Bump together with the lint output the new
     # minor produces.
     "ruff>=0.16,<0.17",
-    "mypy>=2.1.0",
+    "mypy>=2.1.0,<3",
     "hypothesis>=6.115",
     "types-PyYAML>=6.0.12.20260518",
     # SDK is dev-only: the runtime depends on the OTel API alone (no-op
